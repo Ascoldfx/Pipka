@@ -1,0 +1,25 @@
+services:
+  app:
+    build: .
+    env_file: .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://jobhunt:jobhunt@db:5432/jobhunt
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: jobhunt
+      POSTGRES_PASSWORD: jobhunt
+      POSTGRES_DB: jobhunt
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  pgdata:

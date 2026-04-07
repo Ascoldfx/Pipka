@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "JobHunt Bot (Telegram + API)",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["run.py"],
+      "port": 8000
+    },
+    {
+      "name": "FastAPI Only (dev)",
+      "runtimeExecutable": "uvicorn",
+      "runtimeArgs": ["app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"],
+      "port": 8000
+    },
+    {
+      "name": "Docker Compose (full stack)",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "up", "--build"],
+      "port": 8000
+    }
+  ]
+}

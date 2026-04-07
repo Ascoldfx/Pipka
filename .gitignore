@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.env
+*.db
+.venv/
+venv/
+dist/
+*.egg-info/
+.ruff_cache/
+.pytest_cache/
+alembic/versions/*.py
+!alembic/versions/.gitkeep
