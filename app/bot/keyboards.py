@@ -30,6 +30,9 @@ def job_actions(job_db_id: int) -> InlineKeyboardMarkup:
             InlineKeyboardButton("🤖 AI Анализ", callback_data=f"ai_{job_db_id}"),
             InlineKeyboardButton("💾 Сохранить", callback_data=f"save_{job_db_id}"),
         ],
+        [
+            InlineKeyboardButton("📨 Отправил резюме", callback_data=f"applied_{job_db_id}"),
+        ],
     ])
 
 # --- Application status ---

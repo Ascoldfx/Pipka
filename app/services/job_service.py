@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import logging
+
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.job import Job
+from app.models.job import Job, JobScore
 from app.models.user import User
 from app.scoring.matcher import score_jobs
 from app.scoring.rules import pre_filter
+from app.services.tracker_service import get_applied_job_ids
 from app.sources.aggregator import JobAggregator
 from app.sources.base import SearchParams
+
+logger = logging.getLogger(__name__)
 
 
 async def search_and_score(
@@ -16,30 +22,50 @@ async def search_and_score(
     user: User,
     session: AsyncSession,
     max_results: int = 15,
+    skip_seen: bool = False,
 ) -> list[tuple[Job, int, str]]:
     """Search, filter by relevance bucket, score top candidates with AI."""
     all_jobs = await aggregator.search(params, session)
 
+    # Get already-scored job IDs for this user (to prioritize new ones)
+    already_scored_result = await session.execute(
+        select(JobScore.job_id).where(JobScore.user_id == user.id)
+    )
+    already_scored_ids = {row[0] for row in already_scored_result.fetchall()}
+
+    # Get applied job IDs — hide from results
+    applied_ids = await get_applied_job_ids(user.id, session)
+
     profile = user.profile
-    high: list[Job] = []
-    medium: list[Job] = []
+    new_high: list[Job] = []
+    new_medium: list[Job] = []
+    seen_high: list[Job] = []
+    seen_medium: list[Job] = []
 
     for job in all_jobs:
+        if job.id in applied_ids:
+            continue
         passed, bucket = pre_filter(job, profile)
         if not passed:
             continue
+        is_seen = job.id in already_scored_ids
         if bucket == "high":
-            high.append(job)
+            (seen_high if is_seen else new_high).append(job)
         elif bucket == "medium":
-            medium.append(job)
+            (seen_medium if is_seen else new_medium).append(job)
 
-    # Prioritize high-bucket, then medium
-    candidates = high + medium
+    # Prioritize: new high → new medium → seen high → seen medium
+    candidates = new_high + new_medium + seen_high + seen_medium
+
+    logger.info(
+        "Pre-filter: %d new_high, %d new_medium, %d seen_high, %d seen_medium (total candidates: %d)",
+        len(new_high), len(new_medium), len(seen_high), len(seen_medium), len(candidates),
+    )
 
     if not candidates:
         return []
 
-    # Score more candidates to find the best ones (up to 50)
+    # Score up to 50 candidates
     to_score = candidates[:50]
     scores = await score_jobs(to_score, user, session)
 
@@ -51,7 +77,7 @@ async def search_and_score(
         if s:
             result.append((job, s.score, s.ai_analysis or ""))
 
-    # Sort by score, only return jobs scoring 50+
+    # Sort by score, only return jobs scoring 40+
     result.sort(key=lambda x: x[1], reverse=True)
-    result = [r for r in result if r[1] >= 50]
+    result = [r for r in result if r[1] >= 40]
     return result[:max_results]

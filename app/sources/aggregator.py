@@ -70,6 +70,13 @@ GERMAN_C1_REQUIRED = [
     "german language skills required",
     "strong german language",
     "excellent german",
+    # German compound patterns (Deutsch- und Englischkenntnisse)
+    "verhandlungssichere deutsch- und englischkenntnisse",
+    "verhandlungssichere deutsch und englischkenntnisse",
+    "deutsch- und englischkenntnisse in wort und schrift",
+    "deutschkenntnisse in wort und schrift",
+    "deutsch in wort und schrift",
+    "mindestens c1 deutsch",
 ]
 
 
@@ -100,19 +107,28 @@ class JobAggregator:
 
         logger.info("After dedup: %d unique jobs", len(unique))
 
-        # Filter
+        # Filter with stats
         cutoff = datetime.now() - timedelta(days=params.max_age_days)
         filtered: list[RawJob] = []
+        rejected_negative = 0
+        rejected_old = 0
+        rejected_location = 0
         for job in unique:
             if _is_negative(job):
+                rejected_negative += 1
                 continue
             if job.posted_at and job.posted_at < cutoff:
+                rejected_old += 1
                 continue
             if _is_wrong_location(job):
+                rejected_location += 1
                 continue
             filtered.append(job)
 
-        logger.info("After filter: %d jobs", len(filtered))
+        logger.info(
+            "After filter: %d jobs (rejected: %d negative/german, %d old, %d wrong location)",
+            len(filtered), rejected_negative, rejected_old, rejected_location,
+        )
 
         # Upsert into DB
         db_jobs: list[Job] = []
@@ -157,26 +173,57 @@ US_LOCATIONS = [
 ]
 
 NON_DACH_CITIES = [
+    # US cities
     "new york", "san francisco", "los angeles", "chicago", "boston",
     "seattle", "denver", "austin", "miami", "houston", "dallas",
     "atlanta", "phoenix", "portland", "philadelphia", "detroit",
-    "london", "paris", "madrid", "barcelona", "rome", "milan",
-    "lisbon", "warsaw", "prague", "budapest", "bucharest",
+    "minneapolis", "san diego", "san jose", "charlotte", "nashville",
+    "columbus", "indianapolis", "jacksonville", "raleigh", "pittsburgh",
+    "cincinnati", "kansas city", "salt lake", "tampa", "orlando",
+    "st. louis", "st louis", "baltimore", "sacramento", "milwaukee",
+    "oklahoma", "richmond", "memphis", "louisville", "hartford",
+    # UK
+    "london", "manchester", "birmingham", "edinburgh", "glasgow", "leeds", "bristol",
+    # Other Europe (non-DACH/NL)
+    "paris", "madrid", "barcelona", "rome", "milan", "lisbon",
+    "warsaw", "prague", "budapest", "bucharest", "sofia", "zagreb",
+    "dublin", "brussels", "copenhagen", "stockholm", "oslo", "helsinki",
+    # Asia
     "bangalore", "mumbai", "delhi", "singapore", "shanghai", "beijing",
-    "tokyo", "sydney", "melbourne", "toronto", "vancouver", "montreal",
-    "são paulo", "dubai", "abu dhabi",
+    "tokyo", "hong kong", "seoul", "taipei",
+    # Other
+    "sydney", "melbourne", "toronto", "vancouver", "montreal",
+    "são paulo", "dubai", "abu dhabi", "riyadh", "doha",
+    "mexico city", "buenos aires", "bogota",
 ]
 
 
 def _is_wrong_location(job: RawJob) -> bool:
-    """Filter out jobs that are clearly outside DACH region."""
+    """Filter out jobs that are clearly outside DACH/NL region."""
     location_lower = (job.location or "").lower()
-    if not location_lower:
-        return False
-    if any(us in location_lower for us in US_LOCATIONS):
-        return True
-    if any(city in location_lower for city in NON_DACH_CITIES):
-        return True
+    desc_lower = (job.description or "").lower()
+    all_text = f"{location_lower} {desc_lower}"
+
+    # Check location field
+    if location_lower:
+        if any(us in location_lower for us in US_LOCATIONS):
+            return True
+        if any(city in location_lower for city in NON_DACH_CITIES):
+            return True
+
+    # Check description for US/non-DACH indicators
+    if "united states" in all_text or "usa" in desc_lower:
+        # Only reject if no DACH location is also mentioned
+        dach_mentioned = any(w in all_text for w in [
+            "germany", "deutschland", "austria", "österreich",
+            "netherlands", "nederland", "berlin", "munich", "münchen",
+            "hamburg", "frankfurt", "düsseldorf", "cologne", "köln",
+            "stuttgart", "leipzig", "dresden", "vienna", "wien",
+            "amsterdam", "rotterdam",
+        ])
+        if not dach_mentioned:
+            return True
+
     return False
 
 

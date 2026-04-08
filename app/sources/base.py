@@ -26,7 +26,7 @@ class RawJob:
 
     @property
     def dedup_hash(self) -> str:
-        normalized = _normalize(f"{self.title}|{self.company_name or ''}|{self.location or ''}")
+        normalized = _normalize(f"{self.title}|{self.company_name or ''}")
         return hashlib.sha256(normalized.encode()).hexdigest()
 
 

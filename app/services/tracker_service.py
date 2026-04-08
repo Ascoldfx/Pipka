@@ -26,6 +26,39 @@ async def save_job(user_id: int, job_id: int, session: AsyncSession) -> Applicat
     return app
 
 
+async def mark_applied(user_id: int, job_id: int, session: AsyncSession) -> Application:
+    existing = await session.execute(
+        select(Application).where(Application.user_id == user_id, Application.job_id == job_id)
+    )
+    app = existing.scalar_one_or_none()
+    if app:
+        old_status = app.status
+        app.status = "applied"
+        app.applied_at = datetime.now()
+        history = ApplicationHistory(application_id=app.id, old_status=old_status, new_status="applied")
+        session.add(history)
+    else:
+        app = Application(user_id=user_id, job_id=job_id, status="applied", applied_at=datetime.now())
+        session.add(app)
+        await session.flush()
+        history = ApplicationHistory(application_id=app.id, old_status=None, new_status="applied")
+        session.add(history)
+
+    await session.commit()
+    return app
+
+
+async def get_applied_job_ids(user_id: int, session: AsyncSession) -> set[int]:
+    """Get all job IDs where the user has applied — these should be hidden from search."""
+    result = await session.execute(
+        select(Application.job_id).where(
+            Application.user_id == user_id,
+            Application.status == "applied",
+        )
+    )
+    return {row[0] for row in result.fetchall()}
+
+
 async def update_status(app_id: int, new_status: str, note: str | None, session: AsyncSession) -> Application | None:
     if new_status not in VALID_STATUSES:
         return None

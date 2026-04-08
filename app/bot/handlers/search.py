@@ -46,7 +46,7 @@ SEARCH_PRESETS = {
     },
     "search_europe": {
         "queries": ["Director Supply Chain", "VP Procurement", "Head of Logistics", "COO", "Global Operations", "Supply Chain Manager English"],
-        "countries": ["de", "ch", "at", "nl"],
+        "countries": ["de", "at", "nl"],
         "locations": [],
         "label": "Европа (DACH + NL)",
     },

@@ -37,7 +37,7 @@ class JobSpySource:
             sites = SITE_MAP.get(country, ["indeed", "linkedin", "google"])
             for query in params.queries:
                 location = ", ".join(params.locations) if params.locations else None
-                jobs = await self._scrape(query, sites, location, country, params.results_per_query)
+                jobs = await self._scrape(query, sites, location, country, min(params.results_per_query, 25))
                 for job in jobs:
                     if job.external_id not in seen:
                         seen.add(job.external_id)

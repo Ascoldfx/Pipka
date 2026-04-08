@@ -72,7 +72,7 @@ with Session(engine) as session:
     profile.experience_years = 16
     profile.industries = ["FMCG", "Manufacturing", "Logistics", "Automotive", "Retail", "Pharma", "Food & Beverage"]
     profile.work_mode = "any"
-    profile.preferred_countries = ["de", "ch", "at"]
+    profile.preferred_countries = ["de", "at", "nl"]
     profile.base_location = "Leipzig"
 
     session.commit()
