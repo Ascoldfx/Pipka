@@ -12,14 +12,17 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await get_or_create_user(tg_user.id, tg_user.full_name, session)
         await session.commit()
 
-    await update.message.reply_text(
+    text = (
         "🤖 *JobHunt Bot*\n\n"
-        "Агрегатор вакансий из 5+ площадок с AI\\-скорингом\\.\n\n"
+        "Агрегатор вакансий из 5\\+ площадок с AI\\-скорингом\\.\n\n"
         "Источники: Adzuna, Indeed, LinkedIn, Google Jobs, Arbeitsagentur\n\n"
-        "Начните с настройки профиля или сразу ищите\\!",
-        parse_mode="MarkdownV2",
-        reply_markup=main_menu(),
+        "Начните с настройки профиля или сразу ищите\\!"
     )
+
+    if update.callback_query:
+        await update.callback_query.edit_message_text(text, parse_mode="MarkdownV2", reply_markup=main_menu())
+    else:
+        await update.message.reply_text(text, parse_mode="MarkdownV2", reply_markup=main_menu())
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):

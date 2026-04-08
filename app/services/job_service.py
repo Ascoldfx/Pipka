@@ -15,26 +15,32 @@ async def search_and_score(
     params: SearchParams,
     user: User,
     session: AsyncSession,
-    max_results: int = 30,
+    max_results: int = 15,
 ) -> list[tuple[Job, int, str]]:
-    """Search, filter, score. Returns list of (job, score, verdict)."""
+    """Search, filter by relevance bucket, score top candidates with AI."""
     all_jobs = await aggregator.search(params, session)
 
-    # Pre-filter with rules
     profile = user.profile
-    candidates: list[Job] = []
+    high: list[Job] = []
+    medium: list[Job] = []
+
     for job in all_jobs:
         passed, bucket = pre_filter(job, profile)
-        if passed:
-            candidates.append(job)
-        if len(candidates) >= max_results * 2:
-            break
+        if not passed:
+            continue
+        if bucket == "high":
+            high.append(job)
+        elif bucket == "medium":
+            medium.append(job)
+
+    # Prioritize high-bucket, then medium
+    candidates = high + medium
 
     if not candidates:
         return []
 
-    # AI scoring (top N)
-    to_score = candidates[:max_results]
+    # Score more candidates to find the best ones (up to 50)
+    to_score = candidates[:50]
     scores = await score_jobs(to_score, user, session)
 
     # Build result tuples
@@ -44,8 +50,8 @@ async def search_and_score(
         s = score_map.get(job.id)
         if s:
             result.append((job, s.score, s.ai_analysis or ""))
-        else:
-            result.append((job, 0, ""))
 
+    # Sort by score, only return jobs scoring 50+
     result.sort(key=lambda x: x[1], reverse=True)
+    result = [r for r in result if r[1] >= 50]
     return result[:max_results]

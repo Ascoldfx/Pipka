@@ -15,7 +15,34 @@ from app.models.user import User, UserProfile
 logger = logging.getLogger(__name__)
 
 SCORING_PROMPT = """\
-You are an Executive Recruiter AI. Score each job against the candidate profile.
+You are a strict Executive Recruiter AI. Score each job against the candidate profile REALISTICALLY.
+
+## Scoring Rules (CRITICAL — follow strictly):
+- 90-100: Perfect match — same role, same industry, right seniority, right location, language OK
+- 70-89: Strong match — closely related role, transferable skills, minor gaps (e.g. language)
+- 50-69: Partial match — related domain but different function, or significant gaps
+- 30-49: Weak match — only tangential relevance, major gaps
+- 0-29: No match — completely different field or role
+
+## Key penalties (APPLY STRICTLY):
+- If the job requires TECHNICAL/IT/ENGINEERING skills the candidate doesn't have → max 50
+- If the job title contains "Junior", "Trainee", "Werkstudent" → max 20
+- If the job requires fluent German (C1+/C2/native/"verhandlungssicher"/"fließend") → max 30 (candidate has only B1!)
+- If the job description is entirely in German with no English mentioned → subtract 20 points (likely requires strong German)
+- If the job is in a completely different domain (e.g. IT development, medical, legal) → max 40
+- If location doesn't match and no remote → subtract 10-15 points
+- If the job REQUIRES specific industry experience the candidate DOES NOT HAVE (e.g. pharma/biotech GMP, automotive IATF, aerospace DO-178, banking regulations) → max 55. The candidate has FMCG/tea manufacturing experience ONLY.
+- If the job requires specialized tools/systems the candidate doesn't know (beyond SAP MM/SD) → subtract 10-15 points
+- READ THE FULL DESCRIPTION carefully. Do not score based on title alone. Look for hard requirements like certifications, specific industry experience, specialized tools.
+
+## Key bonuses:
+- If the job is at an international/English-speaking company → +10 points
+- If description mentions "English" as working language → +10 points
+- If the job is at a startup, international company, or explicitly says "English-speaking environment" → +10 points
+
+## IMPORTANT — salary filter:
+- If candidate has min_salary set and the job shows a salary BELOW that threshold → max 40
+- If no salary is shown, do NOT penalize — but mention "зарплата не указана" in verdict
 
 ## Candidate Profile
 {profile_text}
@@ -26,9 +53,9 @@ You are an Executive Recruiter AI. Score each job against the candidate profile.
 ## Instructions
 For each job, return a JSON object with:
 - "job_index": the index number
-- "score": 0-100 (overall match)
+- "score": 0-100 (realistic, use the full range — most jobs should be 30-70)
 - "breakdown": {{"relevance": 0-100, "seniority": 0-100, "language_fit": 0-100, "location": 0-100}}
-- "verdict": 1-2 sentence assessment in Russian
+- "verdict": 1-2 sentence assessment in Russian. Be honest and specific.
 - "red_flags": list of concerns (in Russian)
 
 Return a JSON array. Only valid JSON, no markdown fences."""
@@ -115,7 +142,7 @@ async def _score_batch(
 ) -> list[JobScore]:
     jobs_text = ""
     for idx, job in enumerate(jobs):
-        desc_preview = (job.description or "")[:500]
+        desc_preview = (job.description or "")[:1200]
         salary_info = ""
         if job.salary_min or job.salary_max:
             salary_info = f"Salary: {job.salary_min or '?'}-{job.salary_max or '?'} {job.salary_currency or 'EUR'}"
@@ -136,13 +163,21 @@ async def _score_batch(
         ai = _get_client()
         response = await ai.messages.create(
             model="claude-sonnet-4-20250514",
-            max_tokens=2000,
+            max_tokens=5000,
             messages=[{"role": "user", "content": prompt}],
         )
         text = response.content[0].text
         # Strip markdown fences if present
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1].rsplit("```", 1)[0]
+        if "```" in text:
+            text = text.split("```json")[-1] if "```json" in text else text.split("```")[-2] if text.count("```") >= 2 else text
+            text = text.replace("```", "").strip()
+        # Try to fix truncated JSON
+        text = text.strip()
+        if not text.endswith("]"):
+            # Find last complete object
+            last_brace = text.rfind("}")
+            if last_brace > 0:
+                text = text[:last_brace + 1] + "]"
         results = json.loads(text)
     except Exception as e:
         logger.error("Claude scoring failed: %s", e)

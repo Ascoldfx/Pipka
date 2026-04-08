@@ -38,7 +38,15 @@ async def ai_analysis_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         analysis = await analyze_single_job(job, profile)
 
-    await query.edit_message_text(text=f"{original_text}\n\n🤖 *АНАЛИЗ:*\n{analysis}", parse_mode="Markdown")
+    # Send analysis as a new message (can be long, avoids message edit limits)
+    await query.edit_message_text(text=f"{original_text}\n\n🤖 Анализ — см. ниже ⬇️")
+    # Split if too long for Telegram (4096 char limit)
+    full_text = f"🤖 АНАЛИЗ: {job.title}\n\n{analysis}"
+    if len(full_text) <= 4096:
+        await query.message.reply_text(full_text)
+    else:
+        await query.message.reply_text(full_text[:4096])
+        await query.message.reply_text(full_text[4096:])
 
 
 async def save_job_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):

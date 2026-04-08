@@ -32,17 +32,29 @@ SEARCH_PRESETS = {
         "locations": [],
         "label": "Вся Германия",
     },
+    "search_international": {
+        "queries": [
+            "Supply Chain Manager English",
+            "Procurement Manager international",
+            "Global Supply Chain Manager",
+            "Head of Procurement",
+            "VP Supply Chain",
+        ],
+        "countries": ["de"],
+        "locations": [],
+        "label": "International / English (DE)",
+    },
     "search_europe": {
-        "queries": ["Director Supply Chain", "VP Procurement", "Head of Logistics", "COO", "Global Operations"],
+        "queries": ["Director Supply Chain", "VP Procurement", "Head of Logistics", "COO", "Global Operations", "Supply Chain Manager English"],
         "countries": ["de", "ch", "at", "nl"],
         "locations": [],
-        "label": "Европа (International)",
+        "label": "Европа (DACH + NL)",
     },
 }
 
 
 def _build_aggregator() -> JobAggregator:
-    return JobAggregator([AdzunaSource(), JobSpySource(), ArbeitsagenturSource()])
+    return JobAggregator([AdzunaSource(), JobSpySource()])
 
 
 async def search_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -61,7 +73,7 @@ async def search_preset_handler(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text("Неизвестный режим поиска.")
         return
 
-    await query.edit_message_text(f"🚀 Ищу: *{preset['label']}*\\.\\.\\.\n\nИсточники: Adzuna, Indeed, LinkedIn, Google Jobs, Arbeitsagentur\nЭто может занять 30\\-60 секунд\\.", parse_mode="MarkdownV2")
+    await query.edit_message_text(f"🚀 Ищу: {preset['label']}...\n\nИсточники: Adzuna, Indeed, LinkedIn, Google Jobs, Arbeitsagentur\nЭто может занять 30-60 секунд.")
 
     params = SearchParams(
         queries=preset["queries"],
@@ -79,17 +91,18 @@ async def search_preset_handler(update: Update, context: ContextTypes.DEFAULT_TY
         await query.message.reply_text("Новых вакансий не найдено. Попробуйте другой режим.")
         return
 
-    await query.message.reply_text(f"✅ Найдено {len(results)} вакансий (отсортированы по AI\\-скору):", parse_mode="MarkdownV2")
+    # Count sources
+    source_counts: dict[str, int] = {}
+    for job, _, _ in results:
+        source_counts[job.source] = source_counts.get(job.source, 0) + 1
+    sources_str = " | ".join(f"{s}: {c}" for s, c in sorted(source_counts.items()))
+    await query.message.reply_text(f"✅ Найдено {len(results)} вакансий (по AI-скору)\n📡 {sources_str}")
 
     for i, (job, score, verdict) in enumerate(results[:15]):
         card = format_job_card(job, score=score, rank=i + 1)
         if verdict:
-            card += f"\n\n💬 _{verdict}_"
-        try:
-            await query.message.reply_text(card, parse_mode="Markdown", reply_markup=job_actions(job.id))
-        except Exception as e:
-            # Fallback without markdown if parsing fails
-            await query.message.reply_text(card.replace("*", "").replace("_", ""), reply_markup=job_actions(job.id))
+            card += f"\n\n💬 {verdict}"
+        await query.message.reply_text(card, reply_markup=job_actions(job.id))
         await asyncio.sleep(0.3)
 
 
@@ -123,9 +136,6 @@ async def text_search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     for i, (job, score, verdict) in enumerate(results[:15]):
         card = format_job_card(job, score=score, rank=i + 1)
         if verdict:
-            card += f"\n\n💬 _{verdict}_"
-        try:
-            await update.message.reply_text(card, parse_mode="Markdown", reply_markup=job_actions(job.id))
-        except Exception:
-            await update.message.reply_text(card.replace("*", "").replace("_", ""), reply_markup=job_actions(job.id))
+            card += f"\n\n💬 {verdict}"
+        await update.message.reply_text(card, reply_markup=job_actions(job.id))
         await asyncio.sleep(0.3)

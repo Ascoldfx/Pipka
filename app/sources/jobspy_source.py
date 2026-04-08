@@ -9,10 +9,18 @@ from app.sources.base import RawJob, SearchParams
 logger = logging.getLogger(__name__)
 
 SITE_MAP = {
-    "de": ["indeed", "linkedin", "glassdoor", "google"],
-    "ch": ["indeed", "linkedin", "glassdoor", "google"],
-    "at": ["indeed", "linkedin", "glassdoor", "google"],
-    "nl": ["indeed", "linkedin", "glassdoor", "google"],
+    "de": ["indeed", "linkedin", "google"],
+    "ch": ["indeed", "linkedin", "google"],
+    "at": ["indeed", "linkedin", "google"],
+    "nl": ["indeed", "linkedin", "google"],
+}
+
+# JobSpy uses full country names, not ISO codes
+COUNTRY_NAME = {
+    "de": "germany",
+    "ch": "switzerland",
+    "at": "austria",
+    "nl": "netherlands",
 }
 
 
@@ -51,7 +59,7 @@ class JobSpySource:
                 "search_term": query,
                 "results_wanted": min(limit, 50),
                 "hours_old": 24 * 60,  # 60 days
-                "country_indeed": country,
+                "country_indeed": COUNTRY_NAME.get(country, country),
             }
             if location:
                 kwargs["location"] = location

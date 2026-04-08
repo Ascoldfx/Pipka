@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     arbeitsagentur_api_key: str = "jobboerse-jobsuche"
 
     # Scoring
-    max_jobs_per_scoring_batch: int = 10
+    max_jobs_per_scoring_batch: int = 8
     max_scored_per_search: int = 30
     score_cache_hours: int = 168  # 7 days
 

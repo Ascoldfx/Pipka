@@ -16,7 +16,8 @@ def search_type_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📍 Регион (Саксония + Галле)", callback_data="search_regional")],
         [InlineKeyboardButton("🇩🇪 Вся Германия", callback_data="search_germany")],
-        [InlineKeyboardButton("🌍 Европа (International)", callback_data="search_europe")],
+        [InlineKeyboardButton("🌐 International / English (DE)", callback_data="search_international")],
+        [InlineKeyboardButton("🌍 Европа (DACH + NL)", callback_data="search_europe")],
         [InlineKeyboardButton("🎯 Свой запрос", callback_data="search_custom")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="back_main")],
     ])

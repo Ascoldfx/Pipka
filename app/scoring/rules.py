@@ -15,11 +15,18 @@ DOMAIN_KEYWORDS = [
     "purchasing", "lieferkette", "warehouse", "lager",
 ]
 
+ENGLISH_FRIENDLY_SIGNALS = [
+    "english", "international", "global", "multinational",
+    "working language: english", "english-speaking",
+    "startup", "remote", "hybrid",
+]
+
 
 def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     """Fast rule-based pre-filter. Returns (pass, bucket) where bucket is low/medium/high."""
     title_lower = job.title.lower()
     desc_lower = (job.description or "").lower()
+    text = f"{title_lower} {desc_lower}"
 
     # Seniority check
     seniority_match = any(kw in title_lower for kw in SENIOR_KEYWORDS)
@@ -44,7 +51,15 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     if profile and profile.work_mode == "remote" and job.is_remote is False:
         return False, "low"
 
+    # English-friendly bonus
+    english_friendly = any(signal in text for signal in ENGLISH_FRIENDLY_SIGNALS)
+
+    # Scoring: high = seniority + domain + english, medium = domain only
+    if seniority_match and domain_match and english_friendly:
+        return True, "high"
     if seniority_match and domain_match:
+        return True, "high"
+    if domain_match and english_friendly:
         return True, "high"
     if domain_match:
         return True, "medium"

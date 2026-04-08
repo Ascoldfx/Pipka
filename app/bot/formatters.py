@@ -2,15 +2,17 @@ from app.models.job import Job
 
 
 def format_job_card(job: Job, score: int | None = None, rank: int | None = None) -> str:
+    """Format job card as plain text (no Markdown to avoid escaping issues)."""
     parts = []
     if rank is not None:
-        parts.append(f"*#{rank}*")
+        parts.append(f"#{rank}")
     if score is not None:
-        parts.append(f"{'🟢' if score >= 70 else '🟡' if score >= 40 else '🔴'} *{score}/100*")
+        emoji = '🟢' if score >= 70 else '🟡' if score >= 40 else '🔴'
+        parts.append(f"{emoji} {score}/100")
 
-    parts.append(f"\n📌 *{_escape_md(job.title)}*")
-    parts.append(f"🏢 {_escape_md(job.company_name or 'N/A')}")
-    parts.append(f"📍 {_escape_md(job.location or 'N/A')} ({job.country or '?'})")
+    parts.append(f"\n📌 {job.title}")
+    parts.append(f"🏢 {job.company_name or 'N/A'}")
+    parts.append(f"📍 {job.location or 'N/A'} ({job.country or '?'})")
 
     if job.salary_min or job.salary_max:
         sal = _salary_str(job.salary_min, job.salary_max, job.salary_currency)
@@ -24,7 +26,7 @@ def format_job_card(job: Job, score: int | None = None, rank: int | None = None)
     parts.append(f"📡 {job.source}")
 
     if job.url:
-        parts.append(f"🔗 [Открыть вакансию]({job.url})")
+        parts.append(f"🔗 {job.url}")
 
     return "\n".join(parts)
 
@@ -39,7 +41,7 @@ def format_stats(stats: dict[str, int]) -> str:
         "withdrawn": "🚫",
     }
     total = sum(stats.values())
-    lines = [f"📊 *Pipeline* (всего: {total})\n"]
+    lines = [f"📊 Pipeline (всего: {total})\n"]
     for status, count in stats.items():
         icon = icons.get(status, "•")
         lines.append(f"{icon} {status.capitalize()}: {count}")
@@ -55,9 +57,3 @@ def _salary_str(min_sal: float | None, max_sal: float | None, currency: str | No
     if max_sal:
         return f"до {int(max_sal):,} {cur}"
     return "не указана"
-
-
-def _escape_md(text: str) -> str:
-    for char in ("_", "*", "[", "]", "(", ")", "~", "`", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!"):
-        text = text.replace(char, f"\\{char}")
-    return text

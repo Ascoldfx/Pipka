@@ -17,8 +17,11 @@ from app.bot.handlers.settings import profile_field_handler, profile_menu_handle
 logger = logging.getLogger(__name__)
 
 
-def create_bot():
-    app = ApplicationBuilder().token(settings.telegram_bot_token).build()
+def create_bot_app(post_init_callback=None):
+    builder = ApplicationBuilder().token(settings.telegram_bot_token)
+    if post_init_callback:
+        builder = builder.post_init(post_init_callback)
+    app = builder.build()
 
     # Commands
     app.add_handler(CommandHandler("start", start_handler))
@@ -34,7 +37,7 @@ def create_bot():
     app.add_handler(CallbackQueryHandler(start_handler, pattern="^back_main$"))
 
     # Search presets
-    app.add_handler(CallbackQueryHandler(search_preset_handler, pattern="^search_(regional|germany|europe)$"))
+    app.add_handler(CallbackQueryHandler(search_preset_handler, pattern="^search_(regional|germany|international|europe)$"))
     app.add_handler(CallbackQueryHandler(custom_search_handler, pattern="^search_custom$"))
 
     # Job actions
@@ -47,7 +50,7 @@ def create_bot():
     # Profile editing
     app.add_handler(CallbackQueryHandler(profile_field_handler, pattern=r"^prof_\w+$"))
 
-    # Text handlers (order matters — profile editing first, then custom search)
+    # Text handlers
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _text_router))
 
     return app
