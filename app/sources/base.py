@@ -33,16 +33,19 @@ class RawJob:
 def _normalize(text: str) -> str:
     text = text.lower().strip()
     # Remove common suffixes from company names
-    for suffix in ("gmbh", " ag", " ltd", " inc", " se", " co.", "& co", " mbh"):
+    for suffix in ("gmbh", " ag", " ltd", " inc", " se", " co.", "& co", " mbh",
+                   " kg", " e.v.", " ohg", " ug", " sarl", " bv", " nv"):
         text = text.replace(suffix, "")
     # Remove job board noise from titles (Adzuna appends categories)
     text = re.sub(r"\s*-\s*(system engineering|admin|ingenieur|it|engineering).*$", "", text)
-    # Remove (m/w/d) and similar
-    text = re.sub(r"\s*\(m/w/d\)\s*", " ", text)
-    text = re.sub(r"\s*\(w/m/d\)\s*", " ", text)
-    text = re.sub(r"\s*\(all genders\)\s*", " ", text)
+    # Remove (m/w/d), (m/f/d), (all genders), (f/m/x) and similar
+    text = re.sub(r"\s*\([mwfd/]+\)\s*", " ", text)
+    text = re.sub(r"\s*\(all genders?\)\s*", " ", text)
+    text = re.sub(r"\s*\(m/f/x\)\s*", " ", text)
     # Remove "senior" for dedup — "Senior X" and "X" at same company = likely same role
     text = text.replace("senior ", "")
+    # Remove location from title (e.g. "Director | Berlin", "COO - Munich")
+    text = re.sub(r"\s*[|–—-]\s*(berlin|münchen|munich|hamburg|frankfurt|düsseldorf|köln|cologne|stuttgart|leipzig|dresden|hannover|nürnberg|dortmund|essen|bremen|bonn)\b.*$", "", text)
     # Collapse whitespace
     text = re.sub(r"\s+", " ", text)
     # Remove location specifics (postal codes)

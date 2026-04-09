@@ -221,6 +221,49 @@ async def analyze_job(job_id: int):
         return {"analysis": analysis}
 
 
+# ─── Manual Scan ────────────────────────────────────────────────
+
+@router.post("/api/scan")
+async def trigger_scan():
+    """Trigger a background job scan manually."""
+    import asyncio
+    from app.services.scheduler_service import _background_scan, scheduler
+
+    # Check if scan is already running
+    running = scheduler.get_job("manual_scan")
+    if running:
+        return {"status": "already_running"}
+
+    # Get bot app from scheduler's existing job
+    bg_job = scheduler.get_job("background_scan")
+    if not bg_job:
+        return {"error": "Scheduler not initialized"}
+
+    bot_app = bg_job.args[0]
+
+    # Run scan as a background task
+    async def _run():
+        try:
+            await _background_scan(bot_app)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error("Manual scan failed: %s", e)
+
+    asyncio.create_task(_run())
+    return {"status": "started"}
+
+
+@router.get("/api/scan/status")
+async def scan_status():
+    """Check when last/next scan runs."""
+    from app.services.scheduler_service import scheduler
+    bg_job = scheduler.get_job("background_scan")
+    if not bg_job:
+        return {"next_run": None}
+    next_run = bg_job.next_run_time
+    return {"next_run": next_run.isoformat() if next_run else None}
+
+
 # ─── Profile / Settings ────────────────────────────────────────
 
 @router.get("/api/profile")

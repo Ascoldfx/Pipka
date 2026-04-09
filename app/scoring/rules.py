@@ -39,6 +39,9 @@ REJECT_TITLE_KEYWORDS = [
     "medical director", "clinical",
     "real estate", "property",
     "founding", "co-founder",
+    # Consulting
+    "consultant", "consulting", "berater", "beratung",
+    "advisory", "advisor",
 ]
 
 DOMAIN_KEYWORDS = [

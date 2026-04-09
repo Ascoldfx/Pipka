@@ -130,7 +130,10 @@
 
 <header>
   <h1>pipka<span>.net</span></h1>
-  <div style="font-size:11px;color:var(--muted)">Job Dashboard</div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <button class="btn-outline" id="scan-btn" onclick="triggerScan()" style="font-size:11px;padding:4px 12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);cursor:pointer;">Scan Now</button>
+    <span id="scan-info" style="font-size:10px;color:var(--muted)"></span>
+  </div>
 </header>
 
 <div class="stats" id="stats">
@@ -507,8 +510,44 @@ function fmtSalary(min,max,cur){
 }
 function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 
+/* Scan */
+async function triggerScan(){
+  const btn=$('scan-btn'); btn.disabled=true; btn.textContent='Scanning...';
+  $('scan-info').textContent='Scan started, may take 2-5 min...';
+  try{
+    const r=await fetch('/api/scan',{method:'POST'});
+    const d=await r.json();
+    if(d.status==='started'){
+      // Poll for new results
+      let checks=0;
+      const poll=setInterval(async()=>{
+        checks++;
+        const s=await(await fetch('/api/stats')).json();
+        $('scan-info').textContent=`Scanning... ${s.total_jobs} jobs (${checks*10}s)`;
+        $('stat-total').textContent=s.total_jobs;
+        $('stat-scored').textContent=s.scored;
+        $('stat-top').textContent=s.top_matches;
+        if(checks>=30){clearInterval(poll);btn.disabled=false;btn.textContent='Scan Now';$('scan-info').textContent='Done';loadJobs();loadStats();}
+      },10000);
+    } else {
+      $('scan-info').textContent=d.error||d.status;
+      btn.disabled=false; btn.textContent='Scan Now';
+    }
+  }catch(e){$('scan-info').textContent='Error';btn.disabled=false;btn.textContent='Scan Now';}
+}
+
+async function loadScanStatus(){
+  try{
+    const d=await(await fetch('/api/scan/status')).json();
+    if(d.next_run){
+      const t=new Date(d.next_run);
+      $('scan-info').textContent='Next: '+t.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+    }
+  }catch(e){}
+}
+
 /* Init */
-loadStats(); loadJobs();
+loadStats(); loadJobs(); loadScanStatus();
 setInterval(()=>{loadStats();loadJobs()},300000);
 </script>
 </body>

@@ -47,6 +47,8 @@ TOP_SCORE_THRESHOLD = 80  # Push to Telegram if score >= this
 
 def start_scheduler(bot_app):
     """Start background job scanner."""
+    from datetime import timedelta
+
     # Run every 3 hours
     scheduler.add_job(
         _background_scan,
@@ -56,17 +58,17 @@ def start_scheduler(bot_app):
         id="background_scan",
         replace_existing=True,
     )
-    # Also run 2 minutes after startup
+    # Run 30 seconds after startup (give time for everything to init)
     scheduler.add_job(
         _background_scan,
         "date",
-        run_date=datetime.now().replace(second=0, microsecond=0),
+        run_date=datetime.now() + timedelta(seconds=30),
         args=[bot_app],
         id="startup_scan",
         replace_existing=True,
     )
     scheduler.start()
-    logger.info("Background scanner started (every 3 hours)")
+    logger.info("Background scanner started (every 3 hours, first scan in 30s)")
 
 
 async def _background_scan(bot_app):

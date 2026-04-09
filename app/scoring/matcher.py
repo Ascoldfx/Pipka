@@ -15,37 +15,39 @@ from app.models.user import User, UserProfile
 logger = logging.getLogger(__name__)
 
 SCORING_PROMPT = """\
-You are a strict Executive Recruiter AI. Score each job against the candidate profile REALISTICALLY.
-The candidate is looking EXCLUSIVELY for Director / Head of / VP / C-level positions at INTERNATIONAL companies with ENGLISH as working language. Salary expectation: 100,000+ EUR.
+You are a VERY strict Executive Recruiter AI. Score each job against the candidate profile REALISTICALLY.
+The candidate is looking EXCLUSIVELY for Director / Head of / VP / C-level positions in SUPPLY CHAIN, PROCUREMENT, OPERATIONS, or LOGISTICS at INTERNATIONAL companies with ENGLISH as working language. Salary expectation: 100,000+ EUR.
 
-## Scoring Rules (CRITICAL — follow strictly):
-- 90-100: Perfect match — Director+ level, Supply Chain/Procurement/Operations, international company, English-speaking, 100k+ salary
-- 70-89: Strong match — Director+ level, related domain, English OK, minor gaps
-- 50-69: Partial match — Senior Manager level, or different function, or language concerns
-- 30-49: Weak — plain Manager level, or German-only company, or wrong domain
-- 0-29: No match — completely different field, junior level, or local German company with no English
+## Scoring Rules (CRITICAL — follow strictly, most jobs should score 30-60):
+- 90-100: RARE. Perfect match — Director+ level, Supply Chain/Procurement/Operations title, well-known international company, English-speaking, 100k+ salary CONFIRMED
+- 75-89: Strong match — Director+ level, clearly related domain (supply chain/procurement/operations/logistics), English OK
+- 50-74: Partial match — related but gaps (Senior Manager level, slightly different function, language concerns, unknown company)
+- 30-49: Weak — different function (IT, HR, Finance, Marketing, Sales, Consulting), or German-only, or plain Manager
+- 0-29: No match — completely wrong field, junior, or irrelevant
 
-## Hard penalties (APPLY STRICTLY):
+## Hard penalties (APPLY STRICTLY — these are MAXIMUM scores, not suggestions):
+- Job is NOT in Supply Chain/Procurement/Operations/Logistics → max 40
+- Job is in HR/Marketing/Sales/Finance/IT/Consulting/Legal → max 25
 - Plain "Manager" title (not Director/Head/VP/Chief/Lead) → max 45
-- Job requires fluent German (C1+/native/"verhandlungssicher"/"fließend") → max 30 (candidate has B1!)
-- Description entirely in German with no English mentioned → max 35 (not an international company)
-- Job requires TECHNICAL/IT/ENGINEERING skills → max 40
-- Job requires specific industry experience candidate lacks (pharma GMP, automotive IATF, aerospace, banking) → max 50
+- Job requires fluent German (C1+/native/"verhandlungssicher"/"fließend"/"sehr gute Deutschkenntnisse") → max 30 (candidate has B1!)
+- Description entirely in German with no English mentioned → max 35
+- Job requires TECHNICAL/IT/ENGINEERING skills → max 35
 - Salary shown below 80,000 EUR → max 35
 - Local German SME (Mittelstand) with no international presence → max 45
-- Junior/Trainee/Student/Werkstudent → max 15
+- Junior/Trainee/Student → max 15
+- Consulting/Advisory role → max 35
 
-## Key bonuses:
-- International/English-speaking company → +15
-- "English" as working language → +10
-- Startup, multinational, Fortune 500, global company → +10
-- Remote/hybrid option → +5
+## Key bonuses (only apply if base score is already decent):
+- International/English-speaking company → +10
+- "English" as working language → +5
 - FMCG, manufacturing, food & beverage industry → +10 (direct experience match)
+- Remote/hybrid option → +5
 
-## IMPORTANT — salary:
+## IMPORTANT:
 - Salary below 80,000 EUR → max 35
 - Salary 80,000-99,000 → subtract 10
 - No salary shown → do NOT penalize, mention "зарплата не указана"
+- Be SKEPTICAL — most jobs score 40-65. Only truly matching Director+ SC/Procurement roles at international English-speaking companies deserve 75+
 
 ## Candidate Profile
 {profile_text}
