@@ -11,7 +11,6 @@ from app.models.application import SearchSubscription
 from app.models.user import User
 from app.services.job_service import search_and_score
 from app.sources.adzuna import AdzunaSource
-from app.sources.arbeitsagentur import ArbeitsagenturSource
 from app.sources.aggregator import JobAggregator
 from app.sources.base import SearchParams
 from app.sources.jobspy_source import JobSpySource
@@ -60,18 +59,18 @@ async def _run_subscriptions(bot_app):
                     locations=qp.get("locations", []),
                 )
 
-                aggregator = JobAggregator([AdzunaSource(), JobSpySource(), ArbeitsagenturSource()])
+                aggregator = JobAggregator([AdzunaSource(), JobSpySource()])
                 results = await search_and_score(aggregator, params, user, session)
 
                 if results:
-                    text = f"📬 *Дайджест: {sub.name}*\nНайдено {len(results)} вакансий:\n\n"
+                    text = f"📬 Дайджест: {sub.name}\nНайдено {len(results)} вакансий:\n\n"
                     for job, score, verdict in results[:10]:
-                        text += f"{'🟢' if score >= 70 else '🟡' if score >= 40 else '🔴'} *{score}* — {job.title} @ {job.company_name or '?'}\n"
+                        text += f"{'🟢' if score >= 70 else '🟡' if score >= 40 else '🔴'} {score} — {job.title} @ {job.company_name or '?'}\n"
                         if job.url:
-                            text += f"  [Открыть]({job.url})\n"
+                            text += f"  {job.url}\n"
 
                     await bot_app.bot.send_message(
-                        chat_id=user.telegram_id, text=text, parse_mode="Markdown"
+                        chat_id=user.telegram_id, text=text,
                     )
 
                 sub.last_run = datetime.now()

@@ -9,7 +9,7 @@ from app.models.job import Job, JobScore
 from app.models.user import User
 from app.scoring.matcher import score_jobs
 from app.scoring.rules import pre_filter
-from app.services.tracker_service import get_applied_job_ids
+from app.services.tracker_service import get_applied_dedup_hashes, get_applied_job_ids
 from app.sources.aggregator import JobAggregator
 from app.sources.base import SearchParams
 
@@ -21,7 +21,7 @@ async def search_and_score(
     params: SearchParams,
     user: User,
     session: AsyncSession,
-    max_results: int = 15,
+    max_results: int = 100,
     skip_seen: bool = False,
 ) -> list[tuple[Job, int, str]]:
     """Search, filter by relevance bucket, score top candidates with AI."""
@@ -33,8 +33,9 @@ async def search_and_score(
     )
     already_scored_ids = {row[0] for row in already_scored_result.fetchall()}
 
-    # Get applied job IDs — hide from results
+    # Get applied jobs — hide from results (by ID and dedup_hash for robustness)
     applied_ids = await get_applied_job_ids(user.id, session)
+    applied_hashes = await get_applied_dedup_hashes(user.id, session)
 
     profile = user.profile
     new_high: list[Job] = []
@@ -43,7 +44,7 @@ async def search_and_score(
     seen_medium: list[Job] = []
 
     for job in all_jobs:
-        if job.id in applied_ids:
+        if job.id in applied_ids or job.dedup_hash in applied_hashes:
             continue
         passed, bucket = pre_filter(job, profile)
         if not passed:
@@ -57,16 +58,17 @@ async def search_and_score(
     # Prioritize: new high → new medium → seen high → seen medium
     candidates = new_high + new_medium + seen_high + seen_medium
 
+    applied_count = len(applied_ids | {j for j in applied_ids})  # just for logging
     logger.info(
-        "Pre-filter: %d new_high, %d new_medium, %d seen_high, %d seen_medium (total candidates: %d)",
-        len(new_high), len(new_medium), len(seen_high), len(seen_medium), len(candidates),
+        "Pre-filter: %d new_high, %d new_medium, %d seen_high, %d seen_medium (total: %d, applied hidden: %d)",
+        len(new_high), len(new_medium), len(seen_high), len(seen_medium), len(candidates), len(applied_ids),
     )
 
     if not candidates:
         return []
 
-    # Score up to 50 candidates
-    to_score = candidates[:50]
+    # Score up to 80 candidates (more chances to find top matches)
+    to_score = candidates[:80]
     scores = await score_jobs(to_score, user, session)
 
     # Build result tuples

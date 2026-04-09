@@ -23,16 +23,15 @@ async def my_jobs_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("У вас нет сохранённых вакансий.", reply_markup=main_menu())
         return
 
-    lines = ["📋 *Мои вакансии:*\n"]
+    lines = ["📋 Мои вакансии:\n"]
     for app in apps[:20]:
         job = app.job
         status_icon = {"saved": "💾", "applied": "📝", "interviewing": "🗣", "offer": "🎉", "rejected": "❌"}.get(app.status, "•")
         title = job.title if job else "N/A"
         company = job.company_name if job else ""
-        lines.append(f"{status_icon} *{title}* — {company}")
-        lines.append(f"   /update\\_{app.id}")
+        lines.append(f"{status_icon} {title} — {company}")
 
-    await query.edit_message_text("\n".join(lines), parse_mode="Markdown", reply_markup=main_menu())
+    await query.edit_message_text("\n".join(lines), reply_markup=main_menu())
 
 
 async def stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -48,7 +47,7 @@ async def stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Нет данных. Сохраните вакансии чтобы видеть статистику.", reply_markup=main_menu())
         return
 
-    await query.edit_message_text(format_stats(stats), parse_mode="Markdown", reply_markup=main_menu())
+    await query.edit_message_text(format_stats(stats), reply_markup=main_menu())
 
 
 async def status_update_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):

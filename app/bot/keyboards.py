@@ -22,6 +22,13 @@ def search_type_menu() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("⬅️ Назад", callback_data="back_main")],
     ])
 
+# --- "Show more" after search results ---
+
+def show_more_button() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📥 Показать ещё 15", callback_data="show_more")],
+    ])
+
 # --- Job actions ---
 
 def job_actions(job_db_id: int) -> InlineKeyboardMarkup:

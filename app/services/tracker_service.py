@@ -59,6 +59,19 @@ async def get_applied_job_ids(user_id: int, session: AsyncSession) -> set[int]:
     return {row[0] for row in result.fetchall()}
 
 
+async def get_applied_dedup_hashes(user_id: int, session: AsyncSession) -> set[str]:
+    """Get dedup hashes of all applied jobs — survives DB resets."""
+    result = await session.execute(
+        select(Job.dedup_hash)
+        .join(Application, Application.job_id == Job.id)
+        .where(
+            Application.user_id == user_id,
+            Application.status == "applied",
+        )
+    )
+    return {row[0] for row in result.fetchall()}
+
+
 async def update_status(app_id: int, new_status: str, note: str | None, session: AsyncSession) -> Application | None:
     if new_status not in VALID_STATUSES:
         return None

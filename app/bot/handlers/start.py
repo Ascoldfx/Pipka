@@ -13,26 +13,25 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await session.commit()
 
     text = (
-        "🤖 *JobHunt Bot*\n\n"
-        "Агрегатор вакансий из 5\\+ площадок с AI\\-скорингом\\.\n\n"
-        "Источники: Adzuna, Indeed, LinkedIn, Google Jobs, Arbeitsagentur\n\n"
-        "Начните с настройки профиля или сразу ищите\\!"
+        "🤖 JobHunt Bot\n\n"
+        "Агрегатор вакансий с AI-скорингом.\n\n"
+        "Источники: Adzuna, Indeed, LinkedIn, Google Jobs\n\n"
+        "Начните с настройки профиля или сразу ищите!"
     )
 
     if update.callback_query:
-        await update.callback_query.edit_message_text(text, parse_mode="MarkdownV2", reply_markup=main_menu())
+        await update.callback_query.edit_message_text(text, reply_markup=main_menu())
     else:
-        await update.message.reply_text(text, parse_mode="MarkdownV2", reply_markup=main_menu())
+        await update.message.reply_text(text, reply_markup=main_menu())
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "📖 *Команды:*\n"
-        "/start \\- Главное меню\n"
-        "/search \\- Поиск вакансий\n"
-        "/profile \\- Настройки профиля\n"
-        "/my\\_jobs \\- Сохранённые вакансии\n"
-        "/stats \\- Статистика pipeline\n"
-        "/help \\- Эта справка",
-        parse_mode="MarkdownV2",
+        "📖 Команды:\n"
+        "/start - Главное меню\n"
+        "/search - Поиск вакансий\n"
+        "/profile - Настройки профиля\n"
+        "/my_jobs - Сохранённые вакансии\n"
+        "/stats - Статистика pipeline\n"
+        "/help - Эта справка"
     )

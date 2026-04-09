@@ -61,12 +61,13 @@ with Session(engine) as session:
 
     profile.resume_text = RESUME_TEXT
     profile.target_titles = [
-        "Supply Chain Manager", "Procurement Manager", "Head of Procurement",
-        "Head of Supply Chain", "Operations Manager", "Leiter Einkauf",
-        "Leiter Supply Chain", "Director Supply Chain", "VP Procurement",
-        "COO", "Einkaufsleiter", "Logistik Manager",
+        "Director Supply Chain", "Head of Procurement", "VP Supply Chain",
+        "Head of Supply Chain", "Director Operations", "VP Procurement",
+        "Chief Procurement Officer", "Director Purchasing", "Head of Sourcing",
+        "Director Logistics", "Head of Operations", "COO",
+        "VP Operations", "Chief Operating Officer", "Global Supply Chain Director",
     ]
-    profile.min_salary = 55000
+    profile.min_salary = 100000
     profile.max_commute_km = 100
     profile.languages = {"en": "C1", "de": "B1", "uk": "Native", "ru": "Native"}
     profile.experience_years = 16

@@ -8,6 +8,7 @@ from app.bot.handlers.search import (
     custom_search_handler,
     search_menu_handler,
     search_preset_handler,
+    show_more_handler,
     text_search_handler,
 )
 from app.bot.handlers.results import ai_analysis_handler, applied_handler, save_job_handler
@@ -39,6 +40,9 @@ def create_bot_app(post_init_callback=None):
     # Search presets
     app.add_handler(CallbackQueryHandler(search_preset_handler, pattern="^search_(regional|germany|international|europe)$"))
     app.add_handler(CallbackQueryHandler(custom_search_handler, pattern="^search_custom$"))
+
+    # Pagination
+    app.add_handler(CallbackQueryHandler(show_more_handler, pattern="^show_more$"))
 
     # Job actions
     app.add_handler(CallbackQueryHandler(ai_analysis_handler, pattern=r"^ai_\d+$"))

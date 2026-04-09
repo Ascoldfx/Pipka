@@ -27,7 +27,7 @@ async def profile_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         profile = await ensure_profile(user, session)
         await session.commit()
 
-    lines = ["⚙️ *Ваш профиль:*\n"]
+    lines = ["⚙️ Ваш профиль:\n"]
     lines.append(f"📝 Резюме: {'✅' if profile.resume_text else '❌ не задано'}")
     lines.append(f"🎯 Должности: {', '.join(profile.target_titles) if profile.target_titles else '❌'}")
     lines.append(f"💰 Мин. зарплата: {profile.min_salary or '❌'}")
@@ -35,7 +35,7 @@ async def profile_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     lines.append(f"📍 Локация: {profile.base_location or '❌'}")
     lines.append(f"🏭 Индустрии: {', '.join(profile.industries) if profile.industries else '❌'}")
 
-    await query.edit_message_text("\n".join(lines), parse_mode="Markdown", reply_markup=profile_menu())
+    await query.edit_message_text("\n".join(lines), reply_markup=profile_menu())
 
 
 async def profile_field_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
