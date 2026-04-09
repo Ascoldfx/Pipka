@@ -77,7 +77,7 @@ async def _background_scan(bot_app):
 
     params = SearchParams(
         queries=SCAN_QUERIES,
-        countries=["de", "at", "nl"],
+        countries=["de", "at", "nl", "ch", "be"],
         locations=[],
     )
 

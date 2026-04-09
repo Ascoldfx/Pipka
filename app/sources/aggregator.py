@@ -19,6 +19,18 @@ NEGATIVE_KEYWORDS = [
     "specialist", "analyst", "coordinator", "assistant", "clerk",
     "sachbearbeiter", "referent", "mitarbeiter", "fachkraft",
     "dispatcher", "planner",
+    "merchandiser", "account executive", "founding",
+]
+
+# Foreign language requirements (not EN/DE) → reject
+FOREIGN_LANG_REQUIRED = [
+    "langue requise", "français courant", "francais courant",
+    "courant français", "courant francais",
+    "maîtrise du français", "french: native", "french required",
+    "français - courant", "francais - courant",
+    "español requerido", "spanish required",
+    "italiano richiesto", "italian required",
+    "polski wymagany", "polish required",
 ]
 
 # Phrases in title or description that indicate restricted positions
@@ -80,6 +92,20 @@ GERMAN_C1_REQUIRED = [
     "deutschkenntnisse in wort und schrift",
     "deutsch in wort und schrift",
     "mindestens c1 deutsch",
+    # Additional patterns that slip through
+    "sehr gute deutsch- und englischkenntnisse",
+    "sehr gute deutsch und englischkenntnisse",
+    "gute deutschkenntnisse",
+    "gute deutsch- und englischkenntnisse",
+    "sichere deutschkenntnisse",
+    "german: business fluency",
+    "german business fluency",
+    "german language: fluent",
+    "german language: business",
+    "german language proficiency",
+    "advanced german",
+    "german is highly preferred",
+    "german: business fluency is highly preferred",
 ]
 
 
@@ -267,6 +293,9 @@ DACH_MARKERS = [
     "rostock", "kassel", "halle", "magdeburg", "chemnitz", "potsdam",
     "vienna", "wien", "graz", "salzburg", "linz", "innsbruck",
     "amsterdam", "rotterdam", "den haag", "utrecht", "eindhoven",
+    # Belgium
+    "belgium", "belgien", "bruxelles", "brussels", "brüssel", "antwerp",
+    "antwerpen", "gent", "ghent", "leuven", "liège", "liege",
     # Russian DACH names (LinkedIn)
     "германия", "берлин", "мюнхен", "гамбург", "франкфурт",
     "штутгарт", "дюссельдорф", "кёльн", "лейпциг", "дрезден",
@@ -276,7 +305,7 @@ DACH_MARKERS = [
 ]
 
 
-ALLOWED_COUNTRIES = {"de", "at", "nl", "ch"}
+ALLOWED_COUNTRIES = {"de", "at", "nl", "ch", "be"}
 
 
 def _is_wrong_location(job: RawJob) -> bool:
@@ -347,5 +376,8 @@ def _is_negative(job: RawJob) -> bool:
     if any(phrase in text for phrase in EXCLUSION_PHRASES):
         return True
     if any(phrase in text for phrase in GERMAN_C1_REQUIRED):
+        return True
+    # Foreign language required (not EN/DE)
+    if any(phrase in desc_lower for phrase in FOREIGN_LANG_REQUIRED):
         return True
     return False

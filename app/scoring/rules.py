@@ -14,26 +14,65 @@ DIRECTOR_KEYWORDS = [
     "geschäftsführer", "geschaeftsfuehrer",
 ]
 
-# These in title = too junior, auto-reject
+# These in title = too junior or wrong function, auto-reject
 REJECT_TITLE_KEYWORDS = [
+    # Junior / operational
     "specialist", "analyst", "coordinator", "assistant", "clerk",
     "sachbearbeiter", "referent", "mitarbeiter", "fachkraft",
     "junior", "trainee", "werkstudent", "praktikant", "azubi",
     "intern", "student",
     "buyer",  # operational buyer, not strategic
     "dispatcher", "planner",  # too operational
+    "merchandiser",  # retail/marketing
+    # Wrong function — NOT supply chain / procurement / operations
+    "marketing", "sales director", "account executive", "account manager",
+    "hr director", "hr manager", "human resources", "people operations",
+    "people lead", "talent", "recruiting", "recruitment",
+    "engineering manager", "software", "developer", "data scientist",
+    "product manager", "product director", "product lead",
+    "finance director", "financial controller", "accounting",
+    "legal", "compliance director", "regulatory",
+    "creative director", "design director", "art director",
+    "editorial", "content director", "communications director",
+    "customer success", "customer service", "support manager",
+    "research director", "r&d director", "scientific",
+    "medical director", "clinical",
+    "real estate", "property",
+    "founding", "co-founder",
 ]
 
 DOMAIN_KEYWORDS = [
     "supply chain", "procurement", "einkauf", "beschaffung", "logistics",
     "logistik", "operations", "s2p", "source to pay", "sourcing",
     "purchasing", "lieferkette", "warehouse", "lager",
+    "demand planning", "inventory", "distribution", "fulfillment",
+    "supplier", "vendor management", "category management",
+    "strategic sourcing", "indirect procurement", "direct procurement",
 ]
 
 ENGLISH_FRIENDLY_SIGNALS = [
     "english", "international", "global", "multinational",
     "working language: english", "english-speaking",
     "startup", "remote",
+]
+
+# Non-English/non-German language requirements → reject
+FOREIGN_LANGUAGE_REQUIRED = [
+    # French
+    "langue requise", "français", "francais", "french required",
+    "french: native", "french: fluent", "french fluency",
+    "courant français", "courant francais",
+    "maîtrise du français", "maitrise du francais",
+    # Spanish
+    "español requerido", "spanish required", "spanish: native",
+    # Italian
+    "italiano richiesto", "italian required",
+    # Dutch (for NL jobs requiring native Dutch)
+    "nederlands vereist", "dutch: native", "native dutch required",
+    "vloeiend nederlands",
+    # Polish, Czech etc.
+    "polski wymagany", "polish required",
+    "čeština", "czech required",
 ]
 
 
@@ -43,8 +82,12 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     desc_lower = (job.description or "").lower()
     text = f"{title_lower} {desc_lower}"
 
-    # Hard reject: too junior titles
+    # Hard reject: too junior or wrong function
     if any(kw in title_lower for kw in REJECT_TITLE_KEYWORDS):
+        return False, "low"
+
+    # Hard reject: non-English/German language required
+    if any(kw in desc_lower for kw in FOREIGN_LANGUAGE_REQUIRED):
         return False, "low"
 
     # Domain check — must be in supply chain / procurement / operations

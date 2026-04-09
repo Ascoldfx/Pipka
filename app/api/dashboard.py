@@ -302,22 +302,48 @@ async def update_profile(
 
 @router.post("/api/profile/resume")
 async def upload_resume(file: UploadFile = File(...)):
-    """Upload resume file and extract text."""
+    """Upload resume file and extract text (PDF, DOCX, TXT)."""
     content = await file.read()
-
-    # Try to extract text from PDF
+    filename = (file.filename or "").lower()
     text = ""
-    if file.filename and file.filename.lower().endswith(".pdf"):
+
+    if filename.endswith(".pdf"):
         try:
             import io
-            # Try pdfminer
             from pdfminer.high_level import extract_text as pdf_extract
             text = pdf_extract(io.BytesIO(content))
-        except ImportError:
-            # Fallback: save raw text
-            text = content.decode("utf-8", errors="ignore")
-    else:
+        except Exception as e:
+            return {"error": f"PDF parse error: {str(e)[:200]}"}
+
+    elif filename.endswith(".docx"):
+        try:
+            import io
+            import zipfile
+            import xml.etree.ElementTree as ET
+            zf = zipfile.ZipFile(io.BytesIO(content))
+            xml_content = zf.read("word/document.xml")
+            tree = ET.fromstring(xml_content)
+            ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+            paragraphs = []
+            for p in tree.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p"):
+                texts = [t.text for t in p.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t") if t.text]
+                if texts:
+                    paragraphs.append("".join(texts))
+            text = "\n".join(paragraphs)
+        except Exception as e:
+            return {"error": f"DOCX parse error: {str(e)[:200]}"}
+
+    elif filename.endswith(".txt"):
         text = content.decode("utf-8", errors="ignore")
+
+    else:
+        return {"error": "Unsupported format. Use PDF, DOCX, or TXT."}
+
+    # Remove null bytes that PostgreSQL can't handle
+    text = text.replace("\x00", "").strip()
+
+    if not text:
+        return {"error": "Could not extract text from file"}
 
     async with async_session() as session:
         user = await _get_user(session)
@@ -327,7 +353,7 @@ async def upload_resume(file: UploadFile = File(...)):
         if not p:
             p = UserProfile(user_id=user.id)
             session.add(p)
-        p.resume_text = text.strip()
+        p.resume_text = text
         await session.commit()
 
     return {"ok": True, "length": len(text), "preview": text[:500]}

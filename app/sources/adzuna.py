@@ -27,17 +27,26 @@ class AdzunaSource:
             for country in params.countries:
                 for location in params.locations or [""]:
                     for query in params.queries:
-                        jobs = await self._fetch_page(session, country, location, query, params.results_per_query)
-                        for job in jobs:
-                            if job.external_id not in seen:
-                                seen.add(job.external_id)
-                                results.append(job)
+                        # Fetch multiple pages (up to 3) for more results
+                        for page in range(1, 4):
+                            jobs = await self._fetch_page(
+                                session, country, location, query,
+                                min(params.results_per_query, 50), page,
+                            )
+                            for job in jobs:
+                                if job.external_id not in seen:
+                                    seen.add(job.external_id)
+                                    results.append(job)
+                            # Stop if we got fewer than requested (no more pages)
+                            if len(jobs) < 20:
+                                break
         return results
 
     async def _fetch_page(
-        self, session: aiohttp.ClientSession, country: str, location: str, query: str, limit: int
+        self, session: aiohttp.ClientSession, country: str, location: str,
+        query: str, limit: int, page: int = 1,
     ) -> list[RawJob]:
-        url = f"{ADZUNA_BASE}/{country}/search/1"
+        url = f"{ADZUNA_BASE}/{country}/search/{page}"
         request_params = {
             "app_id": settings.adzuna_app_id,
             "app_key": settings.adzuna_app_key,
@@ -51,7 +60,7 @@ class AdzunaSource:
         try:
             async with session.get(url, params=request_params, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                 if resp.status != 200:
-                    logger.warning("Adzuna %s/%s returned %s", country, query, resp.status)
+                    logger.warning("Adzuna %s/%s p%d returned %s", country, query, page, resp.status)
                     return []
                 data = await resp.json()
         except Exception as e:
@@ -65,6 +74,9 @@ class AdzunaSource:
                 title = item.get("title", "").replace("<b>", "").replace("</b>", "")
                 area = item.get("location", {}).get("display_name", "")
 
+                # Use direct job URL if available, fallback to redirect_url
+                job_url = item.get("redirect_url", "")
+
                 jobs.append(
                     RawJob(
                         external_id=f"adzuna_{country}_{item['id']}",
@@ -77,7 +89,7 @@ class AdzunaSource:
                         salary_min=item.get("salary_min"),
                         salary_max=item.get("salary_max"),
                         salary_currency="EUR" if country in ("de", "at", "nl", "be", "fr") else "CHF" if country == "ch" else "EUR",
-                        url=item.get("redirect_url"),
+                        url=job_url,
                         is_remote=None,
                         posted_at=posted,
                         raw_data=item,

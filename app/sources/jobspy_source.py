@@ -9,10 +9,11 @@ from app.sources.base import RawJob, SearchParams
 logger = logging.getLogger(__name__)
 
 SITE_MAP = {
-    "de": ["indeed", "linkedin", "google"],
-    "ch": ["indeed", "linkedin", "google"],
-    "at": ["indeed", "linkedin", "google"],
-    "nl": ["indeed", "linkedin", "google"],
+    "de": ["indeed", "linkedin", "glassdoor"],
+    "ch": ["indeed", "linkedin", "glassdoor"],
+    "at": ["indeed", "linkedin", "glassdoor"],
+    "nl": ["indeed", "linkedin", "glassdoor"],
+    "be": ["indeed", "linkedin", "glassdoor"],
 }
 
 # JobSpy uses full country names, not ISO codes
@@ -21,6 +22,7 @@ COUNTRY_NAME = {
     "ch": "switzerland",
     "at": "austria",
     "nl": "netherlands",
+    "be": "belgium",
 }
 
 
