@@ -19,6 +19,8 @@ dependencies = [
     "pydantic-settings>=2.7,<3.0",
     "python-dotenv>=1.0,<2.0",
     "python-dateutil>=2.9,<3.0",
+    "pdfminer.six>=20231228",
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
