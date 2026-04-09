@@ -58,9 +58,8 @@ async def search_and_score(
     # Prioritize: new high → new medium → seen high → seen medium
     candidates = new_high + new_medium + seen_high + seen_medium
 
-    applied_count = len(applied_ids | {j for j in applied_ids})  # just for logging
     logger.info(
-        "Pre-filter: %d new_high, %d new_medium, %d seen_high, %d seen_medium (total: %d, applied hidden: %d)",
+        "Pre-filter: %d new_high, %d new_medium, %d seen_high, %d seen_medium (total: %d, hidden: %d)",
         len(new_high), len(new_medium), len(seen_high), len(seen_medium), len(candidates), len(hidden_ids),
     )
 

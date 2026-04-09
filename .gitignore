@@ -10,3 +10,4 @@ dist/
 .pytest_cache/
 alembic/versions/*.py
 !alembic/versions/.gitkeep
+.claude/settings.local.json

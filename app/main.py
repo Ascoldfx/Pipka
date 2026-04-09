@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 
 from app.api.health import router as health_router
+from app.api.dashboard import router as dashboard_router
 
 app = FastAPI(title="JobHunt API", version="0.1.0")
 app.include_router(health_router, tags=["health"])
+app.include_router(dashboard_router, tags=["dashboard"])
