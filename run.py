@@ -25,15 +25,11 @@ async def main():
     asyncio.create_task(server.serve())
     logger.info("FastAPI started on port 8000")
 
-    # Build bot with post_init that starts scheduler
+    # Build bot
     from app.bot.bot import create_bot_app
     from app.services.scheduler_service import start_scheduler
 
-    async def on_post_init(app):
-        start_scheduler(app)
-        logger.info("Scheduler started")
-
-    bot_app = create_bot_app(post_init_callback=on_post_init)
+    bot_app = create_bot_app()
     logger.info("Starting Telegram bot...")
 
     # Run bot polling (blocks until stopped)
@@ -41,6 +37,10 @@ async def main():
         await bot_app.initialize()
         await bot_app.start()
         await bot_app.updater.start_polling()
+
+        # Start scheduler AFTER bot is fully running
+        start_scheduler(bot_app)
+        logger.info("Scheduler started")
         logger.info("Bot is running")
 
         # Keep running until interrupted
