@@ -1,32 +1,28 @@
+import asyncio
 import logging
-import threading
 
 import uvicorn
 
 from app.config import settings
 
 
-def main():
+async def main():
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         level=getattr(logging, settings.log_level),
     )
     logger = logging.getLogger(__name__)
 
-    # Initialize database (sync wrapper)
-    import asyncio
+    # Initialize database
     from app.database import init_db
-    loop = asyncio.new_event_loop()
-    loop.run_until_complete(init_db())
-    loop.close()
+    await init_db()
     logger.info("Database initialized")
 
-    # Start FastAPI in background thread
-    api_thread = threading.Thread(
-        target=lambda: uvicorn.run("app.main:app", host="0.0.0.0", port=8000, log_level="warning"),
-        daemon=True,
-    )
-    api_thread.start()
+    # Start FastAPI server in background
+    from app.main import app as fastapi_app
+    config = uvicorn.Config(fastapi_app, host="0.0.0.0", port=8000, log_level="warning")
+    server = uvicorn.Server(config)
+    asyncio.create_task(server.serve())
     logger.info("FastAPI started on port 8000")
 
     # Build bot with post_init that starts scheduler
@@ -39,8 +35,28 @@ def main():
 
     bot_app = create_bot_app(post_init_callback=on_post_init)
     logger.info("Starting Telegram bot...")
-    bot_app.run_polling()
+
+    # Run bot polling (blocks until stopped)
+    async with bot_app:
+        await bot_app.initialize()
+        await bot_app.start()
+        await bot_app.updater.start_polling()
+        logger.info("Bot is running")
+
+        # Keep running until interrupted
+        stop_event = asyncio.Event()
+        try:
+            await stop_event.wait()
+        except asyncio.CancelledError:
+            pass
+        finally:
+            await bot_app.updater.stop()
+            await bot_app.stop()
+            await bot_app.shutdown()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
