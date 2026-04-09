@@ -39,6 +39,7 @@ def job_actions(job_db_id: int) -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton("📨 Отправил резюме", callback_data=f"applied_{job_db_id}"),
+            InlineKeyboardButton("👎 Не подходит", callback_data=f"reject_{job_db_id}"),
         ],
     ])
 

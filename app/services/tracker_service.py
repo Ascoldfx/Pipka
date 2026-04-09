@@ -59,14 +59,46 @@ async def get_applied_job_ids(user_id: int, session: AsyncSession) -> set[int]:
     return {row[0] for row in result.fetchall()}
 
 
-async def get_applied_dedup_hashes(user_id: int, session: AsyncSession) -> set[str]:
-    """Get dedup hashes of all applied jobs — survives DB resets."""
+async def mark_rejected(user_id: int, job_id: int, session: AsyncSession) -> Application:
+    existing = await session.execute(
+        select(Application).where(Application.user_id == user_id, Application.job_id == job_id)
+    )
+    app = existing.scalar_one_or_none()
+    if app:
+        old_status = app.status
+        app.status = "rejected"
+        history = ApplicationHistory(application_id=app.id, old_status=old_status, new_status="rejected")
+        session.add(history)
+    else:
+        app = Application(user_id=user_id, job_id=job_id, status="rejected")
+        session.add(app)
+        await session.flush()
+        history = ApplicationHistory(application_id=app.id, old_status=None, new_status="rejected")
+        session.add(history)
+
+    await session.commit()
+    return app
+
+
+async def get_hidden_job_ids(user_id: int, session: AsyncSession) -> set[int]:
+    """Get job IDs that should be hidden: applied + rejected."""
+    result = await session.execute(
+        select(Application.job_id).where(
+            Application.user_id == user_id,
+            Application.status.in_(["applied", "rejected"]),
+        )
+    )
+    return {row[0] for row in result.fetchall()}
+
+
+async def get_hidden_dedup_hashes(user_id: int, session: AsyncSession) -> set[str]:
+    """Get dedup hashes of applied + rejected jobs — survives DB resets."""
     result = await session.execute(
         select(Job.dedup_hash)
         .join(Application, Application.job_id == Job.id)
         .where(
             Application.user_id == user_id,
-            Application.status == "applied",
+            Application.status.in_(["applied", "rejected"]),
         )
     )
     return {row[0] for row in result.fetchall()}

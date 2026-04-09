@@ -8,7 +8,7 @@ from telegram.ext import ContextTypes
 from app.database import async_session
 from app.models.job import Job
 from app.scoring.matcher import analyze_single_job
-from app.services.tracker_service import save_job, mark_applied
+from app.services.tracker_service import save_job, mark_applied, mark_rejected
 from app.services.user_service import get_or_create_user
 
 logger = logging.getLogger(__name__)
@@ -74,3 +74,18 @@ async def applied_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     original_text = query.message.text or ""
     await query.edit_message_text(text=f"{original_text}\n\n✅ Резюме отправлено — вакансия скрыта из будущих поисков")
+
+
+async def reject_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    job_id = int(query.data.replace("reject_", ""))
+
+    async with async_session() as session:
+        user = await get_or_create_user(query.from_user.id, query.from_user.full_name, session)
+        await session.commit()
+        await mark_rejected(user.id, job_id, session)
+
+    original_text = query.message.text or ""
+    await query.edit_message_text(text=f"{original_text}\n\n👎 Не подходит — скрыта из будущих поисков")

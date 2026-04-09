@@ -11,7 +11,7 @@ from app.bot.handlers.search import (
     show_more_handler,
     text_search_handler,
 )
-from app.bot.handlers.results import ai_analysis_handler, applied_handler, save_job_handler
+from app.bot.handlers.results import ai_analysis_handler, applied_handler, reject_handler, save_job_handler
 from app.bot.handlers.tracker import my_jobs_handler, stats_handler, status_update_handler
 from app.bot.handlers.settings import profile_field_handler, profile_menu_handler, profile_text_handler
 
@@ -48,6 +48,7 @@ def create_bot_app(post_init_callback=None):
     app.add_handler(CallbackQueryHandler(ai_analysis_handler, pattern=r"^ai_\d+$"))
     app.add_handler(CallbackQueryHandler(save_job_handler, pattern=r"^save_\d+$"))
     app.add_handler(CallbackQueryHandler(applied_handler, pattern=r"^applied_\d+$"))
+    app.add_handler(CallbackQueryHandler(reject_handler, pattern=r"^reject_\d+$"))
 
     # Application status
     app.add_handler(CallbackQueryHandler(status_update_handler, pattern=r"^status_\d+_\w+$"))

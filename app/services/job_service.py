@@ -9,7 +9,7 @@ from app.models.job import Job, JobScore
 from app.models.user import User
 from app.scoring.matcher import score_jobs
 from app.scoring.rules import pre_filter
-from app.services.tracker_service import get_applied_dedup_hashes, get_applied_job_ids
+from app.services.tracker_service import get_hidden_dedup_hashes, get_hidden_job_ids
 from app.sources.aggregator import JobAggregator
 from app.sources.base import SearchParams
 
@@ -33,9 +33,9 @@ async def search_and_score(
     )
     already_scored_ids = {row[0] for row in already_scored_result.fetchall()}
 
-    # Get applied jobs — hide from results (by ID and dedup_hash for robustness)
-    applied_ids = await get_applied_job_ids(user.id, session)
-    applied_hashes = await get_applied_dedup_hashes(user.id, session)
+    # Get hidden jobs (applied + rejected) — by ID and dedup_hash for robustness
+    hidden_ids = await get_hidden_job_ids(user.id, session)
+    hidden_hashes = await get_hidden_dedup_hashes(user.id, session)
 
     profile = user.profile
     new_high: list[Job] = []
@@ -44,7 +44,7 @@ async def search_and_score(
     seen_medium: list[Job] = []
 
     for job in all_jobs:
-        if job.id in applied_ids or job.dedup_hash in applied_hashes:
+        if job.id in hidden_ids or job.dedup_hash in hidden_hashes:
             continue
         passed, bucket = pre_filter(job, profile)
         if not passed:
@@ -61,7 +61,7 @@ async def search_and_score(
     applied_count = len(applied_ids | {j for j in applied_ids})  # just for logging
     logger.info(
         "Pre-filter: %d new_high, %d new_medium, %d seen_high, %d seen_medium (total: %d, applied hidden: %d)",
-        len(new_high), len(new_medium), len(seen_high), len(seen_medium), len(candidates), len(applied_ids),
+        len(new_high), len(new_medium), len(seen_high), len(seen_medium), len(candidates), len(hidden_ids),
     )
 
     if not candidates:
