@@ -13,8 +13,7 @@ from app.services.job_service import search_and_score
 from app.services.user_service import get_or_create_user
 from app.sources.aggregator import JobAggregator
 from app.sources.base import SearchParams
-from app.sources.adzuna import AdzunaSource
-from app.sources.jobspy_source import JobSpySource
+from app.sources import AdzunaSource, JobSpySource, ArbeitnowSource, RemotiveSource
 
 logger = logging.getLogger(__name__)
 
@@ -85,15 +84,28 @@ SEARCH_PRESETS = {
             "Director Sourcing",
             "Head of Purchasing",
         ],
-        "countries": ["de", "at", "nl"],
+        "countries": ["de", "at", "nl", "ch", "be", "si", "sk", "ro", "hu"],
         "locations": [],
-        "label": "Европа (DACH + NL)",
+        "label": "Европа (DACH + NL + CEE)",
+    },
+    "search_cee": {
+        "queries": [
+            "Director Supply Chain",
+            "Head of Procurement",
+            "VP Operations",
+            "Director Logistics",
+            "Chief Operating Officer",
+            "Global Supply Chain Director",
+        ],
+        "countries": ["si", "sk", "ro", "hu"],
+        "locations": [],
+        "label": "CEE (SI/SK/RO/HU)",
     },
 }
 
 
 def _build_aggregator() -> JobAggregator:
-    return JobAggregator([AdzunaSource(), JobSpySource()])
+    return JobAggregator([AdzunaSource(), JobSpySource(), ArbeitnowSource(), RemotiveSource()])
 
 
 async def search_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -107,16 +119,43 @@ async def search_preset_handler(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
 
     preset_key = query.data
-    preset = SEARCH_PRESETS.get(preset_key)
-    if not preset:
-        await query.edit_message_text("Неизвестный режим поиска.")
-        return
+    
+    if preset_key == "search_profile":
+        async with async_session() as session:
+            import sqlalchemy as sa
+            from app.models.user import User
+            from sqlalchemy.orm import selectinload
+            
+            user_res = await session.execute(
+                sa.select(User).options(selectinload(User.profile)).where(User.telegram_id == update.effective_user.id)
+            )
+            user = user_res.scalar_one_or_none()
+            
+            if not user or not user.profile or not user.profile.preferred_countries or not user.profile.target_titles:
+                await query.edit_message_text(
+                    "❌ Ваш профиль или настройки поиска не заполнены!\n\n"
+                    "Зайдите на вкладку Settings на сайте и заполните поля `Target job titles` и `Countries`."
+                )
+                return
+                
+            preset = {
+                "label": "Мой Профиль",
+                "queries": user.profile.target_titles,
+                "countries": user.profile.preferred_countries,
+                "locations": [],
+            }
+    else:
+        preset = SEARCH_PRESETS.get(preset_key)
+        if not preset:
+            await query.edit_message_text("Неизвестный режим поиска.")
+            return
 
     await query.edit_message_text(
-        f"🚀 Ищу: {preset['label']}...\n\n"
-        "Источники: Adzuna, Indeed, LinkedIn, Google Jobs\n"
-        "Фокус: Director / Head / VP / C-level\n"
-        "Это может занять 30-60 секунд."
+        f"🚀 Ищу: {preset['label']}...\n"
+        f"Страны: {', '.join(preset['countries']).upper()}\n"
+        f"Запросы: {len(preset['queries'])} шт.\n\n"
+        "Источники: Adzuna, JobSpy, Arbeitnow, Remotive\n"
+        "Это может занять 1-3 минуты."
     )
 
     params = SearchParams(

@@ -43,6 +43,7 @@ async def get_jobs(
     search: str | None = Query(None),
     status: str | None = Query(None),
     region: str | None = Query(None),
+    country: str | None = Query(None),
 ):
     async with async_session() as session:
         user = await _get_user(session)
@@ -101,7 +102,12 @@ async def get_jobs(
         elif region == "dach":
             stmt = stmt.where(Job.country.in_(["de", "at", "ch"]))
         elif region == "europe":
-            stmt = stmt.where(Job.country.in_(["de", "at", "ch", "nl", "be", "lu", "dk", "pl", "cz"]))
+            stmt = stmt.where(Job.country.in_(["de", "at", "ch", "nl", "be", "lu", "dk", "pl", "cz", "si", "sk", "ro", "hu"]))
+        elif region == "cee":
+            stmt = stmt.where(Job.country.in_(["si", "sk", "ro", "hu"]))
+
+        if country:
+            stmt = stmt.where(Job.country.ilike(country))
 
         # Count
         count_stmt = select(func.count()).select_from(stmt.subquery())
@@ -174,11 +180,15 @@ async def get_stats():
                 Application.user_id == user.id, Application.status == "rejected"
             )
         )).scalar() or 0
-        saved = (await session.execute(
-            select(func.count(Application.id)).where(
-                Application.user_id == user.id, Application.status == "saved"
-            )
-        )).scalar() or 0
+
+        # Calculate inbox (scored but not applied/rejected)
+        inbox_stmt = select(func.count(JobScore.id)).outerjoin(
+            Application, (Application.job_id == JobScore.job_id) & (Application.user_id == user.id)
+        ).where(
+            JobScore.user_id == user.id,
+            (Application.id == None) | (~Application.status.in_(["applied", "rejected"]))
+        )
+        inbox_count = (await session.execute(inbox_stmt)).scalar() or 0
 
         sources = {}
         src_result = await session.execute(select(Job.source, func.count(Job.id)).group_by(Job.source))
@@ -187,7 +197,7 @@ async def get_stats():
 
         return {
             "total_jobs": total_jobs, "scored": scored, "top_matches": top_count,
-            "applied": applied, "rejected": rejected, "saved": saved, "sources": sources,
+            "applied": applied, "rejected": rejected, "inbox": inbox_count, "sources": sources,
         }
 
 
@@ -286,6 +296,7 @@ async def get_profile():
             "work_mode": p.work_mode or "any",
             "preferred_countries": p.preferred_countries or [],
             "base_location": p.base_location or "",
+            "excluded_keywords": p.excluded_keywords or [],
         }}
 
 
@@ -300,6 +311,7 @@ async def update_profile(
     work_mode: str = Form(None),
     preferred_countries: str = Form(None),
     base_location: str = Form(None),
+    excluded_keywords: str = Form(None),
 ):
     async with async_session() as session:
         user = await _get_user(session)
@@ -338,6 +350,8 @@ async def update_profile(
             p.preferred_countries = [c.strip().lower() for c in preferred_countries.split(",") if c.strip()]
         if base_location is not None:
             p.base_location = base_location
+        if excluded_keywords is not None:
+            p.excluded_keywords = [k.strip() for k in excluded_keywords.split(",") if k.strip()]
 
         await session.commit()
         return {"ok": True}
