@@ -13,12 +13,7 @@ async def main():
     )
     logger = logging.getLogger(__name__)
 
-    # Initialize database
-    from app.database import init_db
-    await init_db()
-    logger.info("Database initialized")
-
-    # Start FastAPI server in background
+    # Start FastAPI server in background (lifespan hook handles DB init)
     from app.main import app as fastapi_app
     config = uvicorn.Config(fastapi_app, host="0.0.0.0", port=8000, log_level="warning")
     server = uvicorn.Server(config)
