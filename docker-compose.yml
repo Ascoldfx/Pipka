@@ -33,14 +33,6 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # Auto-update container when you push new code
-  watchtower:
-    image: containrrr/watchtower
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    command: --interval 300 --cleanup
-    restart: unless-stopped
-
 volumes:
   pgdata:
   app_data:
