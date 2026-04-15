@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models import Base
@@ -8,6 +8,12 @@ from app.models import Base
 
 class Job(Base):
     __tablename__ = "jobs"
+    __table_args__ = (
+        # Dashboard listing sorts by posted_at desc and filters by source / country.
+        Index("ix_jobs_posted_at_desc", "posted_at"),
+        Index("ix_jobs_source", "source"),
+        Index("ix_jobs_country", "country"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     external_id: Mapped[str] = mapped_column(String(255), index=True)
@@ -32,7 +38,12 @@ class Job(Base):
 
 class JobScore(Base):
     __tablename__ = "job_scores"
-    __table_args__ = (UniqueConstraint("job_id", "user_id"),)
+    __table_args__ = (
+        UniqueConstraint("job_id", "user_id"),
+        # Hot paths: LEFT JOIN scores on (job_id, user_id) in get_jobs + per-user aggregates in get_stats.
+        Index("ix_job_scores_user_job", "user_id", "job_id"),
+        Index("ix_job_scores_user_score", "user_id", "score"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"))

@@ -4,7 +4,8 @@ from __future__ import annotations
 import json
 import logging
 import secrets
-from typing import Optional
+import time
+from typing import Any, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -44,6 +45,19 @@ def require_admin(request: Request):
 router = APIRouter(dependencies=[Depends(verify_credentials)])
 
 VALID_ACTIONS = {"save", "applied", "reject"}
+
+# Simple in-memory TTL cache for /api/stats.
+# Keyed by user_id; invalidated by any write endpoint (job_action/analyze/update_profile).
+# Single-process app, so a plain dict is fine. Swap to aiocache/Redis if we ever scale out.
+_STATS_CACHE: dict[int, tuple[float, dict[str, Any]]] = {}
+_STATS_TTL_SECONDS = 30.0
+
+
+def _invalidate_stats_cache(user_id: Optional[int] = None) -> None:
+    if user_id is None:
+        _STATS_CACHE.clear()
+    else:
+        _STATS_CACHE.pop(user_id, None)
 
 
 async def _get_user(session):
@@ -200,6 +214,12 @@ async def get_stats():
         if not user:
             return {}
 
+        cached = _STATS_CACHE.get(user.id)
+        if cached is not None:
+            expires_at, payload = cached
+            if expires_at > time.monotonic():
+                return payload
+
         total_jobs = (await session.execute(select(func.count(Job.id)))).scalar() or 0
         scored = (await session.execute(
             select(func.count(JobScore.id)).where(JobScore.user_id == user.id)
@@ -232,10 +252,12 @@ async def get_stats():
         for row in src_result:
             sources[row[0]] = row[1]
 
-        return {
+        payload = {
             "total_jobs": total_jobs, "scored": scored, "top_matches": top_count,
             "applied": applied, "rejected": rejected, "inbox": inbox_count, "sources": sources,
         }
+        _STATS_CACHE[user.id] = (time.monotonic() + _STATS_TTL_SECONDS, payload)
+        return payload
 
 
 @router.post("/api/jobs/{job_id}/action", dependencies=[Depends(require_admin)])
@@ -254,6 +276,7 @@ async def job_action(job_id: int, action: str = Query(...)):
                 await mark_applied(user.id, job_id, session)
             elif action == "reject":
                 await mark_rejected(user.id, job_id, session)
+            _invalidate_stats_cache(user.id)
             return {"ok": True, "action": action}
         except HTTPException:
             raise

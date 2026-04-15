@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, JSON, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models import Base
@@ -8,6 +8,12 @@ from app.models import Base
 
 class Application(Base):
     __tablename__ = "applications"
+    __table_args__ = (
+        # Hot paths: LEFT JOIN apps on (job_id, user_id) + status filter + recent-activity aggregates.
+        Index("ix_applications_user_job", "user_id", "job_id"),
+        Index("ix_applications_user_status", "user_id", "status"),
+        Index("ix_applications_updated_at", "updated_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))

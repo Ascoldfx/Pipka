@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     claude_timeout_seconds: float = 60.0
     claude_max_retries: int = 2
 
+    # Claude model/token knobs (overridable via .env without redeploy)
+    claude_model: str = "claude-sonnet-4-20250514"
+    claude_scoring_max_tokens: int = 5000     # batch scoring response budget
+    claude_analysis_max_tokens: int = 1500    # single-job detailed analysis budget
+
     # Dashboard Authentication (required — set in .env)
     dashboard_username: str
     dashboard_password: str
@@ -38,7 +43,9 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    # `extra="ignore"` lets us share .env with docker-compose interpolation vars
+    # (e.g. POSTGRES_PASSWORD) without breaking Settings validation.
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 settings = Settings()

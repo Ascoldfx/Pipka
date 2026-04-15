@@ -173,8 +173,8 @@ async def _score_batch(
     try:
         ai = _get_client()
         response = await ai.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=5000,
+            model=settings.claude_model,
+            max_tokens=settings.claude_scoring_max_tokens,
             messages=[{"role": "user", "content": prompt}],
         )
         text = response.content[0].text
@@ -228,8 +228,8 @@ async def analyze_single_job(job: Job, profile: UserProfile) -> str:
     try:
         ai = _get_client()
         response = await ai.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1500,
+            model=settings.claude_model,
+            max_tokens=settings.claude_analysis_max_tokens,
             messages=[{"role": "user", "content": prompt}],
         )
         return response.content[0].text

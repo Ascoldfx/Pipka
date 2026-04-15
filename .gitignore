@@ -11,3 +11,4 @@ dist/
 alembic/versions/*.py
 !alembic/versions/.gitkeep
 .claude/settings.local.json
+.claude/worktrees/
