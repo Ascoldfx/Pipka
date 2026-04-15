@@ -71,7 +71,11 @@ client: AsyncAnthropic | None = None
 def _get_client() -> AsyncAnthropic:
     global client
     if client is None:
-        client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+        client = AsyncAnthropic(
+            api_key=settings.anthropic_api_key,
+            timeout=settings.claude_timeout_seconds,
+            max_retries=settings.claude_max_retries,
+        )
     return client
 
 

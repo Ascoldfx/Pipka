@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     max_jobs_per_scoring_batch: int = 8
     max_scored_per_search: int = 30
     score_cache_hours: int = 168  # 7 days
+    claude_timeout_seconds: float = 60.0
+    claude_max_retries: int = 2
 
     # Search
     default_results_limit: int = 50
