@@ -100,6 +100,8 @@ def build_profile_text(profile: UserProfile) -> str:
         parts.append(f"Industries: {', '.join(profile.industries)}")
     if profile.min_salary:
         parts.append(f"Min salary: {profile.min_salary} EUR")
+    if profile.excluded_keywords:
+        parts.append(f"CRITICAL EXCLUSIONS: You MUST penalize heavily (Score < 20) any job requiring languages/skills/keywords explicitly excluded here: {', '.join(profile.excluded_keywords)}")
     return "\n".join(parts) or "No profile set"
 
 

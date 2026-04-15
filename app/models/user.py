@@ -38,6 +38,7 @@ class UserProfile(Base):
     work_mode: Mapped[str | None] = mapped_column(String(20))  # remote / hybrid / onsite / any
     preferred_countries: Mapped[list | None] = mapped_column(JSON)  # ["de", "ch", "at"]
     base_location: Mapped[str | None] = mapped_column(String(255))  # "Leipzig"
+    excluded_keywords: Mapped[list | None] = mapped_column(JSON)  # ["junior", "sales", "b2"]
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     user: Mapped["User"] = relationship(back_populates="profile")

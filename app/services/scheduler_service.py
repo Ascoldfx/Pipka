@@ -15,10 +15,9 @@ from app.models.user import User
 from app.scoring.matcher import score_jobs
 from app.scoring.rules import pre_filter
 from app.services.tracker_service import get_hidden_dedup_hashes, get_hidden_job_ids
-from app.sources.adzuna import AdzunaSource
 from app.sources.aggregator import JobAggregator
 from app.sources.base import SearchParams
-from app.sources.jobspy_source import JobSpySource
+from app.sources import AdzunaSource, JobSpySource, ArbeitnowSource, RemotiveSource
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
@@ -75,24 +74,38 @@ async def _background_scan(bot_app):
     """Scan all sources, score only NEW jobs, push top results to Telegram."""
     logger.info("Background scan started")
 
-    aggregator = JobAggregator([AdzunaSource(), JobSpySource()])
-
-    params = SearchParams(
-        queries=SCAN_QUERIES,
-        countries=["de", "at", "nl", "ch", "be"],
-        locations=[],
-    )
+    aggregator = JobAggregator([AdzunaSource(), JobSpySource(), ArbeitnowSource(), RemotiveSource()])
 
     async with async_session() as session:
-        # 1. Collect and store jobs (aggregator handles dedup + upsert)
-        all_jobs = await aggregator.search(params, session)
-        logger.info("Background scan: %d jobs in DB after aggregation", len(all_jobs))
-
-        # 2. Find all users with profiles
+        # 1. Find all users with profiles to determine dynamic search scope
         users_result = await session.execute(
             select(User).options(selectinload(User.profile)).where(User.is_active == True)
         )
         users = users_result.scalars().all()
+
+        dynamic_queries = set()
+        dynamic_countries = set()
+        
+        for user in users:
+            if user.profile:
+                if user.profile.target_titles:
+                    dynamic_queries.update(user.profile.target_titles)
+                if user.profile.preferred_countries:
+                    dynamic_countries.update(user.profile.preferred_countries)
+                    
+        # Fallbacks to defaults if nothing found in profiles
+        final_queries = list(dynamic_queries) if dynamic_queries else SCAN_QUERIES
+        final_countries = list(dynamic_countries) if dynamic_countries else ["de", "at", "nl", "ch", "be", "si", "sk", "ro", "hu"]
+
+        params = SearchParams(
+            queries=final_queries,
+            countries=final_countries,
+            locations=[],
+        )
+
+        # 2. Collect and store jobs (aggregator handles dedup + upsert)
+        all_jobs = await aggregator.search(params, session)
+        logger.info("Background scan: %d jobs in DB after aggregation (Params: %s / %s)", len(all_jobs), final_queries, final_countries)
 
         for user in users:
             if not user.profile:

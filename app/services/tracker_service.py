@@ -59,6 +59,24 @@ async def get_applied_job_ids(user_id: int, session: AsyncSession) -> set[int]:
     return {row[0] for row in result.fetchall()}
 
 
+async def get_unreviewed_jobs(user_id: int, session: AsyncSession, min_score: int = 0) -> list[tuple[Job, int, str]]:
+    """Get scored jobs that the user hasn't reacted to (no Application with applied/rejected status)."""
+    # Find all JobScore for the user
+    stmt = (
+        select(Job, JobScore.score, JobScore.ai_analysis)
+        .join(JobScore, Job.id == JobScore.job_id)
+        .outerjoin(Application, (Application.job_id == Job.id) & (Application.user_id == user_id))
+        .where(
+            JobScore.user_id == user_id,
+            JobScore.score >= min_score,
+            (Application.id == None) | (~Application.status.in_(["applied", "rejected", "withdrawn"]))
+        )
+        .order_by(JobScore.score.desc())
+    )
+    result = await session.execute(stmt)
+    return [(row[0], row[1], row[2]) for row in result.all()]
+
+
 async def mark_rejected(user_id: int, job_id: int, session: AsyncSession) -> Application:
     existing = await session.execute(
         select(Application).where(Application.user_id == user_id, Application.job_id == job_id)

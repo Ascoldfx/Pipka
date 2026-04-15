@@ -4,10 +4,21 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 def main_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📬 Inbox (непросмотренные)", callback_data="menu_inbox")],
         [InlineKeyboardButton("🔍 Поиск вакансий", callback_data="menu_search")],
         [InlineKeyboardButton("📋 Мои вакансии", callback_data="menu_my_jobs")],
         [InlineKeyboardButton("⚙️ Профиль / Фильтры", callback_data="menu_profile")],
         [InlineKeyboardButton("📊 Статистика", callback_data="menu_stats")],
+    ])
+
+# --- Inbox menu ---
+
+def inbox_menu() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🟢 Только Топ (70+)", callback_data="inbox_top")],
+        [InlineKeyboardButton("🟡 Хорошие (40+)", callback_data="inbox_good")],
+        [InlineKeyboardButton("🔵 Все подряд", callback_data="inbox_all")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="back_main")],
     ])
 
 # --- Search options ---
@@ -18,6 +29,8 @@ def search_type_menu() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("🇩🇪 Вся Германия", callback_data="search_germany")],
         [InlineKeyboardButton("🌐 International / English (DE)", callback_data="search_international")],
         [InlineKeyboardButton("🌍 Европа (DACH + NL)", callback_data="search_europe")],
+        [InlineKeyboardButton("🇪🇺 CEE (SI/SK/RO/HU)", callback_data="search_cee")],
+        [InlineKeyboardButton("💼 Поиск по моему Профилю", callback_data="search_profile")],
         [InlineKeyboardButton("🎯 Свой запрос", callback_data="search_custom")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="back_main")],
     ])

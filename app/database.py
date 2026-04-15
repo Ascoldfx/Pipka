@@ -39,6 +39,16 @@ async def get_session() -> AsyncSession:
 
 async def init_db():
     from app.models import Base
+    from sqlalchemy import text
+    import logging
 
     async with _get_engine().begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        
+        # Soft migration: Add excluded_keywords if it doesn't exist
+        try:
+            await conn.execute(text("ALTER TABLE user_profiles ADD COLUMN excluded_keywords JSON"))
+            logging.info("Migrated user_profiles: added excluded_keywords")
+        except Exception:
+            # Column likely already exists
+            pass

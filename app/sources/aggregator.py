@@ -237,12 +237,7 @@ NON_DACH_RUSSIAN = [
     "колумбус", "индианаполис", "питтсбург", "цинциннати",
     "канзас-сити", "тампа", "орландо", "балтимор", "сакраменто",
     "кливленд", "новый орлеан",
-    # UK
-    "лондон", "манчестер", "эдинбург", "глазго", "бирмингем",
-    # Other
-    "париж", "мадрид", "барселона", "рим", "милан", "лиссабон",
-    "варшава", "прага", "будапешт", "бухарест", "дублин",
-    "копенгаген", "стокгольм", "осло", "хельсинки",
+    # Other global hubs (Asia/Americas/Oceania)
     "сингапур", "токио", "шанхай", "пекин", "сеул",
     "сидней", "мельбурн", "торонто", "ванкувер", "монреаль",
     "дубай",
@@ -265,14 +260,9 @@ NON_DACH_CITIES = [
     # UK
     "london", "manchester", "edinburgh", "glasgow", "leeds", "bristol",
     "liverpool", "cambridge", "oxford", "cardiff", "belfast",
-    # Other Europe (non-DACH/NL)
-    "paris", "madrid", "barcelona", "rome", "milan", "lisbon",
-    "warsaw", "prague", "budapest", "bucharest", "sofia", "zagreb",
-    "dublin", "brussels", "copenhagen", "stockholm", "oslo", "helsinki",
-    "athens", "vilnius", "riga", "tallinn", "belgrade", "kiev", "kyiv",
     # Asia
-    "bangalore", "mumbai", "delhi", "singapore", "shanghai", "beijing",
-    "tokyo", "hong kong", "seoul", "taipei", "jakarta", "bangkok",
+    "singapore", "tokyo", "shanghai", "beijing", "seoul",
+    "mumbai", "bangalore", "dubai", "hong kong", "kuala lumpur", "taipei", "jakarta", "bangkok",
     "kuala lumpur", "manila", "hanoi", "ho chi minh",
     # Other
     "sydney", "melbourne", "toronto", "vancouver", "montreal", "calgary",
@@ -302,10 +292,17 @@ DACH_MARKERS = [
     "ганновер", "нюрнберг", "бремен", "бонн", "дортмунд",
     "австрия", "вена", "грац", "зальцбург",
     "нидерланды", "амстердам", "роттердам", "гаага", "утрехт",
+    # CEE (Slovenia, Slovakia, Romania, Hungary)
+    "slovenia", "slowenien", "ljubljana", "maribor",
+    "slovakia", "slowakei", "bratislava", "kosice", "košice",
+    "romania", "rumänien", "bucharest", "cluj", "timisoara",
+    "hungary", "ungarn", "budapest", "debrecen",
+    "словения", "любляна", "словакия", "братислава",
+    "румыния", "бухарест", "венгрия", "будапешт",
 ]
 
 
-ALLOWED_COUNTRIES = {"de", "at", "nl", "ch", "be"}
+ALLOWED_COUNTRIES = {"de", "at", "nl", "ch", "be", "si", "sk", "ro", "hu"}
 
 
 def _is_wrong_location(job: RawJob) -> bool:
@@ -354,15 +351,8 @@ def _is_wrong_location(job: RawJob) -> bool:
         if not has_dach:
             return True
 
-    # --- KEY FIX: if location is empty/N/A, REQUIRE a DACH marker somewhere ---
-    # LinkedIn jobs with no location are almost always non-DACH
-    if not location_lower or location_lower in ("n/a", "none", ""):
-        if not has_dach:
-            logger.debug(
-                "Rejected (no location, no DACH marker): %s @ %s",
-                job.title, job.company_name,
-            )
-            return True
+    # Relaxed location check: if no location provided, we pass it to AI
+    # US_KEYWORDS blacklist will catch the most obvious US spam.
 
     return False
 

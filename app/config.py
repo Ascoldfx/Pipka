@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     claude_timeout_seconds: float = 60.0
     claude_max_retries: int = 2
 
+    # Dashboard Authentication
+    dashboard_username: str = "ascoldfx"
+    dashboard_password: str = "REDACTED"
+    guest_username: str = "guest"
+    guest_password: str = ""
+
     # Search
     default_results_limit: int = 50
     job_max_age_days: int = 60

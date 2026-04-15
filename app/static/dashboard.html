@@ -102,7 +102,33 @@
   .upload-zone input { display:none; }
   .msg { padding:8px 12px; border-radius:4px; margin:8px 0; font-size:12px; }
   .msg.ok { background:#e8f5e9; color:var(--green); }
+  /* Settings page */
+  .settings { padding:24px; max-width:100%; }
+  .settings h2 { font-size:16px; margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:8px; }
+  .settings h3 { font-size:13px; font-weight:600; margin:16px 0 6px; }
+  .field { margin-bottom:12px; }
+  .field label { display:block; font-size:11px; color:var(--muted); margin-bottom:3px; text-transform:uppercase; letter-spacing:.5px; }
+  .field input, .field select, .field textarea { font-family:inherit; font-size:13px; padding:8px 10px; border:1px solid var(--border); border-radius:4px; width:100%; background:var(--bg); color:var(--fg); outline:none; }
+  .field input:focus, .field textarea:focus, .field select:focus { border-color:var(--fg); }
+  .field textarea { min-height:120px; resize:vertical; }
+  .field-row { display:flex; gap:12px; }
+  .field-row .field { flex:1; }
+  .btn { font-family:inherit; font-size:13px; padding:8px 20px; border:2px solid var(--fg); border-radius:4px; background:var(--fg); color:var(--bg); cursor:pointer; font-weight:600; }
+  .btn:hover { background:var(--bg); color:var(--fg); }
+  .btn-outline { background:var(--bg); color:var(--fg); }
+  .btn-outline:hover { background:var(--fg); color:var(--bg); }
+  .upload-zone { border:2px dashed var(--border); border-radius:8px; padding:20px; text-align:center; color:var(--muted); cursor:pointer; margin-bottom:12px; }
+  .upload-zone:hover { border-color:var(--fg); color:var(--fg); }
+  .upload-zone input { display:none; }
+  .msg { padding:8px 12px; border-radius:4px; margin:8px 0; font-size:12px; }
+  .msg.ok { background:#e8f5e9; color:var(--green); }
   .msg.err { background:#fce4ec; color:var(--red); }
+  
+  /* Country Grid */
+  .country-grid { display:flex; flex-wrap:wrap; gap:8px; margin-top:5px; }
+  .country-item { padding:8px 12px; border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:12px; font-weight:500; background:var(--bg); color:var(--fg); user-select:none; transition: all 0.1s; }
+  .country-item:hover { border-color:var(--muted); }
+  .country-item.active { background:#e8f5e9; border-color:var(--green); color:var(--green); font-weight:600; box-shadow: 0 1px 3px rgba(45,138,78,0.2); }
 
   /* Applied/Rejected cards */
   .card-list { padding:12px 24px; }
@@ -131,6 +157,7 @@
 <header>
   <h1>pipka<span>.net</span></h1>
   <div style="display:flex;align-items:center;gap:10px">
+    <span id="role-badge" style="font-size:11px; padding:3px 8px; border-radius:4px; font-weight:600; cursor:pointer;" onclick="toggleLogin()">Guest</span>
     <button class="btn-outline" id="scan-btn" onclick="triggerScan()" style="font-size:11px;padding:4px 12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);cursor:pointer;">Scan Now</button>
     <span id="scan-info" style="font-size:10px;color:var(--muted)"></span>
   </div>
@@ -142,11 +169,11 @@
   <div class="s" onclick="switchTab('jobs')"><span class="num" id="stat-top">—</span>Top</div>
   <div class="s" onclick="switchTab('applied')"><span class="num" id="stat-applied">—</span>Applied</div>
   <div class="s" onclick="switchTab('rejected')"><span class="num" id="stat-rejected">—</span>Rejected</div>
-  <div class="s" onclick="switchTab('jobs')"><span class="num" id="stat-saved">—</span>Saved</div>
 </div>
 
 <div class="tabs">
   <div class="tab active" data-tab="jobs" onclick="switchTab('jobs')">All Jobs</div>
+  <div class="tab" data-tab="inbox" onclick="switchTab('inbox')">Inbox <span class="count" id="tab-inbox-count">0</span></div>
   <div class="tab" data-tab="applied" onclick="switchTab('applied')">Applied <span class="count" id="tab-applied-count">0</span></div>
   <div class="tab" data-tab="rejected" onclick="switchTab('rejected')">Rejected <span class="count" id="tab-rejected-count">0</span></div>
   <div class="tab" data-tab="settings" onclick="switchTab('settings')">Settings</div>
@@ -165,13 +192,29 @@
       <option value="80">80+</option>
       <option value="90">90+</option>
     </select>
-    <label>Region</label>
-    <select id="f-region">
-      <option value="">All</option>
-      <option value="saxony">Saxony (Leipzig, Dresden)</option>
-      <option value="germany">Germany</option>
-      <option value="dach">DACH (DE/AT/CH)</option>
-      <option value="europe">Europe</option>
+    <label>Country</label>
+    <select id="f-country">
+      <option value="">All Regions</option>
+      <option value="de">Germany</option>
+      <option value="at">Austria</option>
+      <option value="ch">Switzerland</option>
+      <option value="nl">Netherlands</option>
+      <option value="be">Belgium</option>
+      <option value="pl">Poland</option>
+      <option value="cz">Czech Rep</option>
+      <option value="es">Spain</option>
+      <option value="it">Italy</option>
+      <option value="fr">France</option>
+      <option value="uk">United Kingdom</option>
+      <option value="ie">Ireland</option>
+      <option value="dk">Denmark</option>
+      <option value="se">Sweden</option>
+      <option value="no">Norway</option>
+      <option value="fi">Finland</option>
+      <option value="ro">Romania</option>
+      <option value="hu">Hungary</option>
+      <option value="sk">Slovakia</option>
+      <option value="si">Slovenia</option>
     </select>
     <label>Source</label>
     <select id="f-source">
@@ -179,16 +222,9 @@
       <option value="adzuna">Adzuna</option>
       <option value="indeed">Indeed</option>
       <option value="linkedin">LinkedIn</option>
-      <option value="google">Google</option>
       <option value="google">Google Jobs</option>
-    </select>
-    <label>Status</label>
-    <select id="f-status">
-      <option value="">All</option>
-      <option value="new">New</option>
-      <option value="saved">Saved</option>
-      <option value="applied">Applied</option>
-      <option value="rejected">Rejected</option>
+      <option value="arbeitnow">Arbeitnow</option>
+      <option value="remotive">Remotive</option>
     </select>
   </div>
   <div class="table-wrap">
@@ -213,16 +249,6 @@
   </div>
 </div>
 
-<!-- TAB: APPLIED -->
-<div class="tab-content" id="tc-applied">
-  <div class="card-list" id="applied-list"><div class="loading">Loading...</div></div>
-</div>
-
-<!-- TAB: REJECTED -->
-<div class="tab-content" id="tc-rejected">
-  <div class="card-list" id="rejected-list"><div class="loading">Loading...</div></div>
-</div>
-
 <!-- TAB: SETTINGS -->
 <div class="tab-content" id="tc-settings">
   <div class="settings">
@@ -241,9 +267,15 @@
     </div>
 
     <h3>Target Positions</h3>
-    <div class="field">
+    <div class="field" style="margin-bottom:24px;">
       <label>Target job titles (comma-separated)</label>
-      <input type="text" id="s-titles" placeholder="Director Supply Chain, Head of Procurement, VP Operations...">
+      <textarea id="s-titles" rows="3" placeholder="Director Supply Chain, Head of Procurement, VP Operations..."></textarea>
+    </div>
+
+    <h3>Exclusions & Negative Keywords</h3>
+    <div class="field" style="margin-bottom:24px;">
+      <label>Do not show jobs requiring (comma-separated)</label>
+      <textarea id="s-excluded" rows="2" placeholder="Junior, Developer, German C1, Sales, Part-time..."></textarea>
     </div>
 
     <h3>Preferences</h3>
@@ -277,9 +309,31 @@
         <label>Base location</label>
         <input type="text" id="s-location" placeholder="Leipzig">
       </div>
-      <div class="field">
-        <label>Countries (comma-sep, e.g. de,at,nl)</label>
-        <input type="text" id="s-countries" placeholder="de, at, ch, nl">
+      <div class="field" style="flex:2">
+        <label>Active Target Countries</label>
+        <div class="country-grid" id="s-countries-grid">
+          <div class="country-item" data-code="de">🇩🇪 Germany</div>
+          <div class="country-item" data-code="at">🇦🇹 Austria</div>
+          <div class="country-item" data-code="nl">🇳🇱 Netherlands</div>
+          <div class="country-item" data-code="ch">🇨🇭 Switzerland</div>
+          <div class="country-item" data-code="be">🇧🇪 Belgium</div>
+          <div class="country-item" data-code="si">🇸🇮 Slovenia</div>
+          <div class="country-item" data-code="sk">🇸🇰 Slovakia</div>
+          <div class="country-item" data-code="ro">🇷🇴 Romania</div>
+          <div class="country-item" data-code="hu">🇭🇺 Hungary</div>
+          <div class="country-item" data-code="cz">🇨🇿 Czech Rep</div>
+          <div class="country-item" data-code="pl">🇵🇱 Poland</div>
+          <div class="country-item" data-code="it">🇮🇹 Italy</div>
+          <div class="country-item" data-code="es">🇪🇸 Spain</div>
+          <div class="country-item" data-code="pt">🇵🇹 Portugal</div>
+          <div class="country-item" data-code="fr">🇫🇷 France</div>
+          <div class="country-item" data-code="uk">🇬🇧 UK</div>
+          <div class="country-item" data-code="ie">🇮🇪 Ireland</div>
+          <div class="country-item" data-code="dk">🇩🇰 Denmark</div>
+          <div class="country-item" data-code="se">🇸🇪 Sweden</div>
+          <div class="country-item" data-code="no">🇳🇴 Norway</div>
+          <div class="country-item" data-code="fi">🇫🇮 Finland</div>
+        </div>
       </div>
     </div>
     <div class="field">
@@ -305,22 +359,29 @@
 
 <script>
 /* ── State ── */
-const S = { page:1, perPage:50, sort:'score', order:'desc', totalPages:1 };
+const S = { page:1, perPage:50, sort:'score', order:'desc', totalPages:1, tabStatus:'', role:'admin' };
 const $ = id => document.getElementById(id);
 
 /* ── Tabs ── */
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab===name));
-  document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id==='tc-'+name));
-  if (name==='applied') loadApplied();
-  if (name==='rejected') loadRejected();
-  if (name==='settings') loadProfile();
+  
+  if (name === 'settings') {
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id==='tc-settings'));
+    loadProfile();
+  } else {
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id==='tc-jobs'));
+    S.tabStatus = name === 'jobs' ? '' : (name === 'inbox' ? 'new' : name);
+    S.page = 1;
+    loadJobs();
+  }
 }
 
 /* ── Filters ── */
 let searchTimeout;
 $('f-search').addEventListener('input', () => { clearTimeout(searchTimeout); searchTimeout=setTimeout(()=>{S.page=1;loadJobs()},400); });
-['f-score','f-source','f-status','f-region'].forEach(id => $(id).addEventListener('change', ()=>{S.page=1;loadJobs()}));
+['f-score','f-source'].forEach(id => $(id).addEventListener('change', ()=>{S.page=1;loadJobs()}));
+$('f-country').addEventListener('input', () => { clearTimeout(searchTimeout); searchTimeout=setTimeout(()=>{S.page=1;loadJobs()},600); });
 $('prev-btn').addEventListener('click', () => { if(S.page>1){S.page--;loadJobs()} });
 $('next-btn').addEventListener('click', () => { if(S.page<S.totalPages){S.page++;loadJobs()} });
 
@@ -349,7 +410,7 @@ async function loadStats(){
     $('stat-top').textContent=d.top_matches||0;
     $('stat-applied').textContent=d.applied||0;
     $('stat-rejected').textContent=d.rejected||0;
-    $('stat-saved').textContent=d.saved||0;
+    $('tab-inbox-count').textContent=d.inbox||0;
     $('tab-applied-count').textContent=d.applied||0;
     $('tab-rejected-count').textContent=d.rejected||0;
   }catch(e){console.error(e)}
@@ -360,8 +421,8 @@ async function loadJobs(){
   const p=new URLSearchParams({page:S.page,per_page:S.perPage,sort:S.sort,order:S.order,min_score:$('f-score').value});
   if($('f-search').value) p.set('search',$('f-search').value);
   if($('f-source').value) p.set('source',$('f-source').value);
-  if($('f-status').value) p.set('status',$('f-status').value);
-  if($('f-region').value) p.set('region',$('f-region').value);
+  if($('f-country').value) p.set('country',$('f-country').value);
+  if(S.tabStatus) p.set('status',S.tabStatus);
   const tbody=$('jobs-body');
   tbody.innerHTML='<tr><td colspan="8" class="loading">Loading...</td></tr>';
   try{
@@ -388,39 +449,12 @@ function jobRow(j){
     <td><span class="source-tag">${j.source}</span></td>
     <td>${st}</td>
     <td class="actions">
-      <button onclick="doAction(${j.id},'save',this)" title="Save"${j.status==='saved'?' class="active"':''}>&#128190;</button>
+      ${S.role === 'admin' ? `
       <button onclick="doAction(${j.id},'applied',this)" title="Applied"${j.status==='applied'?' class="active"':''}>&#10004;</button>
       <button onclick="doAction(${j.id},'reject',this)" title="Reject"${j.status==='rejected'?' class="active"':''}>&#10006;</button>
       <button onclick="showAnalysis(${j.id},'${esc(j.title).replace(/'/g,"\\'")}')">&#129302;</button>
+      ` : `<span style="font-size:10px; color:var(--muted)">View only</span>`}
     </td></tr>`;
-}
-
-/* ── Applied / Rejected lists ── */
-async function loadApplied(){ await loadStatusList('applied','applied-list'); }
-async function loadRejected(){ await loadStatusList('rejected','rejected-list'); }
-
-async function loadStatusList(status, containerId){
-  const el=$(containerId);
-  el.innerHTML='<div class="loading">Loading...</div>';
-  try{
-    const data=await(await fetch(`/api/jobs?status=${status}&per_page=200&sort=date&order=desc&min_score=0`)).json();
-    if(!data.jobs.length){el.innerHTML=`<div class="empty-state">No ${status} jobs yet</div>`;return;}
-    el.innerHTML=data.jobs.map(j=>{
-      const sc=j.score>=70?'high':j.score>=40?'mid':j.score!=null?'low':'none';
-      const date=j.posted_at?new Date(j.posted_at).toLocaleDateString('de-DE'):'';
-      return `<div class="job-card">
-        <span class="score ${sc}">${j.score!=null?j.score:'—'}</span>
-        <div class="info">
-          <div class="title"><a href="${j.url||'#'}" target="_blank">${esc(j.title)}</a></div>
-          <div class="meta">${esc(j.company)} &middot; ${esc(j.location)} &middot; ${j.source} ${date?' &middot; '+date:''}</div>
-        </div>
-        <div class="actions">
-          ${status==='rejected'?`<button onclick="doAction(${j.id},'save',this)" title="Restore">&#8634;</button>`:''}
-          <button onclick="showAnalysis(${j.id},'${esc(j.title).replace(/'/g,"\\'")}')">&#129302;</button>
-        </div>
-      </div>`;
-    }).join('');
-  }catch(e){el.innerHTML='<div class="empty-state">Error loading</div>'}
 }
 
 /* ── Settings / Profile ── */
@@ -431,12 +465,16 @@ async function loadProfile(){
     const p=d.profile;
     $('s-resume').value=p.resume_text||'';
     $('s-titles').value=(p.target_titles||[]).join(', ');
+    if($('s-excluded')) $('s-excluded').value=(p.excluded_keywords||[]).join(', ');
     $('s-salary').value=p.min_salary||'';
     $('s-experience').value=p.experience_years||'';
     $('s-languages').value=p.languages?Object.entries(p.languages).map(([k,v])=>k+':'+v).join(', '):'';
     $('s-workmode').value=p.work_mode||'any';
     $('s-location').value=p.base_location||'';
-    $('s-countries').value=(p.preferred_countries||[]).join(', ');
+    const pc = p.preferred_countries||[];
+    document.querySelectorAll('#s-countries-grid .country-item').forEach(el => {
+      el.classList.toggle('active', pc.includes(el.dataset.code));
+    });
     $('s-industries').value=(p.industries||[]).join(', ');
   }catch(e){console.error(e)}
 }
@@ -445,12 +483,14 @@ async function saveProfile(){
   const fd=new FormData();
   fd.append('resume_text',$('s-resume').value);
   fd.append('target_titles',$('s-titles').value);
+  if($('s-excluded')) fd.append('excluded_keywords',$('s-excluded').value);
   fd.append('min_salary',$('s-salary').value||0);
   fd.append('experience_years',$('s-experience').value||0);
   fd.append('languages',$('s-languages').value);
   fd.append('work_mode',$('s-workmode').value);
   fd.append('base_location',$('s-location').value);
-  fd.append('preferred_countries',$('s-countries').value);
+  const activeCountries = Array.from(document.querySelectorAll('#s-countries-grid .country-item.active')).map(el => el.dataset.code);
+  fd.append('preferred_countries', activeCountries.join(','));
   fd.append('industries',$('s-industries').value);
   try{
     const r=await fetch('/api/profile',{method:'POST',body:fd});
@@ -510,6 +550,11 @@ function fmtSalary(min,max,cur){
 }
 function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 
+/* Interactivity */
+document.querySelectorAll('.country-item').forEach(el => {
+  el.addEventListener('click', () => el.classList.toggle('active'));
+});
+
 /* Scan */
 async function triggerScan(){
   const btn=$('scan-btn'); btn.disabled=true; btn.textContent='Scanning...';
@@ -546,9 +591,38 @@ async function loadScanStatus(){
   }catch(e){}
 }
 
+function toggleLogin() {
+    if(S.role === 'guest') {
+        window.location.href = '/api/login';
+    } else {
+        alert('To log out, please close your browser or clear credentials.');
+    }
+}
+
 /* Init */
-loadStats(); loadJobs(); loadScanStatus();
-setInterval(()=>{loadStats();loadJobs()},300000);
+async function initApp() {
+  try {
+    const me = await (await fetch('/api/me')).json();
+    S.role = me.role;
+    const rb = $('role-badge');
+    if (S.role === 'guest') {
+      if (rb) { rb.textContent = 'Login as Admin'; rb.style.background = 'var(--badge)'; rb.style.color = 'var(--muted)'; }
+      const scanBtn = $('scan-btn');
+      if (scanBtn) { scanBtn.disabled = true; scanBtn.title = "View only"; }
+      document.querySelectorAll('#tc-settings .btn').forEach(b => {
+         b.disabled = true; b.title = "View only";
+      });
+      const uz = $('upload-zone');
+      if (uz) { uz.style.pointerEvents = 'none'; uz.style.opacity = '0.5'; }
+    } else {
+      if (rb) { rb.textContent = 'Admin Mode'; rb.style.background = 'var(--green)'; rb.style.color = '#fff'; }
+    }
+  } catch(e) {}
+  
+  loadStats(); loadJobs(); loadScanStatus();
+  setInterval(()=>{loadStats();loadJobs()},300000);
+}
+initApp();
 </script>
 </body>
 </html>

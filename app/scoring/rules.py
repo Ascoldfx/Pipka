@@ -93,6 +93,12 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     if any(kw in desc_lower for kw in FOREIGN_LANGUAGE_REQUIRED):
         return False, "low"
 
+    # User-defined Exclusions
+    if profile and profile.excluded_keywords:
+        for kw in profile.excluded_keywords:
+            if kw and kw.lower() in text:
+                return False, "low"
+
     # Domain check — must be in supply chain / procurement / operations
     domain_match = any(kw in title_lower or kw in desc_lower for kw in DOMAIN_KEYWORDS)
     if not domain_match:

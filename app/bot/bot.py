@@ -14,6 +14,7 @@ from app.bot.handlers.search import (
 from app.bot.handlers.results import ai_analysis_handler, applied_handler, reject_handler, save_job_handler
 from app.bot.handlers.tracker import my_jobs_handler, stats_handler, status_update_handler
 from app.bot.handlers.settings import profile_field_handler, profile_menu_handler, profile_text_handler
+from app.bot.handlers.inbox import inbox_handler, inbox_menu_handler
 
 logger = logging.getLogger(__name__)
 
@@ -32,14 +33,18 @@ def create_bot_app(post_init_callback=None):
 
     # Callback queries — menu navigation
     app.add_handler(CallbackQueryHandler(search_menu_handler, pattern="^menu_search$"))
+    app.add_handler(CallbackQueryHandler(inbox_menu_handler, pattern="^menu_inbox$"))
     app.add_handler(CallbackQueryHandler(my_jobs_handler, pattern="^menu_my_jobs$"))
     app.add_handler(CallbackQueryHandler(profile_menu_handler, pattern="^menu_profile$"))
     app.add_handler(CallbackQueryHandler(stats_handler, pattern="^menu_stats$"))
     app.add_handler(CallbackQueryHandler(start_handler, pattern="^back_main$"))
 
     # Search presets
-    app.add_handler(CallbackQueryHandler(search_preset_handler, pattern="^search_(regional|germany|international|europe)$"))
+    app.add_handler(CallbackQueryHandler(search_preset_handler, pattern="^search_(regional|germany|international|europe|cee)$"))
     app.add_handler(CallbackQueryHandler(custom_search_handler, pattern="^search_custom$"))
+
+    # Inbox filters
+    app.add_handler(CallbackQueryHandler(inbox_handler, pattern="^inbox_(all|good|top)$"))
 
     # Pagination
     app.add_handler(CallbackQueryHandler(show_more_handler, pattern="^show_more$"))

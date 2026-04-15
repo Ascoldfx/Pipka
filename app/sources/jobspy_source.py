@@ -14,6 +14,10 @@ SITE_MAP = {
     "at": ["indeed", "linkedin", "google"],
     "nl": ["indeed", "linkedin", "google"],
     "be": ["indeed", "linkedin", "google"],
+    "si": ["indeed", "linkedin", "google"],
+    "sk": ["indeed", "linkedin", "google"],
+    "ro": ["indeed", "linkedin", "google"],
+    "hu": ["indeed", "linkedin", "google"],
 }
 
 # JobSpy uses full country names, not ISO codes
@@ -23,6 +27,22 @@ COUNTRY_NAME = {
     "at": "austria",
     "nl": "netherlands",
     "be": "belgium",
+    "si": "slovenia",
+    "sk": "slovakia",
+    "ro": "romania",
+    "hu": "hungary",
+    "cz": "czech republic",
+    "pl": "poland",
+    "it": "italy",
+    "es": "spain",
+    "pt": "portugal",
+    "fr": "france",
+    "uk": "united kingdom",
+    "ie": "ireland",
+    "dk": "denmark",
+    "se": "sweden",
+    "no": "norway",
+    "fi": "finland",
 }
 
 
