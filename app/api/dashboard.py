@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import json
-from fastapi import APIRouter, Query, Request, UploadFile, File, Form
+import secrets
+from fastapi import APIRouter, Query, Request, UploadFile, File, Form, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy import func, select, desc, asc
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.database import async_session
 from app.models.application import Application
 from app.models.job import Job, JobScore
@@ -14,7 +17,20 @@ from app.models.user import User, UserProfile
 from app.scoring.matcher import analyze_single_job
 from app.services.tracker_service import mark_applied, mark_rejected, save_job
 
-router = APIRouter()
+security = HTTPBasic()
+
+def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
+    correct_username = secrets.compare_digest(credentials.username, settings.dashboard_username)
+    correct_password = secrets.compare_digest(credentials.password, settings.dashboard_password)
+    if not (correct_username and correct_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials.username
+
+router = APIRouter(dependencies=[Depends(verify_credentials)])
 
 
 async def _get_user(session):

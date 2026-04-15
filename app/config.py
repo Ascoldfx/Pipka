@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     max_scored_per_search: int = 30
     score_cache_hours: int = 168  # 7 days
 
+    # Dashboard Authentication
+    dashboard_username: str = "ascoldfx"
+    dashboard_password: str = "REDACTED"
+    guest_username: str = "guest"
+    guest_password: str = ""
+
     # Search
     default_results_limit: int = 50
     job_max_age_days: int = 60

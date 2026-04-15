@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "3. Scrapers & Bot/bot.md",
+                "file": "5. Deployment & DevOps/runbook.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "bot"
+              "title": "runbook"
             }
           }
         ]
@@ -182,9 +182,12 @@
   },
   "active": "3be8a68e74d0e93c",
   "lastOpenFiles": [
-    "3. Scrapers & Bot/sources.md",
+    "4. Changelogs/Changelog_Security.md",
     "4. Changelogs/Changelog_Exclusions.md",
+    "3. Scrapers & Bot/sources.md",
     "3. Scrapers & Bot/bot.md",
+    "5. Deployment & DevOps/runbook.md",
+    "5. Deployment & DevOps",
     "2. API & Services/models.md",
     "1. Architecture/index.md",
     "1. Architecture/db.md",
