@@ -157,6 +157,7 @@
 <header>
   <h1>pipka<span>.net</span></h1>
   <div style="display:flex;align-items:center;gap:10px">
+    <span id="role-badge" style="font-size:11px; padding:3px 8px; border-radius:4px; font-weight:600; cursor:pointer;" onclick="toggleLogin()">Guest</span>
     <button class="btn-outline" id="scan-btn" onclick="triggerScan()" style="font-size:11px;padding:4px 12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);cursor:pointer;">Scan Now</button>
     <span id="scan-info" style="font-size:10px;color:var(--muted)"></span>
   </div>
@@ -358,7 +359,7 @@
 
 <script>
 /* ── State ── */
-const S = { page:1, perPage:50, sort:'score', order:'desc', totalPages:1, tabStatus:'' };
+const S = { page:1, perPage:50, sort:'score', order:'desc', totalPages:1, tabStatus:'', role:'admin' };
 const $ = id => document.getElementById(id);
 
 /* ── Tabs ── */
@@ -448,9 +449,11 @@ function jobRow(j){
     <td><span class="source-tag">${j.source}</span></td>
     <td>${st}</td>
     <td class="actions">
+      ${S.role === 'admin' ? `
       <button onclick="doAction(${j.id},'applied',this)" title="Applied"${j.status==='applied'?' class="active"':''}>&#10004;</button>
       <button onclick="doAction(${j.id},'reject',this)" title="Reject"${j.status==='rejected'?' class="active"':''}>&#10006;</button>
       <button onclick="showAnalysis(${j.id},'${esc(j.title).replace(/'/g,"\\'")}')">&#129302;</button>
+      ` : `<span style="font-size:10px; color:var(--muted)">View only</span>`}
     </td></tr>`;
 }
 
@@ -588,9 +591,38 @@ async function loadScanStatus(){
   }catch(e){}
 }
 
+function toggleLogin() {
+    if(S.role === 'guest') {
+        window.location.href = '/api/login';
+    } else {
+        alert('To log out, please close your browser or clear credentials.');
+    }
+}
+
 /* Init */
-loadStats(); loadJobs(); loadScanStatus();
-setInterval(()=>{loadStats();loadJobs()},300000);
+async function initApp() {
+  try {
+    const me = await (await fetch('/api/me')).json();
+    S.role = me.role;
+    const rb = $('role-badge');
+    if (S.role === 'guest') {
+      if (rb) { rb.textContent = 'Login as Admin'; rb.style.background = 'var(--badge)'; rb.style.color = 'var(--muted)'; }
+      const scanBtn = $('scan-btn');
+      if (scanBtn) { scanBtn.disabled = true; scanBtn.title = "View only"; }
+      document.querySelectorAll('#tc-settings .btn').forEach(b => {
+         b.disabled = true; b.title = "View only";
+      });
+      const uz = $('upload-zone');
+      if (uz) { uz.style.pointerEvents = 'none'; uz.style.opacity = '0.5'; }
+    } else {
+      if (rb) { rb.textContent = 'Admin Mode'; rb.style.background = 'var(--green)'; rb.style.color = '#fff'; }
+    }
+  } catch(e) {}
+  
+  loadStats(); loadJobs(); loadScanStatus();
+  setInterval(()=>{loadStats();loadJobs()},300000);
+}
+initApp();
 </script>
 </body>
 </html>

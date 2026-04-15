@@ -4,8 +4,9 @@ from __future__ import annotations
 import json
 import secrets
 from fastapi import APIRouter, Query, Request, UploadFile, File, Form, Depends, HTTPException, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from typing import Optional
 from sqlalchemy import func, select, desc, asc
 from sqlalchemy.orm import selectinload
 
@@ -17,18 +18,25 @@ from app.models.user import User, UserProfile
 from app.scoring.matcher import analyze_single_job
 from app.services.tracker_service import mark_applied, mark_rejected, save_job
 
-security = HTTPBasic()
+security = HTTPBasic(auto_error=False)
 
-def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
-    correct_username = secrets.compare_digest(credentials.username, settings.dashboard_username)
-    correct_password = secrets.compare_digest(credentials.password, settings.dashboard_password)
-    if not (correct_username and correct_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-    return credentials.username
+def verify_credentials(request: Request, credentials: Optional[HTTPBasicCredentials] = Depends(security)):
+    request.state.role = "guest"
+    if credentials:
+        is_admin = secrets.compare_digest(credentials.username, settings.dashboard_username) and \
+                   secrets.compare_digest(credentials.password, settings.dashboard_password)
+        if is_admin:
+            request.state.role = "admin"
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Basic"},
+            )
+
+def require_admin(request: Request):
+    if getattr(request.state, "role", "guest") != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Guests cannot perform this action")
 
 router = APIRouter(dependencies=[Depends(verify_credentials)])
 
@@ -42,10 +50,27 @@ async def _get_user(session):
 
 
 @router.get("/", response_class=HTMLResponse)
-async def dashboard_page(request: Request):
+async def dashboard_page():
     from pathlib import Path
     html_path = Path(__file__).parent.parent / "static" / "dashboard.html"
     return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+
+@router.get("/api/me")
+async def get_me(request: Request):
+    return {"role": getattr(request.state, "role", "guest")}
+
+@router.get("/api/login")
+async def login(credentials: HTTPBasicCredentials = Depends(HTTPBasic(auto_error=True))):
+    is_admin = secrets.compare_digest(credentials.username, settings.dashboard_username) and \
+               secrets.compare_digest(credentials.password, settings.dashboard_password)
+    if is_admin:
+        return RedirectResponse(url="/", status_code=303)
+    
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Incorrect email or password",
+        headers={"WWW-Authenticate": "Basic"},
+    )
 
 
 @router.get("/api/jobs")
@@ -217,7 +242,7 @@ async def get_stats():
         }
 
 
-@router.post("/api/jobs/{job_id}/action")
+@router.post("/api/jobs/{job_id}/action", dependencies=[Depends(require_admin)])
 async def job_action(job_id: int, action: str = Query(...)):
     async with async_session() as session:
         user = await _get_user(session)
@@ -234,7 +259,7 @@ async def job_action(job_id: int, action: str = Query(...)):
         return {"ok": True, "action": action}
 
 
-@router.get("/api/jobs/{job_id}/analyze")
+@router.get("/api/jobs/{job_id}/analyze", dependencies=[Depends(require_admin)])
 async def analyze_job(job_id: int):
     async with async_session() as session:
         user = await _get_user(session)
@@ -249,7 +274,7 @@ async def analyze_job(job_id: int):
 
 # ─── Manual Scan ────────────────────────────────────────────────
 
-@router.post("/api/scan")
+@router.post("/api/scan", dependencies=[Depends(require_admin)])
 async def trigger_scan():
     """Trigger a background job scan manually."""
     import asyncio
@@ -316,7 +341,7 @@ async def get_profile():
         }}
 
 
-@router.post("/api/profile")
+@router.post("/api/profile", dependencies=[Depends(require_admin)])
 async def update_profile(
     resume_text: str = Form(None),
     target_titles: str = Form(None),
@@ -373,7 +398,7 @@ async def update_profile(
         return {"ok": True}
 
 
-@router.post("/api/profile/resume")
+@router.post("/api/profile/resume", dependencies=[Depends(require_admin)])
 async def upload_resume(file: UploadFile = File(...)):
     """Upload resume file and extract text (PDF, DOCX, TXT)."""
     content = await file.read()

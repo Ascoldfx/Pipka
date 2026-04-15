@@ -12,6 +12,8 @@ Welcome to the `jobhunt` Knowledge Graph. This AI-powered job search aggregator 
 - [[bot.md]] - Telegram Bot UI and interaction handlers
 - [[Changelog_Exclusions.md]] - Feature Log: Exclusions & Negative Keywords
 - [[runbook.md]] - Server Infrastructure, Deployment, & .env Keys
+- [[runbook]] - Server Infrastructure, Deployment, .env Keys
+
 
 ## Blast-Radius Table
 | Component | Primary Files | Dependents | Risk Level |
