@@ -28,13 +28,13 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="JobHunt API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Pipka API", version="0.1.0", lifespan=lifespan)
 
 # Session middleware (signed cookies — stores user_id after OAuth login)
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret,
-    session_cookie="jobhunt_session",
+    session_cookie="pipka_session",
     max_age=30 * 24 * 3600,  # 30 days
     same_site="lax",
     https_only=True,

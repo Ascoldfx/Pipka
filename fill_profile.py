@@ -6,7 +6,7 @@ from app.models.user import User, UserProfile
 
 import os
 
-DB_URL = os.environ.get("DATABASE_URL", "sqlite:///./jobhunt.db")
+DB_URL = os.environ.get("DATABASE_URL", "sqlite:///./pipka.db")
 # SQLAlchemy sync needs psycopg2, not asyncpg
 if "asyncpg" in DB_URL:
     DB_URL = DB_URL.replace("postgresql+asyncpg", "postgresql+psycopg2")

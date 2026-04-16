@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str
 
     # Database
-    database_url: str = "sqlite+aiosqlite:///./jobhunt.db"
+    database_url: str = "sqlite+aiosqlite:///./pipka.db"
 
     # Arbeitsagentur
     arbeitsagentur_api_key: str = "jobboerse-jobsuche"

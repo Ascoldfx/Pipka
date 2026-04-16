@@ -9,7 +9,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql+asyncpg://jobhunt:${POSTGRES_PASSWORD}@db:5432/jobhunt
+      DATABASE_URL: postgresql+asyncpg://pipka:${POSTGRES_PASSWORD}@db:5432/pipka
     volumes:
       - app_data:/app/data
     logging:
@@ -21,13 +21,13 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: jobhunt
+      POSTGRES_USER: pipka
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: jobhunt
+      POSTGRES_DB: pipka
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U jobhunt"]
+      test: ["CMD-SHELL", "pg_isready -U pipka"]
       interval: 5s
       timeout: 3s
       retries: 5
