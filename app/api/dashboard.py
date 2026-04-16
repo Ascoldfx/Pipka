@@ -1,19 +1,18 @@
 """Dashboard API endpoints — serves HTML + JSON data for job browsing.
 
-Auth model (v2): Google OAuth session-based. /api/me is handled by auth.py.
-Fallback: legacy Basic Auth for backward compat (if no session but credentials provided).
+Auth model (v2): Google OAuth session-based only. /api/me is handled by auth.py.
+All data endpoints require a valid session cookie (pipka_session).
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
-import secrets
 import time
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi.responses import HTMLResponse
 from sqlalchemy import and_, asc, desc, func, select
 from sqlalchemy.orm import selectinload
 
@@ -30,6 +29,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 VALID_ACTIONS = {"save", "applied", "reject"}
+VALID_WORK_MODES = {"remote", "hybrid", "onsite", "any"}
 
 # ─── Stats cache ──────────────────────────────────────────────
 _STATS_CACHE: dict[int, tuple[float, dict[str, Any]]] = {}
@@ -56,21 +56,9 @@ async def _get_session_user(request: Request, session) -> User | None:
     return result.scalar_one_or_none()
 
 
-async def _get_legacy_user(session) -> User | None:
-    """Fallback: get first active user (for Telegram-only users / backward compat)."""
-    result = await session.execute(
-        select(User).options(selectinload(User.profile)).where(User.is_active == True).limit(1)
-    )
-    return result.scalar_one_or_none()
-
-
 async def _get_user(request: Request, session) -> User | None:
-    """Get current user: session first, then legacy fallback."""
-    user = await _get_session_user(request, session)
-    if user:
-        return user
-    # Legacy Basic Auth fallback (for existing admin without Google OAuth)
-    return await _get_legacy_user(session)
+    """Get current user from session cookie (Google OAuth). Returns None if not authenticated."""
+    return await _get_session_user(request, session)
 
 
 def _get_role(request: Request, user: User | None) -> str:
@@ -324,6 +312,9 @@ async def analyze_job(job_id: int, request: Request):
 
 # ─── Manual Scan (admin only) ────────────────────────────────
 
+_manual_scan_lock = asyncio.Lock()
+
+
 @router.post("/api/scan")
 async def trigger_scan(request: Request):
     """Trigger a background job scan manually."""
@@ -331,11 +322,9 @@ async def trigger_scan(request: Request):
     if role != "admin":
         raise HTTPException(status_code=403, detail="Admin only")
 
-    import asyncio
     from app.services.scheduler_service import _background_scan, scheduler
 
-    running = scheduler.get_job("manual_scan")
-    if running:
+    if _manual_scan_lock.locked():
         return {"status": "already_running"}
 
     bg_job = scheduler.get_job("background_scan")
@@ -345,12 +334,14 @@ async def trigger_scan(request: Request):
     bot_app = bg_job.args[0]
 
     async def _run():
-        try:
-            await _background_scan(bot_app)
-        except Exception as e:
-            logging.getLogger(__name__).error("Manual scan failed: %s", e)
+        async with _manual_scan_lock:
+            try:
+                await _background_scan(bot_app)
+            except Exception as e:
+                logger.error("Manual scan failed: %s", e)
 
-    asyncio.create_task(_run())
+    task = asyncio.create_task(_run())
+    task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
     return {"status": "started"}
 
 
@@ -415,6 +406,8 @@ async def update_profile(
         raise HTTPException(status_code=400, detail="min_salary out of range")
     if experience_years is not None and not (0 <= experience_years <= 80):
         raise HTTPException(status_code=400, detail="experience_years out of range")
+    if work_mode is not None and work_mode not in VALID_WORK_MODES:
+        raise HTTPException(status_code=400, detail=f"Invalid work_mode. Must be one of: {', '.join(VALID_WORK_MODES)}")
 
     async with async_session() as session:
         try:
@@ -481,6 +474,16 @@ async def upload_resume(request: Request, file: UploadFile = File(...)):
 
     filename = (file.filename or "").lower()
     text = ""
+
+    # Validate magic bytes to prevent extension spoofing
+    _MAGIC = {
+        ".pdf": b"%PDF",
+        ".docx": b"PK\x03\x04",
+    }
+    if filename.endswith((".pdf", ".docx")):
+        ext = ".pdf" if filename.endswith(".pdf") else ".docx"
+        if not content[:4].startswith(_MAGIC[ext]):
+            raise HTTPException(status_code=400, detail="File content does not match declared format")
 
     if filename.endswith(".pdf"):
         try:

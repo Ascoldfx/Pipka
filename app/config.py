@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     # Google OAuth
     google_client_id: str = ""
     google_client_secret: str = ""
-    session_secret: str = "change-me-in-production"  # signs session cookies
+    session_secret: str  # signs session cookies — REQUIRED, must be set in .env
 
     # Admin emails (comma-separated) — these Google accounts get admin role
     admin_emails: str = ""

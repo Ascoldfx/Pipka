@@ -57,8 +57,7 @@ async def init_db():
         # Create unique indexes if not exist
         "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users(email) WHERE email IS NOT NULL",
         "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL",
-        # Set first user as admin
-        "UPDATE users SET role = 'admin' WHERE id = (SELECT MIN(id) FROM users) AND (role IS NULL OR role = 'user')",
+        # NOTE: admin role is assigned via ADMIN_EMAILS env var in user_service.py, not here
     ]
     for sql in migrations:
         try:

@@ -459,10 +459,10 @@ function jobRow(j){
   const date=j.posted_at?new Date(j.posted_at).toLocaleDateString('de-DE'):'';
   return `<tr>
     <td><span class="score ${sc}">${j.score!=null?j.score:'—'}</span></td>
-    <td><a class="job-title" href="${j.url||'#'}" target="_blank">${esc(j.title)}</a>${date?`<div class="job-meta">${date}</div>`:''}</td>
+    <td><a class="job-title" href="${safeUrl(j.url)}" target="_blank" rel="noopener noreferrer">${esc(j.title)}</a>${date?`<div class="job-meta">${date}</div>`:''}</td>
     <td class="job-meta">${esc(j.company)}</td>
-    <td class="job-meta">${esc(j.location)} (${j.country})</td>
-    <td><span class="source-tag">${j.source}</span></td>
+    <td class="job-meta">${esc(j.location)} (${esc(j.country)})</td>
+    <td><span class="source-tag">${esc(j.source)}</span></td>
     <td><div class="actions-wrap">
       ${S.authenticated ? `
       <button onclick="doAction(${j.id},'applied',this)" title="Applied"${j.status==='applied'?' class="active"':''}>&#10004;</button>
@@ -560,6 +560,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
 
 
 function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function safeUrl(u){if(!u)return'#';try{const p=new URL(u);if(p.protocol==='https:'||p.protocol==='http:')return u;}catch(e){}return'#';}
 
 /* Interactivity */
 document.querySelectorAll('.country-item').forEach(el => {

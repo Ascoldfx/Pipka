@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 from anthropic import AsyncAnthropic
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -114,23 +115,19 @@ async def score_jobs(
     if not profile:
         return []
 
-    # Check cache
+    # Check cache — single batch SELECT instead of N+1 queries
     cache_cutoff = datetime.now() - timedelta(hours=settings.score_cache_hours)
-    cached_ids: set[int] = set()
-    cached_scores: list[JobScore] = []
-
-    for job in jobs:
-        result = await session.execute(
-            select(JobScore).where(
-                JobScore.job_id == job.id,
-                JobScore.user_id == user.id,
-                JobScore.scored_at > cache_cutoff,
-            )
+    job_ids = [j.id for j in jobs]
+    cached_result = await session.execute(
+        select(JobScore).where(
+            JobScore.job_id.in_(job_ids),
+            JobScore.user_id == user.id,
+            JobScore.scored_at > cache_cutoff,
         )
-        existing = result.scalar_one_or_none()
-        if existing:
-            cached_ids.add(job.id)
-            cached_scores.append(existing)
+    )
+    cached_map = {s.job_id: s for s in cached_result.scalars().all()}
+    cached_ids: set[int] = set(cached_map.keys())
+    cached_scores: list[JobScore] = list(cached_map.values())
 
     to_score = [j for j in jobs if j.id not in cached_ids]
     if not to_score:
@@ -209,10 +206,20 @@ async def _score_batch(
             ai_analysis=item.get("verdict", ""),
             breakdown=item.get("breakdown"),
         )
-        session.add(score_obj)
-        scores.append(score_obj)
+        try:
+            session.add(score_obj)
+            await session.flush()  # catch IntegrityError early, per-row
+            scores.append(score_obj)
+        except IntegrityError:
+            # Race condition: another task (backfill/scan) already inserted this score
+            await session.rollback()
+            logger.debug("Score for job_id=%s user_id=%s already exists (race), skipping", job.id, user_id)
 
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        logger.warning("_score_batch commit IntegrityError for user_id=%s, partial batch discarded", user_id)
     return scores
 
 
