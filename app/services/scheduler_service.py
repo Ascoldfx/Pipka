@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import selectinload
 
 from app.bot.formatters import format_job_card
 from app.bot.keyboards import job_actions
+from app.config import settings
 from app.database import async_session
+from app.models.application import Application
 from app.models.job import Job, JobScore
 from app.models.user import User
 from app.scoring.matcher import score_jobs
@@ -45,9 +47,7 @@ TOP_SCORE_THRESHOLD = 80  # Push to Telegram if score >= this
 
 
 def start_scheduler(bot_app):
-    """Start background job scanner."""
-    from datetime import timedelta
-
+    """Start background job scanner and cleanup tasks."""
     # Run every 3 hours
     scheduler.add_job(
         _background_scan,
@@ -64,6 +64,23 @@ def start_scheduler(bot_app):
         run_date=datetime.now() + timedelta(seconds=30),
         args=[bot_app],
         id="startup_scan",
+        replace_existing=True,
+    )
+    # Daily cleanup at 03:00 UTC — delete jobs older than job_max_age_days
+    scheduler.add_job(
+        _cleanup_old_jobs,
+        "cron",
+        hour=3,
+        minute=0,
+        id="daily_cleanup",
+        replace_existing=True,
+    )
+    # Backfill scorer: every 6 hours — score existing unscored jobs for each user
+    scheduler.add_job(
+        _backfill_score,
+        "interval",
+        hours=6,
+        id="backfill_score",
         replace_existing=True,
     )
     scheduler.start()
@@ -183,3 +200,109 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
         )
 
     logger.info("Pushed %d top jobs to user %s", min(count, 10), user.telegram_id)
+
+
+async def _backfill_score():
+    """Score existing DB jobs that haven't been scored yet for each user.
+
+    Runs every 6 hours. Picks up jobs that were added during scans but skipped
+    due to the per-run 80-job cap, or jobs loaded before a user created their profile.
+    """
+    logger.info("Backfill scorer started")
+
+    async with async_session() as session:
+        users_result = await session.execute(
+            select(User).options(selectinload(User.profile)).where(User.is_active == True)
+        )
+        users = users_result.scalars().all()
+
+        for user in users:
+            if not user.profile:
+                continue
+            try:
+                # All jobs in DB (newest first, limit to recent window)
+                cutoff = datetime.now() - timedelta(days=settings.job_max_age_days)
+                all_jobs_result = await session.execute(
+                    select(Job).where(Job.scraped_at >= cutoff)
+                )
+                all_jobs = all_jobs_result.scalars().all()
+
+                # Already scored for this user
+                scored_result = await session.execute(
+                    select(JobScore.job_id).where(JobScore.user_id == user.id)
+                )
+                already_scored_ids = {row[0] for row in scored_result.fetchall()}
+
+                hidden_ids = await get_hidden_job_ids(user.id, session)
+                hidden_hashes = await get_hidden_dedup_hashes(user.id, session)
+
+                unscored = []
+                for job in all_jobs:
+                    if job.id in already_scored_ids:
+                        continue
+                    if job.id in hidden_ids or job.dedup_hash in hidden_hashes:
+                        continue
+                    passed, bucket = pre_filter(job, user.profile)
+                    if passed and bucket in ("high", "medium"):
+                        unscored.append(job)
+
+                if not unscored:
+                    continue
+
+                # Score up to 120 per run (3 batches of 8 × 5 batches)
+                to_score = unscored[:120]
+                logger.info("Backfill: scoring %d unscored jobs for user %s", len(to_score), user.telegram_id)
+                await score_jobs(to_score, user, session)
+
+            except Exception as e:
+                logger.error("Backfill scorer failed for user %s: %s", user.telegram_id, e)
+
+    logger.info("Backfill scorer completed")
+
+
+async def _cleanup_old_jobs():
+    """Delete jobs older than job_max_age_days that have no applied/saved applications.
+
+    Logic:
+    - Jobs with applied/interviewing/offer status are KEPT forever (user cares about them)
+    - Jobs with only rejected/saved or no application are deleted after max_age_days
+    - Cascade: JobScore rows deleted automatically via FK
+    """
+    cutoff = datetime.now() - timedelta(days=settings.job_max_age_days)
+    logger.info("Running daily cleanup: deleting jobs scraped before %s", cutoff.date())
+
+    async with async_session() as session:
+        # Find job IDs that have an "active" application (applied/interviewing/offer)
+        active_app_result = await session.execute(
+            select(Application.job_id).where(
+                Application.status.in_(["applied", "interviewing", "offer"])
+            )
+        )
+        protected_ids = {row[0] for row in active_app_result.fetchall()}
+
+        # Find old jobs NOT in protected list
+        old_jobs_result = await session.execute(
+            select(Job.id).where(Job.scraped_at < cutoff)
+        )
+        old_job_ids = [row[0] for row in old_jobs_result.fetchall() if row[0] not in protected_ids]
+
+        if not old_job_ids:
+            logger.info("Cleanup: nothing to delete")
+            return
+
+        # Delete in chunks to avoid huge IN clauses
+        chunk_size = 500
+        total_deleted = 0
+        for i in range(0, len(old_job_ids), chunk_size):
+            chunk = old_job_ids[i:i + chunk_size]
+            # Delete scores first (no cascade set)
+            await session.execute(delete(JobScore).where(JobScore.job_id.in_(chunk)))
+            # Delete applications (rejected/saved only — protected ones excluded above)
+            await session.execute(delete(Application).where(Application.job_id.in_(chunk)))
+            # Delete jobs
+            result = await session.execute(delete(Job).where(Job.id.in_(chunk)))
+            total_deleted += result.rowcount
+
+        await session.commit()
+        logger.info("Cleanup: deleted %d old jobs (cutoff=%s, protected=%d)",
+                    total_deleted, cutoff.date(), len(protected_ids))

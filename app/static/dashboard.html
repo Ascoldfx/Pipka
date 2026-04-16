@@ -41,31 +41,26 @@
   /* Table */
   .table-wrap { overflow-x:auto; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
-  th { text-align:left; padding:8px 10px; border-bottom:2px solid var(--fg); font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); cursor:pointer; user-select:none; white-space:nowrap; }
+  th { text-align:left; padding:8px 12px; border-bottom:2px solid var(--fg); font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); cursor:pointer; user-select:none; white-space:nowrap; }
   th:hover { color:var(--fg); }
   th.sorted { color:var(--fg); }
   th .arrow { font-size:9px; margin-left:3px; }
-  td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  td { padding:8px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
   tr:hover { background:var(--hover); }
 
-  .score { display:inline-block; font-weight:700; font-size:14px; width:34px; text-align:center; border-radius:4px; }
+  .score { display:inline-block; font-weight:700; font-size:14px; min-width:28px; text-align:center; border-radius:4px; }
   .score.high { color:var(--green); } .score.mid { color:var(--yellow); } .score.low { color:var(--red); } .score.none { color:var(--muted); }
-
-  .status-badge { display:inline-block; font-size:10px; padding:2px 7px; border-radius:10px; background:var(--badge); color:var(--muted); white-space:nowrap; }
-  .status-badge.applied { background:#e8f5e9; color:var(--green); }
-  .status-badge.saved { background:#e3f2fd; color:var(--blue); }
-  .status-badge.rejected { background:#fce4ec; color:var(--red); }
 
   .job-title { font-weight:600; color:var(--fg); text-decoration:none; }
   .job-title:hover { text-decoration:underline; }
   .job-meta { color:var(--muted); font-size:11px; }
-  .source-tag { font-size:9px; padding:1px 5px; border:1px solid var(--border); border-radius:3px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); }
-  .salary { white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .source-tag { font-size:9px; padding:1px 5px; border:1px solid var(--border); border-radius:3px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); white-space:nowrap; }
 
-  .actions { display:flex; gap:4px; justify-content:flex-end; flex-wrap:nowrap; }
-  .actions button { font-family:inherit; font-size:13px; width:28px; height:28px; padding:0; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--fg); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
-  .actions button:hover { background:var(--fg); color:var(--bg); }
-  .actions button.active { background:var(--fg); color:var(--bg); }
+
+  .actions-wrap { display:inline-flex; gap:4px; white-space:nowrap; }
+  .actions-wrap button { font-family:inherit; font-size:13px; width:28px; height:28px; padding:0; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--fg); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+  .actions-wrap button:hover { background:var(--fg); color:var(--bg); }
+  .actions-wrap button.active { background:var(--fg); color:var(--bg); }
 
   .pagination { display:flex; justify-content:space-between; align-items:center; padding:10px 24px; border-top:1px solid var(--border); font-size:12px; color:var(--muted); }
   .pagination button { font-family:inherit; font-size:12px; padding:5px 14px; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--fg); cursor:pointer; }
@@ -89,6 +84,9 @@
   .field { margin-bottom:12px; }
   .field label { display:block; font-size:11px; color:var(--muted); margin-bottom:3px; text-transform:uppercase; letter-spacing:.5px; }
   .field input, .field select, .field textarea { font-family:inherit; font-size:13px; padding:8px 10px; border:1px solid var(--border); border-radius:4px; width:100%; background:var(--bg); color:var(--fg); outline:none; }
+  .toggle-label { display:flex !important; align-items:flex-start; gap:8px; cursor:pointer; text-transform:none !important; letter-spacing:0 !important; font-size:13px !important; color:var(--fg) !important; }
+  .toggle-label input[type=checkbox] { margin-top:2px; flex-shrink:0; width:16px; height:16px; accent-color:var(--accent); }
+  .toggle-text { line-height:1.5; }
   .field input:focus, .field textarea:focus, .field select:focus { border-color:var(--fg); }
   .field textarea { min-height:120px; resize:vertical; }
   .field-row { display:flex; gap:12px; }
@@ -140,7 +138,7 @@
   .job-card .info .title a { color:var(--fg); text-decoration:none; }
   .job-card .info .title a:hover { text-decoration:underline; }
   .job-card .info .meta { font-size:11px; color:var(--muted); }
-  .job-card .actions { flex-shrink:0; }
+  .job-card .actions-wrap { flex-shrink:0; }
   .empty-state { text-align:center; padding:40px; color:var(--muted); }
 
   @media (max-width:768px) {
@@ -157,26 +155,30 @@
 <header>
   <h1>pipka<span>.net</span></h1>
   <div style="display:flex;align-items:center;gap:10px">
+    <div id="user-info" style="display:flex;align-items:center;gap:8px;">
+      <img id="user-avatar" src="" style="width:28px;height:28px;border-radius:50%;display:none;" />
+      <span id="user-name" style="font-size:12px;font-weight:500;display:none;"></span>
+    </div>
     <span id="role-badge" style="font-size:11px; padding:3px 8px; border-radius:4px; font-weight:600; cursor:pointer;" onclick="toggleLogin()">Guest</span>
-    <button class="btn-outline" id="scan-btn" onclick="triggerScan()" style="font-size:11px;padding:4px 12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);cursor:pointer;">Scan Now</button>
+    <button class="btn-outline" id="scan-btn" onclick="triggerScan()" style="font-size:11px;padding:4px 12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);cursor:pointer;display:none;">Scan Now</button>
     <span id="scan-info" style="font-size:10px;color:var(--muted)"></span>
   </div>
 </header>
 
 <div class="stats" id="stats">
   <div class="s" onclick="switchTab('jobs')"><span class="num" id="stat-total">—</span>Jobs</div>
-  <div class="s" onclick="switchTab('jobs')"><span class="num" id="stat-scored">—</span>Scored</div>
-  <div class="s" onclick="switchTab('jobs')"><span class="num" id="stat-top">—</span>Top</div>
-  <div class="s" onclick="switchTab('applied')"><span class="num" id="stat-applied">—</span>Applied</div>
-  <div class="s" onclick="switchTab('rejected')"><span class="num" id="stat-rejected">—</span>Rejected</div>
+  <div class="s auth-only" onclick="switchTab('jobs')" style="display:none"><span class="num" id="stat-scored">—</span>Scored</div>
+  <div class="s auth-only" onclick="switchTab('jobs')" style="display:none"><span class="num" id="stat-top">—</span>Top</div>
+  <div class="s auth-only" onclick="switchTab('applied')" style="display:none"><span class="num" id="stat-applied">—</span>Applied</div>
+  <div class="s auth-only" onclick="switchTab('rejected')" style="display:none"><span class="num" id="stat-rejected">—</span>Rejected</div>
 </div>
 
 <div class="tabs">
   <div class="tab active" data-tab="jobs" onclick="switchTab('jobs')">All Jobs</div>
-  <div class="tab" data-tab="inbox" onclick="switchTab('inbox')">Inbox <span class="count" id="tab-inbox-count">0</span></div>
-  <div class="tab" data-tab="applied" onclick="switchTab('applied')">Applied <span class="count" id="tab-applied-count">0</span></div>
-  <div class="tab" data-tab="rejected" onclick="switchTab('rejected')">Rejected <span class="count" id="tab-rejected-count">0</span></div>
-  <div class="tab" data-tab="settings" onclick="switchTab('settings')">Settings</div>
+  <div class="tab auth-only" data-tab="inbox" onclick="switchTab('inbox')" style="display:none">Inbox <span class="count" id="tab-inbox-count">0</span></div>
+  <div class="tab auth-only" data-tab="applied" onclick="switchTab('applied')" style="display:none">Applied <span class="count" id="tab-applied-count">0</span></div>
+  <div class="tab auth-only" data-tab="rejected" onclick="switchTab('rejected')" style="display:none">Rejected <span class="count" id="tab-rejected-count">0</span></div>
+  <div class="tab auth-only" data-tab="settings" onclick="switchTab('settings')" style="display:none">Settings</div>
 </div>
 
 <!-- TAB: ALL JOBS -->
@@ -229,17 +231,23 @@
   </div>
   <div class="table-wrap">
     <table>
+      <colgroup>
+        <col style="width:44px">
+        <col><!-- Job: takes remaining space -->
+        <col style="width:16%">
+        <col style="width:16%">
+        <col style="width:58px">
+        <col style="width:110px">
+      </colgroup>
       <thead><tr>
         <th data-sort="score" class="sorted">Score <span class="arrow">&#9660;</span></th>
         <th data-sort="title">Job</th>
         <th data-sort="company">Company</th>
         <th>Location</th>
-        <th data-sort="salary">Salary</th>
         <th>Source</th>
-        <th>Status</th>
-        <th style="min-width:90px;width:90px">Actions</th>
+        <th>Actions</th>
       </tr></thead>
-      <tbody id="jobs-body"><tr><td colspan="8" class="loading">Loading...</td></tr></tbody>
+      <tbody id="jobs-body"><tr><td colspan="6" class="loading">Loading...</td></tr></tbody>
     </table>
   </div>
   <div class="pagination">
@@ -273,9 +281,15 @@
     </div>
 
     <h3>Exclusions & Negative Keywords</h3>
-    <div class="field" style="margin-bottom:24px;">
+    <div class="field" style="margin-bottom:12px;">
       <label>Do not show jobs requiring (comma-separated)</label>
       <textarea id="s-excluded" rows="2" placeholder="Junior, Developer, German C1, Sales, Part-time..."></textarea>
+    </div>
+    <div class="field" style="margin-bottom:24px;">
+      <label class="toggle-label">
+        <input type="checkbox" id="s-english-only">
+        <span class="toggle-text"><strong>English Only</strong> — prioritise jobs with English as working language; skip positions posted entirely in German / French / Dutch</span>
+      </label>
     </div>
 
     <h3>Preferences</h3>
@@ -359,7 +373,7 @@
 
 <script>
 /* ── State ── */
-const S = { page:1, perPage:50, sort:'score', order:'desc', totalPages:1, tabStatus:'', role:'admin' };
+const S = { page:1, perPage:50, sort:'score', order:'desc', totalPages:1, tabStatus:'', role:'guest', authenticated:false };
 const $ = id => document.getElementById(id);
 
 /* ── Tabs ── */
@@ -404,7 +418,7 @@ function updateSortHeaders(){
 /* ── Stats ── */
 async function loadStats(){
   try{
-    const d=await(await fetch('/api/stats')).json();
+    const d=await(await fetch('/api/stats',{cache:'no-store'})).json();
     $('stat-total').textContent=d.total_jobs||0;
     $('stat-scored').textContent=d.scored||0;
     $('stat-top').textContent=d.top_matches||0;
@@ -424,48 +438,50 @@ async function loadJobs(){
   if($('f-country').value) p.set('country',$('f-country').value);
   if(S.tabStatus) p.set('status',S.tabStatus);
   const tbody=$('jobs-body');
-  tbody.innerHTML='<tr><td colspan="8" class="loading">Loading...</td></tr>';
+  tbody.innerHTML='<tr><td colspan="6" class="loading">Loading...</td></tr>';
   try{
-    const data=await(await fetch('/api/jobs?'+p)).json();
+    const data=await(await fetch('/api/jobs?'+p,{cache:'no-store'})).json();
     S.totalPages=data.pages;
     $('page-info').textContent=`Page ${data.page} of ${data.pages} (${data.total} jobs)`;
     $('prev-btn').disabled=data.page<=1; $('next-btn').disabled=data.page>=data.pages;
-    if(!data.jobs.length){tbody.innerHTML='<tr><td colspan="8" class="loading">No jobs found</td></tr>';return;}
-    tbody.innerHTML=data.jobs.map(j=>jobRow(j)).join('');
-  }catch(e){tbody.innerHTML='<tr><td colspan="8" class="loading">Error</td></tr>';console.error(e)}
+    if(!data.jobs.length){tbody.innerHTML='<tr><td colspan="6" class="loading">No jobs found</td></tr>';return;}
+    let rows='';
+    for(let i=0;i<data.jobs.length;i++){
+      try{ rows+=jobRow(data.jobs[i]); }
+      catch(err){ console.error('jobRow crash at index',i,'job:',data.jobs[i],'error:',err); rows+=`<tr><td colspan="6" style="color:red">Row ${i} error: ${err.message} (job id=${data.jobs[i]?.id})</td></tr>`; }
+    }
+    tbody.innerHTML=rows;
+  }catch(e){tbody.innerHTML=`<tr><td colspan="6" class="loading">Error: ${e.message}</td></tr>`;console.error('loadJobs error:',e)}
 }
 
 function jobRow(j){
   const sc=j.score>=70?'high':j.score>=40?'mid':j.score!=null?'low':'none';
-  const sal=fmtSalary(j.salary_min,j.salary_max,j.salary_currency);
-  const st=j.status?`<span class="status-badge ${j.status}">${j.status}</span>`:'';
   const date=j.posted_at?new Date(j.posted_at).toLocaleDateString('de-DE'):'';
   return `<tr>
     <td><span class="score ${sc}">${j.score!=null?j.score:'—'}</span></td>
     <td><a class="job-title" href="${j.url||'#'}" target="_blank">${esc(j.title)}</a>${date?`<div class="job-meta">${date}</div>`:''}</td>
     <td class="job-meta">${esc(j.company)}</td>
     <td class="job-meta">${esc(j.location)} (${j.country})</td>
-    <td class="salary">${sal}</td>
     <td><span class="source-tag">${j.source}</span></td>
-    <td>${st}</td>
-    <td class="actions">
-      ${S.role === 'admin' ? `
+    <td><div class="actions-wrap">
+      ${S.authenticated ? `
       <button onclick="doAction(${j.id},'applied',this)" title="Applied"${j.status==='applied'?' class="active"':''}>&#10004;</button>
       <button onclick="doAction(${j.id},'reject',this)" title="Reject"${j.status==='rejected'?' class="active"':''}>&#10006;</button>
       <button onclick="showAnalysis(${j.id},'${esc(j.title).replace(/'/g,"\\'")}')">&#129302;</button>
-      ` : `<span style="font-size:10px; color:var(--muted)">View only</span>`}
-    </td></tr>`;
+      ` : `<span style="font-size:10px; color:var(--muted)">Sign in to act</span>`}
+    </div></td></tr>`;
 }
 
 /* ── Settings / Profile ── */
 async function loadProfile(){
   try{
-    const d=await(await fetch('/api/profile')).json();
+    const d=await(await fetch('/api/profile',{cache:'no-store'})).json();
     if(!d.profile) return;
     const p=d.profile;
     $('s-resume').value=p.resume_text||'';
     $('s-titles').value=(p.target_titles||[]).join(', ');
     if($('s-excluded')) $('s-excluded').value=(p.excluded_keywords||[]).join(', ');
+    if($('s-english-only')) $('s-english-only').checked=!!p.english_only;
     $('s-salary').value=p.min_salary||'';
     $('s-experience').value=p.experience_years||'';
     $('s-languages').value=p.languages?Object.entries(p.languages).map(([k,v])=>k+':'+v).join(', '):'';
@@ -484,6 +500,7 @@ async function saveProfile(){
   fd.append('resume_text',$('s-resume').value);
   fd.append('target_titles',$('s-titles').value);
   if($('s-excluded')) fd.append('excluded_keywords',$('s-excluded').value);
+  fd.append('english_only', $('s-english-only') && $('s-english-only').checked ? '1' : '0');
   fd.append('min_salary',$('s-salary').value||0);
   fd.append('experience_years',$('s-experience').value||0);
   fd.append('languages',$('s-languages').value);
@@ -533,7 +550,7 @@ async function showAnalysis(jobId,title){
   $('modal-title').textContent='AI Analysis: '+title;
   $('modal-body').textContent='Loading...';
   try{
-    const d=await(await fetch(`/api/jobs/${jobId}/analyze`)).json();
+    const d=await(await fetch(`/api/jobs/${jobId}/analyze`,{cache:'no-store'})).json();
     $('modal-body').textContent=d.analysis||d.error||'No analysis';
   }catch(e){$('modal-body').textContent='Error: '+e.message;}
 }
@@ -541,13 +558,7 @@ function closeModal(){$('modal').classList.remove('open')}
 $('modal').addEventListener('click',e=>{if(e.target===$('modal'))closeModal()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
 
-function fmtSalary(min,max,cur){
-  if(!min&&!max) return '<span style="color:var(--muted)">—</span>';
-  const c=cur||'EUR', f=n=>Math.round(n).toLocaleString('de-DE');
-  if(min&&max) return f(min)+'–'+f(max)+' '+c;
-  if(min) return f(min)+'+ '+c;
-  return 'bis '+f(max)+' '+c;
-}
+
 function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 
 /* Interactivity */
@@ -567,7 +578,7 @@ async function triggerScan(){
       let checks=0;
       const poll=setInterval(async()=>{
         checks++;
-        const s=await(await fetch('/api/stats')).json();
+        const s=await(await fetch('/api/stats',{cache:'no-store'})).json();
         $('scan-info').textContent=`Scanning... ${s.total_jobs} jobs (${checks*10}s)`;
         $('stat-total').textContent=s.total_jobs;
         $('stat-scored').textContent=s.scored;
@@ -583,7 +594,7 @@ async function triggerScan(){
 
 async function loadScanStatus(){
   try{
-    const d=await(await fetch('/api/scan/status')).json();
+    const d=await(await fetch('/api/scan/status',{cache:'no-store'})).json();
     if(d.next_run){
       const t=new Date(d.next_run);
       $('scan-info').textContent='Next: '+t.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
@@ -592,33 +603,49 @@ async function loadScanStatus(){
 }
 
 function toggleLogin() {
-    if(S.role === 'guest') {
-        window.location.href = '/api/login';
+    if(!S.authenticated) {
+        window.location.href = '/auth/google/login';
     } else {
-        alert('To log out, please close your browser or clear credentials.');
+        if(confirm('Log out?')) window.location.href = '/auth/logout';
     }
 }
 
 /* Init */
 async function initApp() {
   try {
-    const me = await (await fetch('/api/me')).json();
-    S.role = me.role;
+    const me = await (await fetch('/api/me',{cache:'no-store'})).json();
+    S.role = me.role || 'guest';
+    S.authenticated = !!me.authenticated;
     const rb = $('role-badge');
-    if (S.role === 'guest') {
-      if (rb) { rb.textContent = 'Login as Admin'; rb.style.background = 'var(--badge)'; rb.style.color = 'var(--muted)'; }
-      const scanBtn = $('scan-btn');
-      if (scanBtn) { scanBtn.disabled = true; scanBtn.title = "View only"; }
-      document.querySelectorAll('#tc-settings .btn').forEach(b => {
-         b.disabled = true; b.title = "View only";
-      });
-      const uz = $('upload-zone');
-      if (uz) { uz.style.pointerEvents = 'none'; uz.style.opacity = '0.5'; }
+    const avatar = $('user-avatar');
+    const uname = $('user-name');
+    const scanBtn = $('scan-btn');
+
+    if (!S.authenticated) {
+      // Guest — show login button, hide auth-only elements, reset filters to defaults
+      if (rb) { rb.textContent = 'Sign in with Google'; rb.style.background = '#4285f4'; rb.style.color = '#fff'; }
+      if (scanBtn) scanBtn.style.display = 'none';
+      // Show all jobs unfiltered for guests
+      $('f-score').value = '0';
     } else {
-      if (rb) { rb.textContent = 'Admin Mode'; rb.style.background = 'var(--green)'; rb.style.color = '#fff'; }
+      // Logged in — show all auth-only tabs/stats
+      document.querySelectorAll('.auth-only').forEach(el => el.style.display = '');
+      // Restore default score filter for logged-in users
+      $('f-score').value = '70';
+
+      if (me.avatar) { avatar.src = me.avatar; avatar.style.display = 'inline'; }
+      if (me.name) { uname.textContent = me.name; uname.style.display = 'inline'; }
+
+      if (S.role === 'admin') {
+        if (rb) { rb.textContent = 'Admin'; rb.style.background = 'var(--green)'; rb.style.color = '#fff'; }
+        if (scanBtn) scanBtn.style.display = 'inline-block';
+      } else {
+        if (rb) { rb.textContent = me.name || 'Logout'; rb.style.background = 'var(--badge)'; rb.style.color = 'var(--fg)'; }
+        if (scanBtn) scanBtn.style.display = 'none';
+      }
     }
-  } catch(e) {}
-  
+  } catch(e) { console.error('initApp error:', e); }
+
   loadStats(); loadJobs(); loadScanStatus();
   setInterval(()=>{loadStats();loadJobs()},300000);
 }

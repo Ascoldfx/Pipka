@@ -102,6 +102,8 @@ def build_profile_text(profile: UserProfile) -> str:
         parts.append(f"Min salary: {profile.min_salary} EUR")
     if profile.excluded_keywords:
         parts.append(f"CRITICAL EXCLUSIONS: You MUST penalize heavily (Score < 20) any job requiring languages/skills/keywords explicitly excluded here: {', '.join(profile.excluded_keywords)}")
+    if getattr(profile, "english_only", False):
+        parts.append("LANGUAGE REQUIREMENT: Candidate wants ENGLISH-ONLY jobs. Jobs posted entirely in German/French/Dutch/other non-English language → max 30. Jobs that mention English as working language or are international → strong bonus.")
     return "\n".join(parts) or "No profile set"
 
 

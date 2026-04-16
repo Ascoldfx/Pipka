@@ -257,16 +257,20 @@ NON_DACH_CITIES = [
     "new orleans", "cleveland", "honolulu", "anchorage", "boise",
     "des moines", "little rock", "birmingham", "spokane", "rochester",
     "grand rapids", "knoxville", "chattanooga", "greensboro",
+    # Canada cities & provinces
+    "toronto", "vancouver", "montreal", "calgary", "edmonton",
+    "ottawa", "winnipeg", "quebec city", "halifax", "victoria",
+    "ontario", "british columbia", "alberta", "manitoba", "quebec",
+    "nova scotia", "new brunswick", "saskatchewan",
     # UK
     "london", "manchester", "edinburgh", "glasgow", "leeds", "bristol",
     "liverpool", "cambridge", "oxford", "cardiff", "belfast",
     # Asia
     "singapore", "tokyo", "shanghai", "beijing", "seoul",
     "mumbai", "bangalore", "dubai", "hong kong", "kuala lumpur", "taipei", "jakarta", "bangkok",
-    "kuala lumpur", "manila", "hanoi", "ho chi minh",
+    "manila", "hanoi", "ho chi minh",
     # Other
-    "sydney", "melbourne", "toronto", "vancouver", "montreal", "calgary",
-    "são paulo", "dubai", "abu dhabi", "riyadh", "doha",
+    "sydney", "melbourne", "são paulo", "abu dhabi", "riyadh", "doha",
     "mexico city", "buenos aires", "bogota", "lima", "santiago",
     "cape town", "johannesburg", "nairobi", "lagos",
 ]
@@ -312,6 +316,11 @@ def _is_wrong_location(job: RawJob) -> bool:
     (search param, not actual country). So we MUST check description text and
     REQUIRE a DACH marker if location is empty.
     """
+    # Hard block: if the source explicitly tagged the job as US or CA country,
+    # reject immediately — no location text analysis needed.
+    if job.country and job.country.lower() in {"us", "ca"}:
+        return True
+
     location_lower = (job.location or "").lower()
     title_lower = job.title.lower()
     desc_lower = (job.description or "").lower()

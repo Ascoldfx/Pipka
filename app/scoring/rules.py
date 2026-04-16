@@ -99,6 +99,12 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
             if kw and kw.lower() in text:
                 return False, "low"
 
+    # English-only filter: reject jobs with no English signals when english_only is set
+    if profile and getattr(profile, "english_only", False):
+        english_friendly = any(signal in text for signal in ENGLISH_FRIENDLY_SIGNALS)
+        if not english_friendly:
+            return False, "low"
+
     # Domain check — must be in supply chain / procurement / operations
     domain_match = any(kw in title_lower or kw in desc_lower for kw in DOMAIN_KEYWORDS)
     if not domain_match:

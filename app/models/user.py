@@ -10,7 +10,11 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    telegram_id: Mapped[int | None] = mapped_column(BigInteger, unique=True, index=True, nullable=True)
+    email: Mapped[str | None] = mapped_column(String(320), unique=True, index=True, nullable=True)
+    google_sub: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    role: Mapped[str] = mapped_column(String(20), default="user")  # admin / user
     name: Mapped[str | None] = mapped_column(String(255))
     language: Mapped[str] = mapped_column(String(5), default="ru")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -39,6 +43,7 @@ class UserProfile(Base):
     preferred_countries: Mapped[list | None] = mapped_column(JSON)  # ["de", "ch", "at"]
     base_location: Mapped[str | None] = mapped_column(String(255))  # "Leipzig"
     excluded_keywords: Mapped[list | None] = mapped_column(JSON)  # ["junior", "sales", "b2"]
+    english_only: Mapped[bool] = mapped_column(Boolean, default=False)  # prioritise English-language jobs only
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     user: Mapped["User"] = relationship(back_populates="profile")

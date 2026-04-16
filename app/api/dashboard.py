@@ -1,4 +1,8 @@
-"""Dashboard API endpoints — serves HTML + JSON data for job browsing."""
+"""Dashboard API endpoints — serves HTML + JSON data for job browsing.
+
+Auth model (v2): Google OAuth session-based. /api/me is handled by auth.py.
+Fallback: legacy Basic Auth for backward compat (if no session but credentials provided).
+"""
 from __future__ import annotations
 
 import json
@@ -6,6 +10,7 @@ import logging
 import secrets
 import time
 from typing import Any, Optional
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -22,33 +27,11 @@ from app.services.tracker_service import mark_applied, mark_rejected, save_job
 
 logger = logging.getLogger(__name__)
 
-security = HTTPBasic(auto_error=False)
-
-def verify_credentials(request: Request, credentials: Optional[HTTPBasicCredentials] = Depends(security)):
-    request.state.role = "guest"
-    if credentials:
-        is_admin = secrets.compare_digest(credentials.username, settings.dashboard_username) and \
-                   secrets.compare_digest(credentials.password, settings.dashboard_password)
-        if is_admin:
-            request.state.role = "admin"
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect email or password",
-                headers={"WWW-Authenticate": "Basic"},
-            )
-
-def require_admin(request: Request):
-    if getattr(request.state, "role", "guest") != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Guests cannot perform this action")
-
-router = APIRouter(dependencies=[Depends(verify_credentials)])
+router = APIRouter()
 
 VALID_ACTIONS = {"save", "applied", "reject"}
 
-# Simple in-memory TTL cache for /api/stats.
-# Keyed by user_id; invalidated by any write endpoint (job_action/analyze/update_profile).
-# Single-process app, so a plain dict is fine. Swap to aiocache/Redis if we ever scale out.
+# ─── Stats cache ──────────────────────────────────────────────
 _STATS_CACHE: dict[int, tuple[float, dict[str, Any]]] = {}
 _STATS_TTL_SECONDS = 30.0
 
@@ -60,13 +43,63 @@ def _invalidate_stats_cache(user_id: Optional[int] = None) -> None:
         _STATS_CACHE.pop(user_id, None)
 
 
-async def _get_user(session):
-    """Single-user mode — grab first active user with profile."""
+# ─── Auth helpers ─────────────────────────────────────────────
+
+async def _get_session_user(request: Request, session) -> User | None:
+    """Get user from session cookie (Google OAuth)."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return None
+    result = await session.execute(
+        select(User).options(selectinload(User.profile)).where(User.id == user_id, User.is_active == True)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _get_legacy_user(session) -> User | None:
+    """Fallback: get first active user (for Telegram-only users / backward compat)."""
     result = await session.execute(
         select(User).options(selectinload(User.profile)).where(User.is_active == True).limit(1)
     )
     return result.scalar_one_or_none()
 
+
+async def _get_user(request: Request, session) -> User | None:
+    """Get current user: session first, then legacy fallback."""
+    user = await _get_session_user(request, session)
+    if user:
+        return user
+    # Legacy Basic Auth fallback (for existing admin without Google OAuth)
+    return await _get_legacy_user(session)
+
+
+def _get_role(request: Request, user: User | None) -> str:
+    """Determine user role from session or legacy Basic Auth."""
+    # Session-based role (Google OAuth)
+    session_role = request.session.get("user_role")
+    if session_role:
+        return session_role
+    # User model role
+    if user and user.role:
+        return user.role
+    return "guest"
+
+
+def _require_authenticated(request: Request):
+    """Raise 401 if no user session."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Login required")
+
+
+def _require_admin(request: Request):
+    """Raise 403 if user is not admin."""
+    role = request.session.get("user_role", "guest")
+    if role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+
+# ─── Pages ────────────────────────────────────────────────────
 
 @router.get("/", response_class=HTMLResponse)
 async def dashboard_page():
@@ -74,26 +107,12 @@ async def dashboard_page():
     html_path = Path(__file__).parent.parent / "static" / "dashboard.html"
     return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
 
-@router.get("/api/me")
-async def get_me(request: Request):
-    return {"role": getattr(request.state, "role", "guest")}
 
-@router.get("/api/login")
-async def login(credentials: HTTPBasicCredentials = Depends(HTTPBasic(auto_error=True))):
-    is_admin = secrets.compare_digest(credentials.username, settings.dashboard_username) and \
-               secrets.compare_digest(credentials.password, settings.dashboard_password)
-    if is_admin:
-        return RedirectResponse(url="/", status_code=303)
-    
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Incorrect email or password",
-        headers={"WWW-Authenticate": "Basic"},
-    )
-
+# ─── Jobs ─────────────────────────────────────────────────────
 
 @router.get("/api/jobs")
 async def get_jobs(
+    request: Request,
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=10, le=200),
     sort: str = Query("score"),
@@ -106,7 +125,7 @@ async def get_jobs(
     country: str | None = Query(None),
 ):
     async with async_session() as session:
-        user = await _get_user(session)
+        user = await _get_user(request, session)
         if not user:
             return {"jobs": [], "total": 0, "page": page, "pages": 0}
 
@@ -144,7 +163,6 @@ async def get_jobs(
         if country:
             filters.append(Job.country.ilike(country))
 
-        # Count with same joins+filters (no subquery wrapping)
         count_stmt = (
             select(func.count(Job.id))
             .select_from(Job)
@@ -208,9 +226,9 @@ async def get_jobs(
 
 
 @router.get("/api/stats")
-async def get_stats():
+async def get_stats(request: Request):
     async with async_session() as session:
-        user = await _get_user(session)
+        user = await _get_user(request, session)
         if not user:
             return {}
 
@@ -238,7 +256,6 @@ async def get_stats():
             )
         )).scalar() or 0
 
-        # Calculate inbox (scored but not applied/rejected)
         inbox_stmt = select(func.count(JobScore.id)).outerjoin(
             Application, (Application.job_id == JobScore.job_id) & (Application.user_id == user.id)
         ).where(
@@ -260,16 +277,18 @@ async def get_stats():
         return payload
 
 
-@router.post("/api/jobs/{job_id}/action", dependencies=[Depends(require_admin)])
-async def job_action(job_id: int, action: str = Query(...)):
+# ─── Actions (require login) ─────────────────────────────────
+
+@router.post("/api/jobs/{job_id}/action")
+async def job_action(job_id: int, request: Request, action: str = Query(...)):
     if action not in VALID_ACTIONS:
         raise HTTPException(status_code=400, detail=f"Unknown action: {action}")
 
     async with async_session() as session:
         try:
-            user = await _get_user(session)
+            user = await _get_user(request, session)
             if not user:
-                raise HTTPException(status_code=404, detail="No user")
+                raise HTTPException(status_code=401, detail="Login required")
             if action == "save":
                 await save_job(user.id, job_id, session)
             elif action == "applied":
@@ -286,10 +305,10 @@ async def job_action(job_id: int, action: str = Query(...)):
             raise HTTPException(status_code=500, detail="Action failed")
 
 
-@router.get("/api/jobs/{job_id}/analyze", dependencies=[Depends(require_admin)])
-async def analyze_job(job_id: int):
+@router.get("/api/jobs/{job_id}/analyze")
+async def analyze_job(job_id: int, request: Request):
     async with async_session() as session:
-        user = await _get_user(session)
+        user = await _get_user(request, session)
         if not user or not user.profile:
             raise HTTPException(status_code=404, detail="No user/profile")
         job = await session.get(Job, job_id)
@@ -303,32 +322,32 @@ async def analyze_job(job_id: int):
         return {"analysis": analysis}
 
 
-# ─── Manual Scan ────────────────────────────────────────────────
+# ─── Manual Scan (admin only) ────────────────────────────────
 
-@router.post("/api/scan", dependencies=[Depends(require_admin)])
-async def trigger_scan():
+@router.post("/api/scan")
+async def trigger_scan(request: Request):
     """Trigger a background job scan manually."""
+    role = _get_role(request, None)
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
     import asyncio
     from app.services.scheduler_service import _background_scan, scheduler
 
-    # Check if scan is already running
     running = scheduler.get_job("manual_scan")
     if running:
         return {"status": "already_running"}
 
-    # Get bot app from scheduler's existing job
     bg_job = scheduler.get_job("background_scan")
     if not bg_job:
         return {"error": "Scheduler not initialized"}
 
     bot_app = bg_job.args[0]
 
-    # Run scan as a background task
     async def _run():
         try:
             await _background_scan(bot_app)
         except Exception as e:
-            import logging
             logging.getLogger(__name__).error("Manual scan failed: %s", e)
 
     asyncio.create_task(_run())
@@ -337,7 +356,6 @@ async def trigger_scan():
 
 @router.get("/api/scan/status")
 async def scan_status():
-    """Check when last/next scan runs."""
     from app.services.scheduler_service import scheduler
     bg_job = scheduler.get_job("background_scan")
     if not bg_job:
@@ -346,12 +364,12 @@ async def scan_status():
     return {"next_run": next_run.isoformat() if next_run else None}
 
 
-# ─── Profile / Settings ────────────────────────────────────────
+# ─── Profile / Settings ──────────────────────────────────────
 
 @router.get("/api/profile")
-async def get_profile():
+async def get_profile(request: Request):
     async with async_session() as session:
-        user = await _get_user(session)
+        user = await _get_user(request, session)
         if not user:
             return {"error": "No user"}
         p = user.profile
@@ -369,14 +387,16 @@ async def get_profile():
             "preferred_countries": p.preferred_countries or [],
             "base_location": p.base_location or "",
             "excluded_keywords": p.excluded_keywords or [],
+            "english_only": getattr(p, "english_only", False) or False,
         }}
 
 
 MAX_RESUME_CHARS = 100_000
 
 
-@router.post("/api/profile", dependencies=[Depends(require_admin)])
+@router.post("/api/profile")
 async def update_profile(
+    request: Request,
     resume_text: str = Form(None),
     target_titles: str = Form(None),
     min_salary: int = Form(None),
@@ -387,6 +407,7 @@ async def update_profile(
     preferred_countries: str = Form(None),
     base_location: str = Form(None),
     excluded_keywords: str = Form(None),
+    english_only: str = Form(None),
 ):
     if resume_text is not None and len(resume_text) > MAX_RESUME_CHARS:
         raise HTTPException(status_code=400, detail=f"Resume too long (>{MAX_RESUME_CHARS} chars)")
@@ -397,9 +418,9 @@ async def update_profile(
 
     async with async_session() as session:
         try:
-            user = await _get_user(session)
+            user = await _get_user(request, session)
             if not user:
-                raise HTTPException(status_code=404, detail="No user")
+                raise HTTPException(status_code=401, detail="Login required")
 
             p = user.profile
             if not p:
@@ -434,8 +455,11 @@ async def update_profile(
                 p.base_location = base_location
             if excluded_keywords is not None:
                 p.excluded_keywords = [k.strip() for k in excluded_keywords.split(",") if k.strip()]
+            if english_only is not None:
+                p.english_only = english_only in ("1", "true", "True", "yes", "on")
 
             await session.commit()
+            _invalidate_stats_cache(user.id)
             return {"ok": True}
         except HTTPException:
             raise
@@ -448,8 +472,8 @@ async def update_profile(
 MAX_RESUME_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
-@router.post("/api/profile/resume", dependencies=[Depends(require_admin)])
-async def upload_resume(file: UploadFile = File(...)):
+@router.post("/api/profile/resume")
+async def upload_resume(request: Request, file: UploadFile = File(...)):
     """Upload resume file and extract text (PDF, DOCX, TXT)."""
     content = await file.read()
     if len(content) > MAX_RESUME_UPLOAD_BYTES:
@@ -499,9 +523,9 @@ async def upload_resume(file: UploadFile = File(...)):
 
     async with async_session() as session:
         try:
-            user = await _get_user(session)
+            user = await _get_user(request, session)
             if not user:
-                raise HTTPException(status_code=404, detail="No user")
+                raise HTTPException(status_code=401, detail="Login required")
             p = user.profile
             if not p:
                 p = UserProfile(user_id=user.id)

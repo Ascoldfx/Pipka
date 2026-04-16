@@ -30,15 +30,23 @@ class Settings(BaseSettings):
     claude_scoring_max_tokens: int = 5000     # batch scoring response budget
     claude_analysis_max_tokens: int = 1500    # single-job detailed analysis budget
 
-    # Dashboard Authentication (required — set in .env)
-    dashboard_username: str
-    dashboard_password: str
-    guest_username: str
-    guest_password: str
+    # Dashboard Authentication (legacy Basic Auth — kept for backward compat)
+    dashboard_username: str = ""
+    dashboard_password: str = ""
+    guest_username: str = ""
+    guest_password: str = ""
+
+    # Google OAuth
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    session_secret: str = "change-me-in-production"  # signs session cookies
+
+    # Admin emails (comma-separated) — these Google accounts get admin role
+    admin_emails: str = ""
 
     # Search
     default_results_limit: int = 50
-    job_max_age_days: int = 60
+    job_max_age_days: int = 45
 
     # Logging
     log_level: str = "INFO"
