@@ -2,9 +2,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.health import router as health_router
 from app.api.dashboard import router as dashboard_router
+from app.api.auth import router as auth_router
+from app.config import settings
 from app.database import init_db
 
 
@@ -13,7 +16,7 @@ class NoCacheAPIMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         response: Response = await call_next(request)
-        if request.url.path.startswith("/api/"):
+        if request.url.path.startswith("/api/") or request.url.path.startswith("/auth/"):
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
             response.headers["Pragma"] = "no-cache"
         return response
@@ -26,6 +29,19 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="JobHunt API", version="0.1.0", lifespan=lifespan)
+
+# Session middleware (signed cookies — stores user_id after OAuth login)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.session_secret,
+    session_cookie="jobhunt_session",
+    max_age=30 * 24 * 3600,  # 30 days
+    same_site="lax",
+    https_only=True,
+)
 app.add_middleware(NoCacheAPIMiddleware)
+
+# Auth routes first (no auth dependency), then dashboard (session-based)
+app.include_router(auth_router)
 app.include_router(health_router, tags=["health"])
 app.include_router(dashboard_router, tags=["dashboard"])

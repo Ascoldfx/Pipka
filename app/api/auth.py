@@ -1,0 +1,90 @@
+"""Google OAuth2 authentication routes."""
+from __future__ import annotations
+
+import logging
+
+from authlib.integrations.starlette_client import OAuth
+from fastapi import APIRouter, Request
+from fastapi.responses import RedirectResponse
+
+from app.config import settings
+from app.database import async_session
+from app.services.user_service import get_or_create_google_user
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(tags=["auth"])
+
+oauth = OAuth()
+oauth.register(
+    name="google",
+    client_id=settings.google_client_id,
+    client_secret=settings.google_client_secret,
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    client_kwargs={"scope": "openid email profile"},
+)
+
+
+@router.get("/auth/google/login")
+async def google_login(request: Request):
+    """Redirect user to Google OAuth consent screen."""
+    redirect_uri = str(request.url_for("google_callback"))
+    # Ensure HTTPS in production (behind Cloudflare)
+    if "pipka.net" in redirect_uri:
+        redirect_uri = redirect_uri.replace("http://", "https://")
+    return await oauth.google.authorize_redirect(request, redirect_uri)
+
+
+@router.get("/auth/google/callback")
+async def google_callback(request: Request):
+    """Handle Google OAuth callback, create/login user, set session."""
+    try:
+        token = await oauth.google.authorize_access_token(request)
+    except Exception as e:
+        logger.error("OAuth callback failed: %s", e)
+        return RedirectResponse(url="/?error=auth_failed")
+
+    userinfo = token.get("userinfo")
+    if not userinfo:
+        return RedirectResponse(url="/?error=no_userinfo")
+
+    google_sub = userinfo["sub"]
+    email = userinfo.get("email", "")
+    name = userinfo.get("name", "")
+    avatar = userinfo.get("picture", "")
+
+    async with async_session() as session:
+        user = await get_or_create_google_user(google_sub, email, name, avatar, session)
+
+        # Store user in session cookie
+        request.session["user_id"] = user.id
+        request.session["user_email"] = user.email
+        request.session["user_name"] = user.name or ""
+        request.session["user_avatar"] = user.avatar_url or ""
+        request.session["user_role"] = user.role
+
+    return RedirectResponse(url="/")
+
+
+@router.get("/auth/logout")
+async def logout(request: Request):
+    """Clear session and redirect to login."""
+    request.session.clear()
+    return RedirectResponse(url="/")
+
+
+@router.get("/api/me")
+async def get_me(request: Request):
+    """Return current user info from session."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return {"authenticated": False, "role": "guest"}
+
+    return {
+        "authenticated": True,
+        "user_id": user_id,
+        "email": request.session.get("user_email", ""),
+        "name": request.session.get("user_name", ""),
+        "avatar": request.session.get("user_avatar", ""),
+        "role": request.session.get("user_role", "user"),
+    }
