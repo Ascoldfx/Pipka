@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
@@ -10,15 +11,28 @@ from app.api.auth import router as auth_router
 from app.config import settings
 from app.database import init_db
 
+_access_log = logging.getLogger("pipka.access")
+
 
 class NoCacheAPIMiddleware(BaseHTTPMiddleware):
-    """Prevent browsers/CDNs from caching API responses (avoids stale-cache bugs behind Cloudflare)."""
+    """Prevent browsers/CDNs from caching API responses. Also logs API/auth requests."""
 
     async def dispatch(self, request: Request, call_next):
         response: Response = await call_next(request)
-        if request.url.path.startswith("/api/") or request.url.path.startswith("/auth/"):
+        path = request.url.path
+        if path.startswith("/api/") or path.startswith("/auth/"):
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
             response.headers["Pragma"] = "no-cache"
+            # Log non-2xx responses and all mutating requests to help diagnose issues
+            if response.status_code >= 400 or request.method in ("POST", "DELETE", "PATCH"):
+                try:
+                    user_id = request.session.get("user_id", "anon")
+                except Exception:
+                    user_id = "?"
+                _access_log.warning(
+                    "%s %s → %s (user=%s)",
+                    request.method, path, response.status_code, user_id,
+                )
         return response
 
 

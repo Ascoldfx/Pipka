@@ -539,9 +539,21 @@ $('resume-file').addEventListener('change', async(e)=>{
 async function doAction(jobId,action,btn){
   btn.disabled=true;
   try{
-    await fetch(`/api/jobs/${jobId}/action?action=${action}`,{method:'POST'});
+    const resp = await fetch(`/api/jobs/${jobId}/action?action=${action}`,{method:'POST'});
+    if(resp.status===401){
+      // Session expired — reload page to re-authenticate
+      alert('Session expired. Page will reload to re-authenticate.');
+      window.location.reload();
+      return;
+    }
+    if(!resp.ok){
+      const body = await resp.json().catch(()=>({}));
+      console.error('Action failed',resp.status,body);
+      btn.disabled=false;
+      return;
+    }
     loadJobs(); loadStats();
-  }catch(e){console.error(e)}
+  }catch(e){console.error('doAction error:',e)}
   btn.disabled=false;
 }
 
