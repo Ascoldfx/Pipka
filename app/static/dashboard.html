@@ -38,6 +38,21 @@
   .filters input[type="text"] { width:200px; }
   .filters label { font-size:11px; color:var(--muted); }
 
+  /* Multi-select country */
+  .ms-wrap { position:relative; display:inline-block; }
+  .ms-btn { font-family:inherit; font-size:12px; padding:5px 8px; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--fg); cursor:pointer; outline:none; min-width:130px; text-align:left; white-space:nowrap; display:flex; align-items:center; justify-content:space-between; gap:6px; }
+  .ms-btn:hover, .ms-btn:focus { border-color:var(--fg); }
+  .ms-btn .ms-arrow { font-size:9px; color:var(--muted); flex-shrink:0; }
+  .ms-drop { display:none; position:absolute; top:calc(100% + 2px); left:0; z-index:300; background:var(--bg); border:1px solid var(--fg); border-radius:4px; padding:4px 0; min-width:200px; max-height:280px; overflow-y:auto; box-shadow:0 4px 16px rgba(0,0,0,.12); }
+  .ms-drop.open { display:block; }
+  .ms-actions { display:flex; gap:4px; padding:4px 8px 6px; border-bottom:1px solid var(--border); }
+  .ms-actions button { font-family:inherit; font-size:10px; padding:2px 8px; border:1px solid var(--border); border-radius:3px; background:var(--bg); color:var(--muted); cursor:pointer; }
+  .ms-actions button:hover { color:var(--fg); border-color:var(--fg); }
+  .ms-item { display:flex; align-items:center; gap:7px; padding:5px 10px; cursor:pointer; user-select:none; font-size:12px; }
+  .ms-item:hover { background:var(--hover); }
+  .ms-item input[type=checkbox] { cursor:pointer; width:13px; height:13px; flex-shrink:0; }
+  .ms-item .ms-cnt { font-size:10px; color:var(--muted); margin-left:auto; }
+
   /* Table */
   .table-wrap { overflow-x:auto; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
@@ -195,29 +210,18 @@
       <option value="90">90+</option>
     </select>
     <label>Country</label>
-    <select id="f-country">
-      <option value="">All Regions</option>
-      <option value="de">Germany</option>
-      <option value="at">Austria</option>
-      <option value="ch">Switzerland</option>
-      <option value="nl">Netherlands</option>
-      <option value="be">Belgium</option>
-      <option value="pl">Poland</option>
-      <option value="cz">Czech Rep</option>
-      <option value="es">Spain</option>
-      <option value="it">Italy</option>
-      <option value="fr">France</option>
-      <option value="uk">United Kingdom</option>
-      <option value="ie">Ireland</option>
-      <option value="dk">Denmark</option>
-      <option value="se">Sweden</option>
-      <option value="no">Norway</option>
-      <option value="fi">Finland</option>
-      <option value="ro">Romania</option>
-      <option value="hu">Hungary</option>
-      <option value="sk">Slovakia</option>
-      <option value="si">Slovenia</option>
-    </select>
+    <div class="ms-wrap" id="country-wrap">
+      <button class="ms-btn" id="f-country-btn" type="button" onclick="toggleCountryDrop(event)">
+        <span id="f-country-label">All Countries</span><span class="ms-arrow">▾</span>
+      </button>
+      <div class="ms-drop" id="f-country-drop">
+        <div class="ms-actions">
+          <button type="button" onclick="msAll(event)">All</button>
+          <button type="button" onclick="msNone(event)">None</button>
+        </div>
+        <div id="ms-list"><!-- populated by loadCountries() --></div>
+      </div>
+    </div>
     <label>Source</label>
     <select id="f-source">
       <option value="">All</option>
@@ -396,7 +400,59 @@ function switchTab(name, save=true) {
 let searchTimeout;
 $('f-search').addEventListener('input', () => { clearTimeout(searchTimeout); searchTimeout=setTimeout(()=>{S.page=1;loadJobs()},400); });
 ['f-score','f-source'].forEach(id => $(id).addEventListener('change', ()=>{S.page=1;loadJobs()}));
-$('f-country').addEventListener('input', () => { clearTimeout(searchTimeout); searchTimeout=setTimeout(()=>{S.page=1;loadJobs()},600); });
+
+/* ── Multi-select country ── */
+const COUNTRY_NAMES = {
+  de:'Germany', at:'Austria', ch:'Switzerland', nl:'Netherlands', be:'Belgium',
+  pl:'Poland', cz:'Czech Rep', es:'Spain', it:'Italy', fr:'France',
+  gb:'UK', uk:'UK', ie:'Ireland', dk:'Denmark', se:'Sweden', no:'Norway',
+  fi:'Finland', ro:'Romania', hu:'Hungary', sk:'Slovakia', si:'Slovenia',
+  us:'USA', ca:'Canada', pt:'Portugal', lu:'Luxembourg', ee:'Estonia',
+  lv:'Latvia', lt:'Lithuania', hr:'Croatia', rs:'Serbia', bg:'Bulgaria',
+};
+let _selCountries = new Set();
+
+function toggleCountryDrop(e) {
+  e.stopPropagation();
+  $('f-country-drop').classList.toggle('open');
+}
+document.addEventListener('click', (e) => {
+  if (!$('country-wrap').contains(e.target)) $('f-country-drop').classList.remove('open');
+});
+
+async function loadCountries() {
+  try {
+    const data = await (await fetch('/api/countries',{cache:'no-store'})).json();
+    $('ms-list').innerHTML = data.map(c => {
+      const name = COUNTRY_NAMES[c.code] || c.code.toUpperCase();
+      return `<label class="ms-item"><input type="checkbox" value="${c.code}" onchange="onCountryToggle()"><span>${name}</span><span class="ms-cnt">${c.count}</span></label>`;
+    }).join('');
+  } catch(e) { console.error('loadCountries:', e); }
+}
+
+function onCountryToggle() {
+  _selCountries = new Set([...document.querySelectorAll('#ms-list input:checked')].map(i=>i.value));
+  _updateCountryBtn();
+  S.page=1; loadJobs();
+}
+
+function _updateCountryBtn() {
+  const n = _selCountries.size;
+  $('f-country-label').textContent = n===0 ? 'All Countries'
+    : n===1 ? (COUNTRY_NAMES[[..._selCountries][0]] || [..._selCountries][0].toUpperCase())
+    : `${n} countries`;
+}
+
+function msAll(e) {
+  e.stopPropagation();
+  document.querySelectorAll('#ms-list input').forEach(i=>i.checked=true);
+  onCountryToggle();
+}
+function msNone(e) {
+  e.stopPropagation();
+  document.querySelectorAll('#ms-list input').forEach(i=>i.checked=false);
+  onCountryToggle();
+}
 $('prev-btn').addEventListener('click', () => { if(S.page>1){S.page--;loadJobs()} });
 $('next-btn').addEventListener('click', () => { if(S.page<S.totalPages){S.page++;loadJobs()} });
 
@@ -434,9 +490,10 @@ async function loadStats(){
 /* ── Jobs table ── */
 async function loadJobs(){
   const p=new URLSearchParams({page:S.page,per_page:S.perPage,sort:S.sort,order:S.order,min_score:$('f-score').value});
-  if($('f-search').value) p.set('search',$('f-search').value);
+  const search = $('f-search').value.trim();
+  if(search) p.set('search', search);
   if($('f-source').value) p.set('source',$('f-source').value);
-  if($('f-country').value) p.set('country',$('f-country').value);
+  if(_selCountries.size>0) p.set('countries',[..._selCountries].join(','));
   if(S.tabStatus) p.set('status',S.tabStatus);
   const tbody=$('jobs-body');
   tbody.innerHTML='<tr><td colspan="6" class="loading">Loading...</td></tr>';
@@ -668,7 +725,7 @@ async function initApp() {
     } catch(e) {}
   }
 
-  loadStats(); loadJobs(); loadScanStatus();
+  loadCountries(); loadStats(); loadJobs(); loadScanStatus();
   setInterval(()=>{loadStats();loadJobs()},300000);
 }
 initApp();

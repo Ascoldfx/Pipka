@@ -98,6 +98,22 @@ async def dashboard_page():
 
 # ─── Jobs ─────────────────────────────────────────────────────
 
+@router.get("/api/countries")
+async def get_countries(request: Request):
+    """Return distinct countries present in the jobs table with job counts."""
+    async with async_session() as session:
+        user = await _get_user(request, session)
+        if not user:
+            return []
+        result = await session.execute(
+            select(Job.country, func.count(Job.id).label("cnt"))
+            .where(Job.country.is_not(None), Job.country != "")
+            .group_by(Job.country)
+            .order_by(func.count(Job.id).desc())
+        )
+        return [{"code": row[0].lower(), "count": row[1]} for row in result.all()]
+
+
 @router.get("/api/jobs")
 async def get_jobs(
     request: Request,
@@ -111,6 +127,7 @@ async def get_jobs(
     status: str | None = Query(None),
     region: str | None = Query(None),
     country: str | None = Query(None),
+    countries: str | None = Query(None),  # comma-separated country codes, e.g. "de,pl,cz"
 ):
     async with async_session() as session:
         user = await _get_user(request, session)
@@ -126,8 +143,14 @@ async def get_jobs(
         if source:
             filters.append(Job.source == source)
         if search:
-            pattern = f"%{search}%"
-            filters.append(Job.title.ilike(pattern) | Job.company_name.ilike(pattern))
+            # Trim whitespace, escape LIKE special chars (% and _) to treat them literally
+            term = search.strip()
+            if term:
+                escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                pattern = f"%{escaped}%"
+                filters.append(
+                    Job.title.ilike(pattern, escape="\\") | Job.company_name.ilike(pattern, escape="\\")
+                )
         if status == "new":
             filters.append(Application.status.is_(None))
         elif status:
@@ -148,7 +171,12 @@ async def get_jobs(
         elif region == "cee":
             filters.append(Job.country.in_(["si", "sk", "ro", "hu"]))
 
-        if country:
+        # Multi-country filter takes precedence over legacy single country
+        if countries:
+            codes = [c.strip().lower() for c in countries.split(",") if c.strip()]
+            if codes:
+                filters.append(func.lower(Job.country).in_(codes))
+        elif country:
             filters.append(Job.country.ilike(country))
 
         count_stmt = (
