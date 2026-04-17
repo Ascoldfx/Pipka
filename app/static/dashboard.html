@@ -229,6 +229,33 @@
   .mini-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
   .mini-list span { padding:5px 8px; border-radius:999px; background:#f6f8fb; font-size:11px; color:var(--muted); }
 
+  /* ── Dark mode overrides for Ops (hardcoded whites) ── */
+  :root[data-theme="dark"] .ops-shell {
+    background: radial-gradient(circle at top left, rgba(74,157,232,0.07), transparent 28%),
+                radial-gradient(circle at top right, rgba(61,186,104,0.07), transparent 24%),
+                linear-gradient(180deg, #111 0%, #0f0f0f 48%);
+  }
+  :root[data-theme="dark"] .ops-card,
+  :root[data-theme="dark"] .ops-panel { background:rgba(26,26,26,0.95); border-color:rgba(255,255,255,0.07); box-shadow:0 16px 40px rgba(0,0,0,0.3); }
+  :root[data-theme="dark"] .ops-card.clickable:hover { border-color:rgba(255,255,255,0.15); box-shadow:0 18px 42px rgba(0,0,0,0.4); }
+  :root[data-theme="dark"] .segmented { background:#1a1a1a; border-color:var(--border); box-shadow:none; }
+  :root[data-theme="dark"] .ops-card .delta { background:#1e2a38; }
+  :root[data-theme="dark"] .ops-alert { background:#1a1a1a; border-color:#2a2a2a; }
+  :root[data-theme="dark"] .ops-alert.queue { background:linear-gradient(180deg,#2a2008 0%,#1a1a1a 100%); border-color:#4a3a10; }
+  :root[data-theme="dark"] .ops-alert.errors { background:linear-gradient(180deg,#2a0e0e 0%,#1a1a1a 100%); border-color:#4a1a1a; }
+  :root[data-theme="dark"] .ops-alert.success { background:linear-gradient(180deg,#0d2a14 0%,#1a1a1a 100%); border-color:#1a4a22; }
+  :root[data-theme="dark"] .pipeline-row .bar,
+  :root[data-theme="dark"] .source-bar { background:#252525; }
+  :root[data-theme="dark"] .scan-stat { background:#1a1a1a; border-color:#2a2a2a; }
+  :root[data-theme="dark"] .pill { background:#252525; }
+  :root[data-theme="dark"] .pill.success { background:#0d2a14; }
+  :root[data-theme="dark"] .pill.error { background:#2a0e0e; }
+  :root[data-theme="dark"] .pill.warning,
+  :root[data-theme="dark"] .pill.warn { background:#2a1e00; }
+  :root[data-theme="dark"] .pill.running { background:#0d1e2a; }
+  :root[data-theme="dark"] .event-item { border-top-color:#2a2a2a; }
+  :root[data-theme="dark"] .mini-list span { background:#1e1e1e; }
+
   @media (max-width:768px) {
     .filters,.stats { padding:8px 12px; }
     td,th { padding:6px 5px; }
