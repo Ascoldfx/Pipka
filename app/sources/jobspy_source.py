@@ -9,15 +9,16 @@ from app.sources.base import RawJob, SearchParams
 logger = logging.getLogger(__name__)
 
 SITE_MAP = {
-    "de": ["indeed", "linkedin", "google"],
-    "ch": ["indeed", "linkedin", "google"],
-    "at": ["indeed", "linkedin", "google"],
-    "nl": ["indeed", "linkedin", "google"],
-    "be": ["indeed", "linkedin", "google"],
-    "si": ["indeed", "linkedin", "google"],
-    "sk": ["indeed", "linkedin", "google"],
-    "ro": ["indeed", "linkedin", "google"],
-    "hu": ["indeed", "linkedin", "google"],
+    # Google Jobs is excluded: blocked on VPS IPs by Google (returns 0 results silently)
+    "de": ["indeed", "linkedin"],
+    "ch": ["indeed", "linkedin"],
+    "at": ["indeed", "linkedin"],
+    "nl": ["indeed", "linkedin"],
+    "be": ["indeed", "linkedin"],
+    "si": ["indeed", "linkedin"],
+    "sk": ["indeed", "linkedin"],
+    "ro": ["indeed", "linkedin"],
+    "hu": ["indeed", "linkedin"],
 }
 
 # JobSpy uses full country names, not ISO codes
