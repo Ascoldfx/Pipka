@@ -10,11 +10,12 @@ logger = logging.getLogger(__name__)
 
 SITE_MAP = {
     # Google Jobs is excluded: blocked on VPS IPs by Google (returns 0 results silently)
-    "de": ["indeed", "linkedin"],
-    "ch": ["indeed", "linkedin"],
-    "at": ["indeed", "linkedin"],
-    "nl": ["indeed", "linkedin"],
-    "be": ["indeed", "linkedin"],
+    # Glassdoor: best-effort (Cloudflare CAPTCHAs may block, handled gracefully)
+    "de": ["indeed", "linkedin", "glassdoor"],
+    "ch": ["indeed", "linkedin", "glassdoor"],
+    "at": ["indeed", "linkedin", "glassdoor"],
+    "nl": ["indeed", "linkedin", "glassdoor"],
+    "be": ["indeed", "linkedin", "glassdoor"],
     "si": ["indeed", "linkedin"],
     "sk": ["indeed", "linkedin"],
     "ro": ["indeed", "linkedin"],
