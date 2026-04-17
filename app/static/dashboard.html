@@ -228,6 +228,15 @@
   .event-item .time { font-size:11px; color:var(--muted); white-space:nowrap; }
   .mini-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
   .mini-list span { padding:5px 8px; border-radius:999px; background:#f6f8fb; font-size:11px; color:var(--muted); }
+  .user-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .user-table th { text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); padding:6px 8px; border-bottom:1px solid var(--border); }
+  .user-table td { padding:8px 8px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .user-table tr:last-child td { border-bottom:none; }
+  .user-table tr:hover td { background:var(--hover); }
+  .u-bar-wrap { display:flex; align-items:center; gap:6px; }
+  .u-bar { flex:1; height:6px; border-radius:999px; background:var(--border); overflow:hidden; }
+  .u-bar .u-fill { height:100%; border-radius:999px; background:linear-gradient(90deg,var(--blue),var(--green)); }
+  :root[data-theme="dark"] .mini-list span { background:#1e1e1e; }
 
   /* ── Dark mode overrides for Ops (hardcoded whites) ── */
   :root[data-theme="dark"] .ops-shell {
@@ -535,6 +544,16 @@
           <span>Latest scan and API signals</span>
         </div>
         <div class="event-list" id="ops-events"></div>
+      </section>
+    </div>
+
+    <div class="ops-panels" style="grid-template-columns:1fr">
+      <section class="ops-panel">
+        <div class="panel-head">
+          <h3>Users</h3>
+          <span id="ops-users-summary">—</span>
+        </div>
+        <div id="ops-users"><div class="ops-empty">Loading users...</div></div>
       </section>
     </div>
   </div>
@@ -990,6 +1009,7 @@ async function loadOpsOverview(force=false){
   const sources = $('ops-sources');
   const events = $('ops-events');
   const scan = $('ops-scan');
+  const usersEl = $('ops-users');
 
   if(!force && S.activeTab !== 'ops') return;
 
@@ -999,6 +1019,7 @@ async function loadOpsOverview(force=false){
   sources.innerHTML = '<div class="ops-empty">Loading sources...</div>';
   events.innerHTML = '<div class="ops-empty">Loading events...</div>';
   scan.innerHTML = '<div class="ops-empty">Loading scan health...</div>';
+  if(usersEl) usersEl.innerHTML = '<div class="ops-empty">Loading users...</div>';
 
   try {
     const d = await (await fetch(`/api/ops/overview?window_hours=${S.opsWindow}`)).json();
@@ -1080,6 +1101,62 @@ async function loadOpsOverview(force=false){
           </div>
         `).join('')
       : '<div class="ops-empty">No events recorded yet.</div>';
+    // ── Users panel ──
+    if(usersEl && d.users) {
+      const u = d.users;
+      const summary = $('ops-users-summary');
+      if(summary) summary.textContent = `${u.total} total · ${u.new_in_window} new · ${u.with_profile} profiled`;
+
+      const maxScores = Math.max(...(u.activity.map(a => a.scores_total)), 1);
+      const maxActions = Math.max(...(u.activity.map(a => a.actions_total)), 1);
+
+      usersEl.innerHTML = `
+        <div class="mini-list" style="margin-bottom:14px">
+          <span>👥 ${u.total} users</span>
+          <span>✅ ${u.active} active</span>
+          <span>📋 ${u.with_profile} profiled</span>
+          <span>✈️ ${u.via_telegram} telegram</span>
+          <span>🔑 ${u.via_google} google</span>
+          ${u.new_in_window > 0 ? `<span style="color:var(--green)">+${u.new_in_window} new in window</span>` : ''}
+        </div>
+        <table class="user-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Auth</th>
+              <th>Role</th>
+              <th>Scores total</th>
+              <th>Scores in window</th>
+              <th>Actions total</th>
+              <th>Actions in window</th>
+              <th>Last active</th>
+              <th>Joined</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${u.activity.map(a => `
+              <tr>
+                <td><strong>${esc(a.name)}</strong></td>
+                <td><span class="pill ${a.auth.includes('telegram') ? 'running' : 'success'}" style="font-size:10px">${esc(a.auth||'—')}</span></td>
+                <td>${a.role === 'admin' ? '<span class="pill warning">admin</span>' : '<span style="color:var(--muted)">user</span>'}</td>
+                <td>
+                  <div class="u-bar-wrap">
+                    <div class="u-bar"><div class="u-fill" style="width:${Math.round((a.scores_total/maxScores)*100)}%"></div></div>
+                    <span>${fmtNumber(a.scores_total)}</span>
+                  </div>
+                </td>
+                <td style="color:${a.scores_window > 0 ? 'var(--green)' : 'var(--muted)'}">+${fmtNumber(a.scores_window)}</td>
+                <td>${fmtNumber(a.actions_total)}</td>
+                <td style="color:${a.actions_window > 0 ? 'var(--blue)' : 'var(--muted)'}">+${fmtNumber(a.actions_window)}</td>
+                <td>${a.last_active ? fmtRelative(a.last_active) : '<span style="color:var(--muted)">never</span>'}</td>
+                <td style="color:var(--muted)">${a.joined ? fmtRelative(a.joined) : '—'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
   } catch (e) {
     kpis.innerHTML = `<div class="ops-card"><div class="kicker">Ops Unavailable</div><div class="value">!</div><div class="sub">${esc(e.message || 'Unknown error')}</div></div>`;
     alerts.innerHTML = '<div class="ops-alert errors"><strong>Ops view failed</strong><p>Dashboard could not load the operational overview. Check API auth and the new ops event table.</p></div>';
@@ -1087,6 +1164,7 @@ async function loadOpsOverview(force=false){
     sources.innerHTML = '<div class="ops-empty">Could not load source metrics.</div>';
     events.innerHTML = '<div class="ops-empty">Could not load events.</div>';
     scan.innerHTML = '<div class="ops-empty">Could not load scan status.</div>';
+    if(usersEl) usersEl.innerHTML = '<div class="ops-empty">Could not load user metrics.</div>';
   }
 }
 

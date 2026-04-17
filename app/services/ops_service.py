@@ -11,6 +11,7 @@ from app.database import async_session
 from app.models.application import Application
 from app.models.job import Job, JobScore
 from app.models.ops_event import OpsEvent
+from app.models.user import User, UserProfile
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +194,84 @@ async def build_ops_overview(
             }
         )
 
+    # ── Users / clients ──────────────────────────────────────────
+    total_users = (await session.execute(select(func.count(User.id)))).scalar() or 0
+    active_users = (
+        await session.execute(select(func.count(User.id)).where(User.is_active == True))
+    ).scalar() or 0
+    users_with_profile = (
+        await session.execute(select(func.count(UserProfile.id)))
+    ).scalar() or 0
+    users_telegram = (
+        await session.execute(
+            select(func.count(User.id)).where(User.telegram_id.is_not(None))
+        )
+    ).scalar() or 0
+    users_google = (
+        await session.execute(
+            select(func.count(User.id)).where(User.google_sub.is_not(None))
+        )
+    ).scalar() or 0
+    new_users_window = (
+        await session.execute(
+            select(func.count(User.id)).where(User.created_at >= window_start)
+        )
+    ).scalar() or 0
+
+    # Per-user activity: scores + actions in window
+    user_rows = await session.execute(
+        select(User).where(User.is_active == True).order_by(User.created_at.desc())
+    )
+    all_users = list(user_rows.scalars())
+
+    user_activity = []
+    for u in all_users:
+        scores_total = (
+            await session.execute(
+                select(func.count(JobScore.id)).where(JobScore.user_id == u.id)
+            )
+        ).scalar() or 0
+        scores_window = (
+            await session.execute(
+                select(func.count(JobScore.id)).where(
+                    JobScore.user_id == u.id,
+                    JobScore.scored_at >= window_start,
+                )
+            )
+        ).scalar() or 0
+        actions_total = (
+            await session.execute(
+                select(func.count(Application.id)).where(Application.user_id == u.id)
+            )
+        ).scalar() or 0
+        actions_window = (
+            await session.execute(
+                select(func.count(Application.id)).where(
+                    Application.user_id == u.id,
+                    Application.updated_at >= window_start,
+                )
+            )
+        ).scalar() or 0
+        last_score_at = (
+            await session.execute(
+                select(func.max(JobScore.scored_at)).where(JobScore.user_id == u.id)
+            )
+        ).scalar()
+        user_activity.append({
+            "id": u.id,
+            "name": u.name or "—",
+            "role": u.role,
+            "auth": ("telegram" if u.telegram_id else "") + ("+" if u.telegram_id and u.google_sub else "") + ("google" if u.google_sub else ""),
+            "tier": u.subscription_tier,
+            "has_profile": scores_total > 0 or actions_total > 0,
+            "scores_total": scores_total,
+            "scores_window": scores_window,
+            "actions_total": actions_total,
+            "actions_window": actions_window,
+            "last_active": last_score_at.isoformat() if last_score_at else None,
+            "joined": u.created_at.isoformat() if u.created_at else None,
+        })
+
     return {
         "window_hours": window_hours,
         "kpis": {
@@ -224,6 +303,15 @@ async def build_ops_overview(
             "recent": actions_recent,
         },
         "sources": sources,
+        "users": {
+            "total": total_users,
+            "active": active_users,
+            "with_profile": users_with_profile,
+            "via_telegram": users_telegram,
+            "via_google": users_google,
+            "new_in_window": new_users_window,
+            "activity": user_activity,
+        },
         "scan": {
             "running": scan_running,
             "next_run": next_run_at.isoformat() if next_run_at else None,
