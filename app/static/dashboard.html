@@ -22,6 +22,12 @@
   #theme-toggle { background:none; border:1px solid var(--border); border-radius:6px; padding:4px 8px; cursor:pointer; font-size:15px; color:var(--fg); line-height:1; display:flex; align-items:center; gap:4px; }
   #theme-toggle:hover { border-color:var(--fg); }
 
+  /* Language switcher */
+  .lang-switcher { display:flex; gap:2px; }
+  .lang-btn { background:none; border:1px solid transparent; border-radius:4px; padding:3px 6px; cursor:pointer; font-size:12px; color:var(--muted); }
+  .lang-btn:hover { border-color:var(--border); color:var(--fg); }
+  .lang-btn.active { border-color:var(--fg); color:var(--fg); font-weight:600; }
+
   /* Stats bar */
   .stats { display:flex; gap:24px; padding:10px 24px; border-bottom:1px solid var(--border); font-size:12px; color:var(--muted); flex-wrap:wrap; }
   .stats .s { cursor:pointer; }
@@ -278,6 +284,164 @@
 </head>
 <body>
 
+<script>
+/* ── i18n ── */
+const TRANSLATIONS = {
+  en: {
+    'nav.jobs':'All Jobs','nav.inbox':'Inbox','nav.applied':'Applied','nav.rejected':'Rejected','nav.settings':'Settings',
+    'stats.jobs':'Jobs','stats.scored':'Scored','stats.top':'Top','stats.applied':'Applied','stats.rejected':'Rejected',
+    'filter.search':'Search title or company...','filter.score':'Score','filter.country':'Country',
+    'filter.allCountries':'All Countries','filter.source':'Source','filter.all':'All','filter.status':'Status',
+    'filter.new':'New','filter.saved':'Saved','filter.applied':'Applied','filter.rejected':'Rejected',
+    'filter.region':'Region','filter.regionAny':'Any region','filter.regionSaxony':'Saxony','filter.regionDe':'Germany only',
+    'filter.regionDach':'DACH','filter.regionEurope':'Europe','filter.regionCee':'CEE',
+    'th.score':'Score','th.job':'Job','th.company':'Company','th.location':'Location','th.source':'Source','th.actions':'Actions',
+    'btn.prev':'← Prev','btn.next':'Next →','btn.save':'Save Settings','btn.reset':'Reset',
+    'btn.scan':'Scan Now','btn.refresh':'Refresh','btn.upload':'Click to upload resume (PDF or TXT)',
+    'settings.title':'Profile & Search Settings','settings.resume':'Resume',
+    'settings.resumeLabel':'Resume text / keywords','settings.resumePlaceholder':'Paste your resume text or key skills...',
+    'settings.targetPos':'Target Positions','settings.targetLabel':'Target job titles (comma-separated)',
+    'settings.targetPlaceholder':'Director Supply Chain, Head of Procurement, VP Operations...',
+    'settings.watchlist':'Target Companies Watchlist','settings.companiesLabel':'Companies to monitor closely (comma-separated)',
+    'settings.companiesPlaceholder':'Nestlé, Unilever, Bayer, Roche, Mars, Mondelez, PepsiCo, Danone...',
+    'settings.watchlistHint':'Jobs from these companies will be highlighted and tracked separately.',
+    'settings.exclusions':'Exclusions & Negative Keywords','settings.excludedLabel':'Do not show jobs requiring (comma-separated)',
+    'settings.excludedPlaceholder':'Junior, Developer, German C1, Sales, Part-time...',
+    'settings.englishOnly':'English Only — prioritise jobs with English as working language; skip positions posted entirely in German / French / Dutch',
+    'settings.prefs':'Preferences','settings.salary':'Min salary (EUR/year)','settings.experience':'Experience (years)',
+    'settings.languages':'Languages (e.g. en:C2, de:B1)','settings.workMode':'Work mode',
+    'settings.workAny':'Any','settings.workRemote':'Remote','settings.workHybrid':'Hybrid','settings.workOnsite':'On-site',
+    'settings.countries':'Active Target Countries','settings.industries':'Industries (comma-separated)',
+    'settings.industriesPlaceholder':'FMCG, Manufacturing, Automotive, Pharma...',
+    'msg.loading':'Loading...','msg.noJobs':'No jobs found.','msg.loginRequired':'Login required',
+    'btn.guest':'Guest','btn.login':'Sign in with Google',
+    'lang.label':'Language',
+  },
+  ru: {
+    'nav.jobs':'Все вакансии','nav.inbox':'Входящие','nav.applied':'Отклики','nav.rejected':'Отклонённые','nav.settings':'Настройки',
+    'stats.jobs':'Вакансий','stats.scored':'Оценённых','stats.top':'Топ','stats.applied':'Откликов','stats.rejected':'Отклонённых',
+    'filter.search':'Поиск по названию или компании...','filter.score':'Оценка','filter.country':'Страна',
+    'filter.allCountries':'Все страны','filter.source':'Источник','filter.all':'Все','filter.status':'Статус',
+    'filter.new':'Новые','filter.saved':'Сохранённые','filter.applied':'Отклики','filter.rejected':'Отклонённые',
+    'filter.region':'Регион','filter.regionAny':'Любой','filter.regionSaxony':'Саксония','filter.regionDe':'Только Германия',
+    'filter.regionDach':'DACH','filter.regionEurope':'Европа','filter.regionCee':'CEE',
+    'th.score':'Оценка','th.job':'Вакансия','th.company':'Компания','th.location':'Место','th.source':'Источник','th.actions':'Действия',
+    'btn.prev':'← Назад','btn.next':'Вперёд →','btn.save':'Сохранить','btn.reset':'Сбросить',
+    'btn.scan':'Сканировать','btn.refresh':'Обновить','btn.upload':'Нажмите для загрузки резюме (PDF или TXT)',
+    'settings.title':'Профиль и настройки поиска','settings.resume':'Резюме',
+    'settings.resumeLabel':'Текст резюме / ключевые слова','settings.resumePlaceholder':'Вставьте текст резюме или ключевые навыки...',
+    'settings.targetPos':'Целевые должности','settings.targetLabel':'Желаемые должности (через запятую)',
+    'settings.targetPlaceholder':'Director Supply Chain, Head of Procurement, VP Operations...',
+    'settings.watchlist':'Список отслеживаемых компаний','settings.companiesLabel':'Компании для мониторинга (через запятую)',
+    'settings.companiesPlaceholder':'Nestlé, Unilever, Bayer, Roche, Mars, Mondelez, PepsiCo, Danone...',
+    'settings.watchlistHint':'Вакансии от этих компаний будут выделены и отслеживаться отдельно.',
+    'settings.exclusions':'Исключения и стоп-слова','settings.excludedLabel':'Не показывать вакансии с требованиями (через запятую)',
+    'settings.excludedPlaceholder':'Junior, Developer, German C1, Sales, Part-time...',
+    'settings.englishOnly':'Только английский — приоритет вакансиям с английским рабочим языком; пропускать позиции полностью на немецком / французском / голландском',
+    'settings.prefs':'Предпочтения','settings.salary':'Мин. зарплата (EUR/год)','settings.experience':'Опыт работы (лет)',
+    'settings.languages':'Языки (напр. en:C2, de:B1)','settings.workMode':'Режим работы',
+    'settings.workAny':'Любой','settings.workRemote':'Удалённо','settings.workHybrid':'Гибрид','settings.workOnsite':'В офисе',
+    'settings.countries':'Целевые страны поиска','settings.industries':'Отрасли (через запятую)',
+    'settings.industriesPlaceholder':'FMCG, производство, автомобили, фарма...',
+    'msg.loading':'Загрузка...','msg.noJobs':'Вакансии не найдены.','msg.loginRequired':'Требуется вход',
+    'btn.guest':'Гость','btn.login':'Войти через Google',
+    'lang.label':'Язык',
+  },
+  de: {
+    'nav.jobs':'Alle Stellen','nav.inbox':'Eingang','nav.applied':'Bewerbungen','nav.rejected':'Abgelehnt','nav.settings':'Einstellungen',
+    'stats.jobs':'Stellen','stats.scored':'Bewertet','stats.top':'Top','stats.applied':'Bewerbungen','stats.rejected':'Abgelehnt',
+    'filter.search':'Titel oder Firma suchen...','filter.score':'Bewertung','filter.country':'Land',
+    'filter.allCountries':'Alle Länder','filter.source':'Quelle','filter.all':'Alle','filter.status':'Status',
+    'filter.new':'Neu','filter.saved':'Gespeichert','filter.applied':'Beworben','filter.rejected':'Abgelehnt',
+    'filter.region':'Region','filter.regionAny':'Beliebig','filter.regionSaxony':'Sachsen','filter.regionDe':'Nur Deutschland',
+    'filter.regionDach':'DACH','filter.regionEurope':'Europa','filter.regionCee':'Osteuropa',
+    'th.score':'Bewertung','th.job':'Stelle','th.company':'Unternehmen','th.location':'Ort','th.source':'Quelle','th.actions':'Aktionen',
+    'btn.prev':'← Zurück','btn.next':'Weiter →','btn.save':'Einstellungen speichern','btn.reset':'Zurücksetzen',
+    'btn.scan':'Jetzt scannen','btn.refresh':'Aktualisieren','btn.upload':'Lebenslauf hochladen (PDF oder TXT)',
+    'settings.title':'Profil & Sucheinstellungen','settings.resume':'Lebenslauf',
+    'settings.resumeLabel':'Lebenslauftext / Schlüsselwörter','settings.resumePlaceholder':'Lebenslauftext oder wichtige Fähigkeiten einfügen...',
+    'settings.targetPos':'Zielpositionen','settings.targetLabel':'Jobbezeichnungen (kommagetrennt)',
+    'settings.targetPlaceholder':'Director Supply Chain, Head of Procurement, VP Operations...',
+    'settings.watchlist':'Zielunternehmen-Watchlist','settings.companiesLabel':'Zu überwachende Unternehmen (kommagetrennt)',
+    'settings.companiesPlaceholder':'Nestlé, Unilever, Bayer, Roche, Mars, Mondelez, PepsiCo, Danone...',
+    'settings.watchlistHint':'Stellen dieser Unternehmen werden hervorgehoben und separat verfolgt.',
+    'settings.exclusions':'Ausschlüsse & Negativwörter','settings.excludedLabel':'Jobs mit diesen Anforderungen ausblenden (kommagetrennt)',
+    'settings.excludedPlaceholder':'Junior, Developer, German C1, Sales, Teilzeit...',
+    'settings.englishOnly':'Nur Englisch — Priorität für englischsprachige Stellen; deutschsprachige / französische / niederländische Inserate überspringen',
+    'settings.prefs':'Einstellungen','settings.salary':'Mindestgehalt (EUR/Jahr)','settings.experience':'Erfahrung (Jahre)',
+    'settings.languages':'Sprachen (z.B. en:C2, de:B1)','settings.workMode':'Arbeitsmodell',
+    'settings.workAny':'Beliebig','settings.workRemote':'Remote','settings.workHybrid':'Hybrid','settings.workOnsite':'Vor Ort',
+    'settings.countries':'Aktive Zielländer','settings.industries':'Branchen (kommagetrennt)',
+    'settings.industriesPlaceholder':'FMCG, Produktion, Automobil, Pharma...',
+    'msg.loading':'Wird geladen...','msg.noJobs':'Keine Stellen gefunden.','msg.loginRequired':'Anmeldung erforderlich',
+    'btn.guest':'Gast','btn.login':'Mit Google anmelden',
+    'lang.label':'Sprache',
+  },
+  es: {
+    'nav.jobs':'Todos los trabajos','nav.inbox':'Bandeja','nav.applied':'Aplicados','nav.rejected':'Rechazados','nav.settings':'Configuración',
+    'stats.jobs':'Trabajos','stats.scored':'Puntuados','stats.top':'Top','stats.applied':'Aplicados','stats.rejected':'Rechazados',
+    'filter.search':'Buscar título o empresa...','filter.score':'Puntuación','filter.country':'País',
+    'filter.allCountries':'Todos los países','filter.source':'Fuente','filter.all':'Todos','filter.status':'Estado',
+    'filter.new':'Nuevo','filter.saved':'Guardados','filter.applied':'Aplicados','filter.rejected':'Rechazados',
+    'filter.region':'Región','filter.regionAny':'Cualquiera','filter.regionSaxony':'Sajonia','filter.regionDe':'Solo Alemania',
+    'filter.regionDach':'DACH','filter.regionEurope':'Europa','filter.regionCee':'Europa del Este',
+    'th.score':'Punt.','th.job':'Trabajo','th.company':'Empresa','th.location':'Ubicación','th.source':'Fuente','th.actions':'Acciones',
+    'btn.prev':'← Anterior','btn.next':'Siguiente →','btn.save':'Guardar configuración','btn.reset':'Restablecer',
+    'btn.scan':'Escanear','btn.refresh':'Actualizar','btn.upload':'Subir currículum (PDF o TXT)',
+    'settings.title':'Perfil y configuración de búsqueda','settings.resume':'Currículum',
+    'settings.resumeLabel':'Texto del currículum / palabras clave','settings.resumePlaceholder':'Pega tu currículum o habilidades clave...',
+    'settings.targetPos':'Puestos objetivo','settings.targetLabel':'Títulos de trabajo deseados (separados por coma)',
+    'settings.targetPlaceholder':'Director Supply Chain, Head of Procurement, VP Operations...',
+    'settings.watchlist':'Lista de empresas objetivo','settings.companiesLabel':'Empresas a monitorear (separadas por coma)',
+    'settings.companiesPlaceholder':'Nestlé, Unilever, Bayer, Roche, Mars, Mondelez, PepsiCo, Danone...',
+    'settings.watchlistHint':'Los trabajos de estas empresas serán destacados y rastreados por separado.',
+    'settings.exclusions':'Exclusiones y palabras negativas','settings.excludedLabel':'No mostrar trabajos que requieren (separados por coma)',
+    'settings.excludedPlaceholder':'Junior, Developer, German C1, Sales, Media jornada...',
+    'settings.englishOnly':'Solo inglés — priorizar trabajos con inglés como idioma de trabajo; omitir posiciones publicadas en alemán / francés / neerlandés',
+    'settings.prefs':'Preferencias','settings.salary':'Salario mínimo (EUR/año)','settings.experience':'Experiencia (años)',
+    'settings.languages':'Idiomas (ej. en:C2, de:B1)','settings.workMode':'Modo de trabajo',
+    'settings.workAny':'Cualquiera','settings.workRemote':'Remoto','settings.workHybrid':'Híbrido','settings.workOnsite':'Presencial',
+    'settings.countries':'Países objetivo activos','settings.industries':'Industrias (separadas por coma)',
+    'settings.industriesPlaceholder':'FMCG, Manufactura, Automotriz, Farma...',
+    'msg.loading':'Cargando...','msg.noJobs':'No se encontraron trabajos.','msg.loginRequired':'Inicio de sesión requerido',
+    'btn.guest':'Invitado','btn.login':'Iniciar sesión con Google',
+    'lang.label':'Idioma',
+  },
+};
+
+let _lang = localStorage.getItem('pipka_lang') || 'ru';
+function T(key) { return (TRANSLATIONS[_lang] || TRANSLATIONS.en)[key] || (TRANSLATIONS.en[key] || key); }
+function setLang(lang) {
+  _lang = lang;
+  localStorage.setItem('pipka_lang', lang);
+  applyLang();
+  loadJobs();
+  if(typeof S !== 'undefined' && S.activeTab === 'settings') loadProfile();
+}
+function applyLang() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const attr = el.getAttribute('data-i18n-attr');
+    if (attr) el.setAttribute(attr, T(key));
+    else el.textContent = T(key);
+  });
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === _lang);
+  });
+  const wm = document.getElementById('s-workmode');
+  if (wm) {
+    wm.options[0].text = T('settings.workAny');
+    wm.options[1].text = T('settings.workRemote');
+    wm.options[2].text = T('settings.workHybrid');
+    wm.options[3].text = T('settings.workOnsite');
+  }
+  const fcl = document.getElementById('f-country-label');
+  if (fcl && fcl.textContent === 'All Countries' || (fcl && fcl.getAttribute('data-default') === '1')) {
+    fcl.textContent = T('filter.allCountries');
+  }
+}
+</script>
+
 <header>
   <h1>pipka<span>.net</span></h1>
   <div style="display:flex;align-items:center;gap:10px">
@@ -286,58 +450,64 @@
       <span id="user-name" style="font-size:12px;font-weight:500;display:none;"></span>
     </div>
     <button id="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
+    <div class="lang-switcher">
+      <button class="lang-btn" data-lang="en" onclick="setLang('en')" title="English">EN</button>
+      <button class="lang-btn" data-lang="ru" onclick="setLang('ru')" title="Русский">RU</button>
+      <button class="lang-btn" data-lang="de" onclick="setLang('de')" title="Deutsch">DE</button>
+      <button class="lang-btn" data-lang="es" onclick="setLang('es')" title="Español">ES</button>
+    </div>
     <span id="role-badge" style="font-size:11px; padding:3px 8px; border-radius:4px; font-weight:600; cursor:pointer;" onclick="toggleLogin()">Guest</span>
-    <button class="btn-outline" id="scan-btn" onclick="triggerScan()" style="font-size:11px;padding:4px 12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);cursor:pointer;display:none;">Scan Now</button>
+    <button class="btn-outline" id="scan-btn" onclick="triggerScan()" style="font-size:11px;padding:4px 12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);cursor:pointer;display:none;" data-i18n="btn.scan">Scan Now</button>
     <span id="scan-info" style="font-size:10px;color:var(--muted)"></span>
   </div>
 </header>
 
 <div class="stats" id="stats">
-  <div class="s" onclick="switchTab('jobs')"><span class="num" id="stat-total">—</span>Jobs</div>
-  <div class="s auth-only" onclick="switchTab('jobs')" style="display:none"><span class="num" id="stat-scored">—</span>Scored</div>
-  <div class="s auth-only" onclick="switchTab('jobs')" style="display:none"><span class="num" id="stat-top">—</span>Top</div>
-  <div class="s auth-only" onclick="switchTab('applied')" style="display:none"><span class="num" id="stat-applied">—</span>Applied</div>
-  <div class="s auth-only" onclick="switchTab('rejected')" style="display:none"><span class="num" id="stat-rejected">—</span>Rejected</div>
+  <div class="s" onclick="switchTab('jobs')"><span class="num" id="stat-total">—</span><span data-i18n="stats.jobs">Jobs</span></div>
+  <div class="s auth-only" onclick="switchTab('jobs')" style="display:none"><span class="num" id="stat-scored">—</span><span data-i18n="stats.scored">Scored</span></div>
+  <div class="s auth-only" onclick="switchTab('jobs')" style="display:none"><span class="num" id="stat-top">—</span><span data-i18n="stats.top">Top</span></div>
+  <div class="s auth-only" onclick="switchTab('applied')" style="display:none"><span class="num" id="stat-applied">—</span><span data-i18n="stats.applied">Applied</span></div>
+  <div class="s auth-only" onclick="switchTab('rejected')" style="display:none"><span class="num" id="stat-rejected">—</span><span data-i18n="stats.rejected">Rejected</span></div>
 </div>
 
 <div class="tabs">
-  <div class="tab active" data-tab="jobs" onclick="switchTab('jobs')">All Jobs</div>
-  <div class="tab auth-only" data-tab="inbox" onclick="switchTab('inbox')" style="display:none">Inbox <span class="count" id="tab-inbox-count">0</span></div>
-  <div class="tab auth-only" data-tab="applied" onclick="switchTab('applied')" style="display:none">Applied <span class="count" id="tab-applied-count">0</span></div>
-  <div class="tab auth-only" data-tab="rejected" onclick="switchTab('rejected')" style="display:none">Rejected <span class="count" id="tab-rejected-count">0</span></div>
-  <div class="tab auth-only" data-tab="settings" onclick="switchTab('settings')" style="display:none">Settings</div>
+  <div class="tab active" data-tab="jobs" onclick="switchTab('jobs')"><span data-i18n="nav.jobs">All Jobs</span></div>
+  <div class="tab auth-only" data-tab="inbox" onclick="switchTab('inbox')" style="display:none"><span data-i18n="nav.inbox">Inbox</span> <span class="count" id="tab-inbox-count">0</span></div>
+  <div class="tab auth-only" data-tab="applied" onclick="switchTab('applied')" style="display:none"><span data-i18n="nav.applied">Applied</span> <span class="count" id="tab-applied-count">0</span></div>
+  <div class="tab auth-only" data-tab="rejected" onclick="switchTab('rejected')" style="display:none"><span data-i18n="nav.rejected">Rejected</span> <span class="count" id="tab-rejected-count">0</span></div>
+  <div class="tab auth-only" data-tab="settings" onclick="switchTab('settings')" style="display:none"><span data-i18n="nav.settings">Settings</span></div>
   <div class="tab auth-only" data-tab="ops" id="tab-ops" onclick="switchTab('ops')" style="display:none">Ops</div>
 </div>
 
 <!-- TAB: ALL JOBS -->
 <div class="tab-content active" id="tc-jobs">
   <div class="filters">
-    <input type="text" id="f-search" placeholder="Search title or company...">
-    <label>Score</label>
+    <input type="text" id="f-search" data-i18n="filter.search" data-i18n-attr="placeholder" placeholder="Search title or company...">
+    <label data-i18n="filter.score">Score</label>
     <select id="f-score">
-      <option value="0">All</option>
+      <option value="0" data-i18n="filter.all">All</option>
       <option value="40">40+</option>
       <option value="60">60+</option>
       <option value="70" selected>70+</option>
       <option value="80">80+</option>
       <option value="90">90+</option>
     </select>
-    <label>Country</label>
+    <label data-i18n="filter.country">Country</label>
     <div class="ms-wrap" id="country-wrap">
       <button class="ms-btn" id="f-country-btn" type="button" onclick="toggleCountryDrop(event)">
-        <span id="f-country-label">All Countries</span><span class="ms-arrow">▾</span>
+        <span id="f-country-label" data-default="1" data-i18n="filter.allCountries">All Countries</span><span class="ms-arrow">▾</span>
       </button>
       <div class="ms-drop" id="f-country-drop">
         <div class="ms-actions">
-          <button type="button" onclick="msAll(event)">All</button>
+          <button type="button" onclick="msAll(event)" data-i18n="filter.all">All</button>
           <button type="button" onclick="msNone(event)">None</button>
         </div>
         <div id="ms-list"><!-- populated by loadCountries() --></div>
       </div>
     </div>
-    <label>Source</label>
+    <label data-i18n="filter.source">Source</label>
     <select id="f-source">
-      <option value="">All</option>
+      <option value="" data-i18n="filter.all">All</option>
       <option value="adzuna">Adzuna</option>
       <option value="indeed">Indeed</option>
       <option value="linkedin">LinkedIn</option>
@@ -360,94 +530,94 @@
         <col style="width:110px">
       </colgroup>
       <thead><tr>
-        <th data-sort="score" class="sorted">Score <span class="arrow">&#9660;</span></th>
-        <th data-sort="title">Job</th>
-        <th data-sort="company">Company</th>
-        <th>Location</th>
-        <th>Source</th>
-        <th>Actions</th>
+        <th data-sort="score" class="sorted"><span data-i18n="th.score">Score</span> <span class="arrow">&#9660;</span></th>
+        <th data-sort="title"><span data-i18n="th.job">Job</span></th>
+        <th data-sort="company"><span data-i18n="th.company">Company</span></th>
+        <th><span data-i18n="th.location">Location</span></th>
+        <th><span data-i18n="th.source">Source</span></th>
+        <th><span data-i18n="th.actions">Actions</span></th>
       </tr></thead>
-      <tbody id="jobs-body"><tr><td colspan="6" class="loading">Loading...</td></tr></tbody>
+      <tbody id="jobs-body"><tr><td colspan="6" class="loading" data-i18n="msg.loading">Loading...</td></tr></tbody>
     </table>
   </div>
   <div class="pagination">
-    <button id="prev-btn" disabled>&larr; Prev</button>
+    <button id="prev-btn" disabled data-i18n="btn.prev">← Prev</button>
     <span id="page-info">—</span>
-    <button id="next-btn" disabled>Next &rarr;</button>
+    <button id="next-btn" disabled data-i18n="btn.next">Next →</button>
   </div>
 </div>
 
 <!-- TAB: SETTINGS -->
 <div class="tab-content" id="tc-settings">
   <div class="settings">
-    <h2>Profile & Search Settings</h2>
+    <h2 data-i18n="settings.title">Profile & Search Settings</h2>
 
     <div id="settings-msg"></div>
 
-    <h3>Resume</h3>
+    <h3 data-i18n="settings.resume">Resume</h3>
     <div class="upload-zone" id="upload-zone" onclick="document.getElementById('resume-file').click()">
       <input type="file" id="resume-file" accept=".pdf,.txt,.doc,.docx">
-      Click to upload resume (PDF or TXT)
+      <span data-i18n="btn.upload">Click to upload resume (PDF or TXT)</span>
     </div>
     <div class="field">
-      <label>Resume text / keywords</label>
-      <textarea id="s-resume" placeholder="Paste your resume text or key skills..."></textarea>
+      <label data-i18n="settings.resumeLabel">Resume text / keywords</label>
+      <textarea id="s-resume" data-i18n="settings.resumePlaceholder" data-i18n-attr="placeholder" placeholder="Paste your resume text or key skills..."></textarea>
     </div>
 
-    <h3>Target Positions</h3>
+    <h3 data-i18n="settings.targetPos">Target Positions</h3>
     <div class="field" style="margin-bottom:24px;">
-      <label>Target job titles (comma-separated)</label>
-      <textarea id="s-titles" rows="3" placeholder="Director Supply Chain, Head of Procurement, VP Operations..."></textarea>
+      <label data-i18n="settings.targetLabel">Target job titles (comma-separated)</label>
+      <textarea id="s-titles" rows="3" data-i18n="settings.targetPlaceholder" data-i18n-attr="placeholder" placeholder="Director Supply Chain, Head of Procurement, VP Operations..."></textarea>
     </div>
 
-    <h3>Target Companies Watchlist</h3>
+    <h3 data-i18n="settings.watchlist">Target Companies Watchlist</h3>
     <div class="field" style="margin-bottom:24px;">
-      <label>Companies to monitor closely (comma-separated)</label>
-      <textarea id="s-companies" rows="3" placeholder="Nestlé, Unilever, Bayer, Roche, Mars, Mondelez, PepsiCo, Danone..."></textarea>
-      <small style="color:var(--text-muted)">Jobs from these companies will be highlighted and tracked separately. Background scan will search for vacancies from each company.</small>
+      <label data-i18n="settings.companiesLabel">Companies to monitor closely (comma-separated)</label>
+      <textarea id="s-companies" rows="3" data-i18n="settings.companiesPlaceholder" data-i18n-attr="placeholder" placeholder="Nestlé, Unilever, Bayer, Roche, Mars, Mondelez, PepsiCo, Danone..."></textarea>
+      <small style="color:var(--text-muted)" data-i18n="settings.watchlistHint">Jobs from these companies will be highlighted and tracked separately.</small>
     </div>
 
-    <h3>Exclusions & Negative Keywords</h3>
+    <h3 data-i18n="settings.exclusions">Exclusions & Negative Keywords</h3>
     <div class="field" style="margin-bottom:12px;">
-      <label>Do not show jobs requiring (comma-separated)</label>
-      <textarea id="s-excluded" rows="2" placeholder="Junior, Developer, German C1, Sales, Part-time..."></textarea>
+      <label data-i18n="settings.excludedLabel">Do not show jobs requiring (comma-separated)</label>
+      <textarea id="s-excluded" rows="2" data-i18n="settings.excludedPlaceholder" data-i18n-attr="placeholder" placeholder="Junior, Developer, German C1, Sales, Part-time..."></textarea>
     </div>
     <div class="field" style="margin-bottom:24px;">
       <label class="toggle-label">
         <input type="checkbox" id="s-english-only">
-        <span class="toggle-text"><strong>English Only</strong> — prioritise jobs with English as working language; skip positions posted entirely in German / French / Dutch</span>
+        <span class="toggle-text" data-i18n="settings.englishOnly"><strong>English Only</strong> — prioritise jobs with English as working language; skip positions posted entirely in German / French / Dutch</span>
       </label>
     </div>
 
-    <h3>Preferences</h3>
+    <h3 data-i18n="settings.prefs">Preferences</h3>
     <div class="field-row">
       <div class="field">
-        <label>Min salary (EUR/year)</label>
+        <label data-i18n="settings.salary">Min salary (EUR/year)</label>
         <input type="number" id="s-salary" placeholder="100000">
       </div>
       <div class="field">
-        <label>Experience (years)</label>
+        <label data-i18n="settings.experience">Experience (years)</label>
         <input type="number" id="s-experience" placeholder="15">
       </div>
     </div>
     <div class="field-row">
       <div class="field">
-        <label>Languages (e.g. en:C2, de:B1)</label>
+        <label data-i18n="settings.languages">Languages (e.g. en:C2, de:B1)</label>
         <input type="text" id="s-languages" placeholder="en:C2, de:B1">
       </div>
       <div class="field">
-        <label>Work mode</label>
+        <label data-i18n="settings.workMode">Work mode</label>
         <select id="s-workmode">
-          <option value="any">Any</option>
-          <option value="remote">Remote</option>
-          <option value="hybrid">Hybrid</option>
-          <option value="onsite">On-site</option>
+          <option value="any" data-i18n="settings.workAny">Any</option>
+          <option value="remote" data-i18n="settings.workRemote">Remote</option>
+          <option value="hybrid" data-i18n="settings.workHybrid">Hybrid</option>
+          <option value="onsite" data-i18n="settings.workOnsite">On-site</option>
         </select>
       </div>
     </div>
     <div class="field-row">
       <div class="field" style="flex:2">
-        <label>Active Target Countries</label>
+        <label data-i18n="settings.countries">Active Target Countries</label>
         <div class="country-grid" id="s-countries-grid">
           <div class="country-item" data-code="de">🇩🇪 Germany</div>
           <div class="country-item" data-code="at">🇦🇹 Austria</div>
@@ -474,13 +644,13 @@
       </div>
     </div>
     <div class="field">
-      <label>Industries (comma-separated)</label>
-      <input type="text" id="s-industries" placeholder="FMCG, Manufacturing, Automotive, Pharma...">
+      <label data-i18n="settings.industries">Industries (comma-separated)</label>
+      <input type="text" id="s-industries" data-i18n="settings.industriesPlaceholder" data-i18n-attr="placeholder" placeholder="FMCG, Manufacturing, Automotive, Pharma...">
     </div>
 
     <div style="margin-top:16px; display:flex; gap:10px;">
-      <button class="btn" onclick="saveProfile()">Save Settings</button>
-      <button class="btn btn-outline" onclick="loadProfile()">Reset</button>
+      <button class="btn" onclick="saveProfile()" data-i18n="btn.save">Save Settings</button>
+      <button class="btn btn-outline" onclick="loadProfile()" data-i18n="btn.reset">Reset</button>
     </div>
   </div>
 </div>
@@ -490,7 +660,7 @@
   <div class="ops-shell">
     <div class="ops-toolbar">
       <div class="ops-title">
-        <h2>Ops Cockpit</h2>
+        <h2>Пульт управления</h2>
         <p>Короткий пульт по здоровью пайплайна: сбор вакансий, скоринг, очередь, ошибки API и последние сканы.</p>
       </div>
       <div class="ops-actions">
@@ -499,31 +669,31 @@
           <button type="button" data-ops-window="72" onclick="setOpsWindow(72)">72h</button>
           <button type="button" data-ops-window="168" onclick="setOpsWindow(168)">7d</button>
         </div>
-        <button class="btn btn-outline" type="button" onclick="loadOpsOverview(true)">Refresh</button>
+        <button class="btn btn-outline" type="button" onclick="loadOpsOverview(true)">Обновить</button>
       </div>
     </div>
 
     <div class="ops-grid" id="ops-kpis">
-      <div class="ops-card"><div class="kicker">Loading</div><div class="value">...</div><div class="sub">Preparing ops overview</div></div>
+      <div class="ops-card"><div class="kicker">Загрузка</div><div class="value">...</div><div class="sub">Подготовка метрик</div></div>
     </div>
 
     <div class="ops-alerts" id="ops-alerts">
-      <div class="ops-alert"><strong>Loading alerts</strong><p>Checking queue pressure, API health and scan freshness.</p></div>
+      <div class="ops-alert"><strong>Загрузка алертов</strong><p>Проверяем давление очереди, здоровье API и свежесть последнего скана.</p></div>
     </div>
 
     <div class="ops-panels">
       <section class="ops-panel">
         <div class="panel-head">
-          <h3>Pipeline</h3>
-          <span id="ops-window-label">Last 24h</span>
+          <h3>Пайплайн</h3>
+          <span id="ops-window-label">Последние 24ч</span>
         </div>
         <div class="pipeline-list" id="ops-pipeline"></div>
       </section>
 
       <section class="ops-panel">
         <div class="panel-head">
-          <h3>Scan Health</h3>
-          <span id="ops-scan-pill" class="pill">Waiting</span>
+          <h3>Здоровье скана</h3>
+          <span id="ops-scan-pill" class="pill">Ожидание</span>
         </div>
         <div id="ops-scan"></div>
       </section>
@@ -532,16 +702,16 @@
     <div class="ops-panels">
       <section class="ops-panel">
         <div class="panel-head">
-          <h3>Sources</h3>
-          <span>Fresh vs total mix</span>
+          <h3>Источники</h3>
+          <span>Свежие vs всего</span>
         </div>
         <div class="source-list" id="ops-sources"></div>
       </section>
 
       <section class="ops-panel">
         <div class="panel-head">
-          <h3>Recent Events</h3>
-          <span>Latest scan and API signals</span>
+          <h3>Последние события</h3>
+          <span>Сканы и сигналы API</span>
         </div>
         <div class="event-list" id="ops-events"></div>
       </section>
@@ -550,10 +720,10 @@
     <div class="ops-panels" style="grid-template-columns:1fr">
       <section class="ops-panel">
         <div class="panel-head">
-          <h3>Users</h3>
+          <h3>Пользователи</h3>
           <span id="ops-users-summary">—</span>
         </div>
-        <div id="ops-users"><div class="ops-empty">Loading users...</div></div>
+        <div id="ops-users"><div class="ops-empty">Загрузка пользователей...</div></div>
       </section>
     </div>
   </div>
@@ -658,9 +828,11 @@ function onCountryToggle() {
 
 function _updateCountryBtn() {
   const n = _selCountries.size;
-  $('f-country-label').textContent = n===0 ? 'All Countries'
+  const lbl = $('f-country-label');
+  lbl.textContent = n===0 ? T('filter.allCountries')
     : n===1 ? (COUNTRY_NAMES[[..._selCountries][0]] || [..._selCountries][0].toUpperCase())
     : `${n} countries`;
+  if(n===0) lbl.setAttribute('data-default','1'); else lbl.removeAttribute('data-default');
 }
 
 function msAll(e) {
@@ -716,13 +888,13 @@ async function loadJobs(){
   if(_selCountries.size>0) p.set('countries',[..._selCountries].join(','));
   if(S.tabStatus) p.set('status',S.tabStatus);
   const tbody=$('jobs-body');
-  tbody.innerHTML='<tr><td colspan="6" class="loading">Loading...</td></tr>';
+  tbody.innerHTML=`<tr><td colspan="6" class="loading">${T('msg.loading')}</td></tr>`;
   try{
     const data=await(await fetch('/api/jobs?'+p,{cache:'no-store'})).json();
     S.totalPages=data.pages;
     $('page-info').textContent=`Page ${data.page} of ${data.pages} (${data.total} jobs)`;
     $('prev-btn').disabled=data.page<=1; $('next-btn').disabled=data.page>=data.pages;
-    if(!data.jobs.length){tbody.innerHTML='<tr><td colspan="6" class="loading">No jobs found</td></tr>';return;}
+    if(!data.jobs.length){tbody.innerHTML=`<tr><td colspan="6" class="loading">${T('msg.noJobs')}</td></tr>`;return;}
     let rows='';
     for(let i=0;i<data.jobs.length;i++){
       try{ rows+=jobRow(data.jobs[i]); }
@@ -926,7 +1098,7 @@ function setOpsWindow(hours){
   document.querySelectorAll('[data-ops-window]').forEach(btn => {
     btn.classList.toggle('active', Number(btn.dataset.opsWindow) === hours);
   });
-  $('ops-window-label').textContent = hours >= 168 ? 'Last 7d' : `Last ${hours}h`;
+  $('ops-window-label').textContent = hours >= 168 ? 'Последние 7д' : `Последние ${hours}ч`;
   loadOpsOverview();
 }
 
@@ -953,9 +1125,9 @@ function renderOpsAlerts(d){
   if(queueRisk >= 35 || d.kpis.unscored_total >= 150){
     alerts.push(`
       <div class="ops-alert queue">
-        <strong>Queue pressure is building</strong>
-        <p>${fmtNumber(d.kpis.unscored_total)} jobs are still unscored (${queueRisk}%). This usually means scoring throughput is lagging behind collection.</p>
-        <button type="button" onclick="openJobsView({ tab:'jobs', minScore:0 })">Open all jobs</button>
+        <strong>Давление очереди растёт</strong>
+        <p>${fmtNumber(d.kpis.unscored_total)} вакансий ещё без оценки (${queueRisk}%). Обычно это значит, что скоринг отстаёт от сбора.</p>
+        <button type="button" onclick="openJobsView({ tab:'jobs', minScore:0 })">Открыть все вакансии</button>
       </div>
     `);
   }
@@ -963,9 +1135,9 @@ function renderOpsAlerts(d){
   if(apiErrors > 0){
     alerts.push(`
       <div class="ops-alert errors">
-        <strong>API warnings detected</strong>
-        <p>In the selected window there were ${fmtNumber(d.kpis.api_401)} auth issues and ${fmtNumber(d.kpis.api_500)} server-side failures. Worth checking recent events before users feel it.</p>
-        <button type="button" onclick="loadOpsOverview(true)">Refresh events</button>
+        <strong>Обнаружены ошибки API</strong>
+        <p>За выбранный период: ${fmtNumber(d.kpis.api_401)} проблем аутентификации и ${fmtNumber(d.kpis.api_500)} серверных ошибок. Проверьте последние события.</p>
+        <button type="button" onclick="loadOpsOverview(true)">Обновить события</button>
       </div>
     `);
   }
@@ -973,9 +1145,9 @@ function renderOpsAlerts(d){
   if(!d.scan.running && lastScanAgeHours !== null && lastScanAgeHours > 6){
     alerts.push(`
       <div class="ops-alert queue">
-        <strong>Last scan feels stale</strong>
-        <p>The last successful scan was ${fmtRelative(d.scan.last_at)}. If this is unexpected, trigger a manual scan and verify the scheduler is still healthy.</p>
-        <button type="button" onclick="triggerScan()">Run scan now</button>
+        <strong>Последний скан устарел</strong>
+        <p>Последний успешный скан был ${fmtRelative(d.scan.last_at)}. Если это неожиданно — запустите скан вручную и проверьте планировщик.</p>
+        <button type="button" onclick="triggerScan()">Запустить скан</button>
       </div>
     `);
   }
@@ -983,9 +1155,9 @@ function renderOpsAlerts(d){
   if(!alerts.length){
     alerts.push(`
       <div class="ops-alert success">
-        <strong>System looks calm</strong>
-        <p>No obvious pressure signals right now: queue is manageable, recent scans exist, and no API errors crossed the threshold for this window.</p>
-        <button type="button" onclick="openJobsView({ tab:'jobs', minScore:70 })">View top matches</button>
+        <strong>Система работает нормально</strong>
+        <p>Нет очевидных сигналов тревоги: очередь управляема, сканы свежие, ошибки API в норме.</p>
+        <button type="button" onclick="openJobsView({ tab:'jobs', minScore:70 })">Топ-совпадения</button>
       </div>
     `);
   }
@@ -1013,13 +1185,13 @@ async function loadOpsOverview(force=false){
 
   if(!force && S.activeTab !== 'ops') return;
 
-  kpis.innerHTML = '<div class="ops-card"><div class="kicker">Loading</div><div class="value">...</div><div class="sub">Refreshing metrics</div></div>';
-  alerts.innerHTML = '<div class="ops-alert"><strong>Loading alerts</strong><p>Checking queue pressure, API health and scan freshness.</p></div>';
-  pipeline.innerHTML = '<div class="ops-empty">Loading pipeline...</div>';
-  sources.innerHTML = '<div class="ops-empty">Loading sources...</div>';
-  events.innerHTML = '<div class="ops-empty">Loading events...</div>';
-  scan.innerHTML = '<div class="ops-empty">Loading scan health...</div>';
-  if(usersEl) usersEl.innerHTML = '<div class="ops-empty">Loading users...</div>';
+  kpis.innerHTML = '<div class="ops-card"><div class="kicker">Загрузка</div><div class="value">...</div><div class="sub">Обновление метрик</div></div>';
+  alerts.innerHTML = '<div class="ops-alert"><strong>Загрузка алертов</strong><p>Проверяем давление очереди, здоровье API и свежесть скана.</p></div>';
+  pipeline.innerHTML = '<div class="ops-empty">Загрузка пайплайна...</div>';
+  sources.innerHTML = '<div class="ops-empty">Загрузка источников...</div>';
+  events.innerHTML = '<div class="ops-empty">Загрузка событий...</div>';
+  scan.innerHTML = '<div class="ops-empty">Загрузка состояния скана...</div>';
+  if(usersEl) usersEl.innerHTML = '<div class="ops-empty">Загрузка пользователей...</div>';
 
   try {
     const d = await (await fetch(`/api/ops/overview?window_hours=${S.opsWindow}`)).json();
@@ -1032,11 +1204,11 @@ async function loadOpsOverview(force=false){
     const sourceStats = aggregator.sources || [];
 
     kpis.innerHTML = [
-      { kicker:'Jobs In DB', value:fmtNumber(d.kpis.total_jobs), sub:`+${fmtNumber(d.kpis.jobs_recent)} in selected window`, delta:`${fmtNumber(d.kpis.active_sources)} sources active`, action:'jobs_recent' },
-      { kicker:'Score Coverage', value:`${d.kpis.coverage_pct}%`, sub:`${fmtNumber(d.kpis.scored_total)} scored total`, delta:`${fmtNumber(d.kpis.unscored_total)} pending`, action:'coverage' },
-      { kicker:'Top Matches', value:fmtNumber(d.kpis.top_matches), sub:`${fmtNumber(d.kpis.top_recent)} new top matches`, delta:d.kpis.avg_score_recent != null ? `avg ${d.kpis.avg_score_recent}` : 'avg —', action:'top_matches' },
-      { kicker:'Queue Risk', value:`${d.kpis.pending_pct}%`, sub:'Unscored jobs still waiting', delta:`${fmtNumber(d.kpis.unscored_total)} jobs`, action:'queue' },
-      { kicker:'API Warnings', value:fmtNumber(d.kpis.api_401 + d.kpis.api_500), sub:`${fmtNumber(d.kpis.api_401)} auth · ${fmtNumber(d.kpis.api_500)} server`, delta:'Latest response issues', action:'api' },
+      { kicker:'Вакансий в базе', value:fmtNumber(d.kpis.total_jobs), sub:`+${fmtNumber(d.kpis.jobs_recent)} за период`, delta:`${fmtNumber(d.kpis.active_sources)} источников активно`, action:'jobs_recent' },
+      { kicker:'Покрытие скорингом', value:`${d.kpis.coverage_pct}%`, sub:`${fmtNumber(d.kpis.scored_total)} оценено всего`, delta:`${fmtNumber(d.kpis.unscored_total)} в очереди`, action:'coverage' },
+      { kicker:'Топ-совпадения', value:fmtNumber(d.kpis.top_matches), sub:`${fmtNumber(d.kpis.top_recent)} новых топ-совпадений`, delta:d.kpis.avg_score_recent != null ? `ср. ${d.kpis.avg_score_recent}` : 'ср. —', action:'top_matches' },
+      { kicker:'Нагрузка очереди', value:`${d.kpis.pending_pct}%`, sub:'Вакансии без оценки', delta:`${fmtNumber(d.kpis.unscored_total)} вакансий`, action:'queue' },
+      { kicker:'Ошибки API', value:fmtNumber(d.kpis.api_401 + d.kpis.api_500), sub:`${fmtNumber(d.kpis.api_401)} авт. · ${fmtNumber(d.kpis.api_500)} сервер`, delta:'Последние проблемы', action:'api' },
     ].map(card => `
       <div class="ops-card clickable" onclick="handleOpsCardAction('${card.action}')">
         <div class="kicker">${card.kicker}</div>
@@ -1047,30 +1219,31 @@ async function loadOpsOverview(force=false){
     `).join('');
     renderOpsAlerts(d);
 
+    const PIPELINE_RU = { collected:'собрано', scored:'оценено', top:'топ', applied:'откликов', rejected:'отказов', saved:'сохранено' };
     const pipelineMax = Math.max(...Object.values(d.pipeline), 1);
     pipeline.innerHTML = Object.entries(d.pipeline)
-      .map(([label, value]) => renderPipelineRow(label.replace('_', ' '), value, pipelineMax))
+      .map(([label, value]) => renderPipelineRow(PIPELINE_RU[label] || label.replace('_', ' '), value, pipelineMax))
       .join('');
 
     const scanStatus = d.scan.running ? 'running' : (d.scan.last_status || 'unknown');
     $('ops-scan-pill').outerHTML = `<span id="ops-scan-pill" class="pill ${scanStatus === 'success' ? 'success' : scanStatus === 'error' ? 'error' : scanStatus === 'running' ? 'running' : 'warning'}">${scanStatus}</span>`;
     scan.innerHTML = `
       <div class="scan-grid">
-        <div class="scan-stat"><span class="label">Last Scan</span><span class="value">${fmtRelative(d.scan.last_at)}</span></div>
-        <div class="scan-stat"><span class="label">Next Run</span><span class="value">${d.scan.running ? 'Running' : fmtDateTime(d.scan.next_run)}</span></div>
-        <div class="scan-stat"><span class="label">Duration</span><span class="value">${scanPayload.duration_seconds != null ? `${scanPayload.duration_seconds}s` : '—'}</span></div>
-        <div class="scan-stat"><span class="label">Filtered Jobs</span><span class="value">${fmtNumber(aggregator.filtered_count || 0)}</span></div>
+        <div class="scan-stat"><span class="label">Последний скан</span><span class="value">${fmtRelative(d.scan.last_at)}</span></div>
+        <div class="scan-stat"><span class="label">Следующий запуск</span><span class="value">${d.scan.running ? 'Идёт сейчас' : fmtDateTime(d.scan.next_run)}</span></div>
+        <div class="scan-stat"><span class="label">Длительность</span><span class="value">${scanPayload.duration_seconds != null ? `${scanPayload.duration_seconds}с` : '—'}</span></div>
+        <div class="scan-stat"><span class="label">Отфильтровано</span><span class="value">${fmtNumber(aggregator.filtered_count || 0)}</span></div>
       </div>
       <div class="scan-list">
         <div><strong>${esc(d.scan.last_message || 'No scans recorded yet')}</strong></div>
         <div class="mini-list">
-          <span>raw ${fmtNumber(aggregator.raw_count || 0)}</span>
-          <span>unique ${fmtNumber(aggregator.unique_count || 0)}</span>
-          <span>negative ${fmtNumber(aggregator.rejected_negative || 0)}</span>
-          <span>old ${fmtNumber(aggregator.rejected_old || 0)}</span>
-          <span>location ${fmtNumber(aggregator.rejected_location || 0)}</span>
-          <span>queries ${fmtNumber(scanPayload.query_count || 0)}</span>
-          <span>countries ${fmtNumber(scanPayload.country_count || 0)}</span>
+          <span>сырых ${fmtNumber(aggregator.raw_count || 0)}</span>
+          <span>уникальных ${fmtNumber(aggregator.unique_count || 0)}</span>
+          <span>негативных ${fmtNumber(aggregator.rejected_negative || 0)}</span>
+          <span>старых ${fmtNumber(aggregator.rejected_old || 0)}</span>
+          <span>по локации ${fmtNumber(aggregator.rejected_location || 0)}</span>
+          <span>запросов ${fmtNumber(scanPayload.query_count || 0)}</span>
+          <span>стран ${fmtNumber(scanPayload.country_count || 0)}</span>
         </div>
         ${sourceStats.length ? `<div class="mini-list">${sourceStats.map(s => `<span>${esc(s.source)}: ${fmtNumber(s.raw_count || 0)}${s.status === 'error' ? ' error' : ''}</span>`).join('')}</div>` : ''}
       </div>
@@ -1081,13 +1254,13 @@ async function loadOpsOverview(force=false){
           <div class="source-item" style="cursor:pointer" onclick="openJobsView({ tab:'jobs', minScore:0, source:'${jsq(s.name)}' })">
             <div>
               <div class="name">${esc(s.name)}</div>
-              <div class="meta">${fmtNumber(s.recent)} fresh / ${fmtNumber(s.total)} total</div>
+              <div class="meta">${fmtNumber(s.recent)} свежих / ${fmtNumber(s.total)} всего</div>
             </div>
             <div class="source-bar"><div class="fill" style="width:${Math.max(s.fresh_share, 6)}%"></div></div>
             <div class="meta">${s.fresh_share}%</div>
           </div>
         `).join('')
-      : '<div class="ops-empty">No source data yet.</div>';
+      : '<div class="ops-empty">Данных по источникам пока нет.</div>';
 
     events.innerHTML = d.events.length
       ? d.events.map(ev => `
@@ -1095,42 +1268,42 @@ async function loadOpsOverview(force=false){
             <div>${eventPill(ev.status)}</div>
             <div class="summary">
               <strong>${esc(ev.type)}${ev.source ? ` · ${esc(ev.source)}` : ''}</strong>
-              <p>${esc(ev.message || 'No details')}</p>
+              <p>${esc(ev.message || 'Нет деталей')}</p>
             </div>
             <div class="time">${fmtRelative(ev.at)}</div>
           </div>
         `).join('')
-      : '<div class="ops-empty">No events recorded yet.</div>';
+      : '<div class="ops-empty">Событий пока не записано.</div>';
     // ── Users panel ──
     if(usersEl && d.users) {
       const u = d.users;
       const summary = $('ops-users-summary');
-      if(summary) summary.textContent = `${u.total} total · ${u.new_in_window} new · ${u.with_profile} profiled`;
+      if(summary) summary.textContent = `${u.total} всего · ${u.new_in_window} новых · ${u.with_profile} с профилем`;
 
       const maxScores = Math.max(...(u.activity.map(a => a.scores_total)), 1);
       const maxActions = Math.max(...(u.activity.map(a => a.actions_total)), 1);
 
       usersEl.innerHTML = `
         <div class="mini-list" style="margin-bottom:14px">
-          <span>👥 ${u.total} users</span>
-          <span>✅ ${u.active} active</span>
-          <span>📋 ${u.with_profile} profiled</span>
+          <span>👥 ${u.total} пользователей</span>
+          <span>✅ ${u.active} активных</span>
+          <span>📋 ${u.with_profile} с профилем</span>
           <span>✈️ ${u.via_telegram} telegram</span>
           <span>🔑 ${u.via_google} google</span>
-          ${u.new_in_window > 0 ? `<span style="color:var(--green)">+${u.new_in_window} new in window</span>` : ''}
+          ${u.new_in_window > 0 ? `<span style="color:var(--green)">+${u.new_in_window} новых за период</span>` : ''}
         </div>
         <table class="user-table">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Auth</th>
-              <th>Role</th>
-              <th>Scores total</th>
-              <th>Scores in window</th>
-              <th>Actions total</th>
-              <th>Actions in window</th>
-              <th>Last active</th>
-              <th>Joined</th>
+              <th>Имя</th>
+              <th>Авторизация</th>
+              <th>Роль</th>
+              <th>Оценок всего</th>
+              <th>Оценок за период</th>
+              <th>Действий всего</th>
+              <th>Действий за период</th>
+              <th>Последняя активность</th>
+              <th>Дата регистрации</th>
             </tr>
           </thead>
           <tbody>
@@ -1158,13 +1331,13 @@ async function loadOpsOverview(force=false){
     }
 
   } catch (e) {
-    kpis.innerHTML = `<div class="ops-card"><div class="kicker">Ops Unavailable</div><div class="value">!</div><div class="sub">${esc(e.message || 'Unknown error')}</div></div>`;
-    alerts.innerHTML = '<div class="ops-alert errors"><strong>Ops view failed</strong><p>Dashboard could not load the operational overview. Check API auth and the new ops event table.</p></div>';
-    pipeline.innerHTML = '<div class="ops-empty">Could not load pipeline metrics.</div>';
-    sources.innerHTML = '<div class="ops-empty">Could not load source metrics.</div>';
-    events.innerHTML = '<div class="ops-empty">Could not load events.</div>';
-    scan.innerHTML = '<div class="ops-empty">Could not load scan status.</div>';
-    if(usersEl) usersEl.innerHTML = '<div class="ops-empty">Could not load user metrics.</div>';
+    kpis.innerHTML = `<div class="ops-card"><div class="kicker">Пульт недоступен</div><div class="value">!</div><div class="sub">${esc(e.message || 'Неизвестная ошибка')}</div></div>`;
+    alerts.innerHTML = '<div class="ops-alert errors"><strong>Ошибка загрузки пульта</strong><p>Дашборд не смог загрузить данные. Проверьте авторизацию API и таблицу событий.</p></div>';
+    pipeline.innerHTML = '<div class="ops-empty">Не удалось загрузить метрики пайплайна.</div>';
+    sources.innerHTML = '<div class="ops-empty">Не удалось загрузить метрики источников.</div>';
+    events.innerHTML = '<div class="ops-empty">Не удалось загрузить события.</div>';
+    scan.innerHTML = '<div class="ops-empty">Не удалось загрузить состояние скана.</div>';
+    if(usersEl) usersEl.innerHTML = '<div class="ops-empty">Не удалось загрузить данные пользователей.</div>';
   }
 }
 
@@ -1190,7 +1363,7 @@ async function initApp() {
 
     if (!S.authenticated) {
       // Guest — show login button, hide auth-only elements, reset filters to defaults
-      if (rb) { rb.textContent = 'Sign in with Google'; rb.style.background = '#4285f4'; rb.style.color = '#fff'; }
+      if (rb) { rb.textContent = T('btn.login'); rb.style.background = '#4285f4'; rb.style.color = '#fff'; }
       if (scanBtn) scanBtn.style.display = 'none';
       if (opsTab) opsTab.style.display = 'none';
       // Show all jobs unfiltered for guests
@@ -1206,10 +1379,10 @@ async function initApp() {
 
       if (S.role === 'admin') {
         if (rb) { rb.textContent = 'Admin'; rb.style.background = 'var(--green)'; rb.style.color = '#fff'; }
-        if (scanBtn) scanBtn.style.display = 'inline-block';
+        if (scanBtn) { scanBtn.style.display = 'inline-block'; scanBtn.textContent = T('btn.scan'); }
         if (opsTab) opsTab.style.display = '';
       } else {
-        if (rb) { rb.textContent = me.name || 'Logout'; rb.style.background = 'var(--badge)'; rb.style.color = 'var(--fg)'; }
+        if (rb) { rb.textContent = me.name || T('btn.guest'); rb.style.background = 'var(--badge)'; rb.style.color = 'var(--fg)'; }
         if (scanBtn) scanBtn.style.display = 'none';
         if (opsTab) opsTab.style.display = 'none';
       }
@@ -1228,6 +1401,7 @@ async function initApp() {
   const isDarkNow = document.documentElement.getAttribute('data-theme') === 'dark';
   if ($('theme-toggle')) $('theme-toggle').textContent = isDarkNow ? '☀️' : '🌙';
 
+  applyLang();
   loadCountries(); loadStats(); loadJobs(); loadScanStatus();
   setInterval(()=>{
     loadStats();

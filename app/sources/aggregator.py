@@ -249,6 +249,10 @@ US_KEYWORDS = [
     "greater new york", "greater los angeles", "greater boston",
     "greater seattle", "greater denver", "san francisco bay",
     "silicon valley", "wall street", "bay area",
+    "greater philadelphia", "greater atlanta", "greater dallas", "greater washington",
+    "greater miami", "greater phoenix", "greater minneapolis", "greater st. louis",
+    "greater detroit", "greater pittsburgh", "greater cleveland", "greater baltimore",
+    "greater salt lake", "greater memphis", "greater richmond", "greater louisville",
     # Russian — LinkedIn returns locations in Russian
     "соединенные штаты", "соединённые штаты", "сша",
     "агломерация", # "Агломерация Нью-Йорка", "Агломерация Чикаго" etc.

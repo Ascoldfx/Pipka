@@ -124,7 +124,10 @@ class JobSpySource:
                         title=str(row.get("title", "")),
                         company_name=str(row.get("company", "")) or None,
                         location=str(row.get("location", "")) or None,
-                        country=country.upper(),
+                        # LinkedIn ignores country_indeed param and returns global results.
+                        # Set country=None for LinkedIn so the text-based location filter runs.
+                        # Indeed/Glassdoor respect the country filter, so keep it for them.
+                        country=None if site == "linkedin" else country.upper(),
                         description=str(row.get("description", "")) or None,
                         salary_min=float(salary_min) if salary_min else None,
                         salary_max=float(salary_max) if salary_max else None,
