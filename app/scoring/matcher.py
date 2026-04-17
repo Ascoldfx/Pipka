@@ -91,8 +91,6 @@ def build_profile_text(profile: UserProfile) -> str:
     if profile.languages:
         lang_str = ", ".join(f"{k.upper()}: {v}" for k, v in profile.languages.items())
         parts.append(f"Languages: {lang_str}")
-    if profile.base_location:
-        parts.append(f"Location: {profile.base_location}")
     if profile.work_mode:
         parts.append(f"Work mode: {profile.work_mode}")
     if profile.preferred_countries:

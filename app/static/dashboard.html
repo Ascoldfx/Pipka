@@ -323,10 +323,6 @@
       </div>
     </div>
     <div class="field-row">
-      <div class="field">
-        <label>Base location</label>
-        <input type="text" id="s-location" placeholder="Leipzig">
-      </div>
       <div class="field" style="flex:2">
         <label>Active Target Countries</label>
         <div class="country-grid" id="s-countries-grid">
@@ -544,7 +540,6 @@ async function loadProfile(){
     $('s-experience').value=p.experience_years||'';
     $('s-languages').value=p.languages?Object.entries(p.languages).map(([k,v])=>k+':'+v).join(', '):'';
     $('s-workmode').value=p.work_mode||'any';
-    $('s-location').value=p.base_location||'';
     const pc = p.preferred_countries||[];
     document.querySelectorAll('#s-countries-grid .country-item').forEach(el => {
       el.classList.toggle('active', pc.includes(el.dataset.code));
@@ -563,7 +558,6 @@ async function saveProfile(){
   fd.append('experience_years',$('s-experience').value||0);
   fd.append('languages',$('s-languages').value);
   fd.append('work_mode',$('s-workmode').value);
-  fd.append('base_location',$('s-location').value);
   const activeCountries = Array.from(document.querySelectorAll('#s-countries-grid .country-item.active')).map(el => el.dataset.code);
   fd.append('preferred_countries', activeCountries.join(','));
   fd.append('industries',$('s-industries').value);

@@ -404,7 +404,6 @@ async def get_profile(request: Request):
             "industries": p.industries or [],
             "work_mode": p.work_mode or "any",
             "preferred_countries": p.preferred_countries or [],
-            "base_location": p.base_location or "",
             "excluded_keywords": p.excluded_keywords or [],
             "english_only": getattr(p, "english_only", False) or False,
         }}
@@ -424,7 +423,6 @@ async def update_profile(
     industries: str = Form(None),
     work_mode: str = Form(None),
     preferred_countries: str = Form(None),
-    base_location: str = Form(None),
     excluded_keywords: str = Form(None),
     english_only: str = Form(None),
 ):
@@ -472,8 +470,6 @@ async def update_profile(
                 p.work_mode = work_mode
             if preferred_countries is not None:
                 p.preferred_countries = [c.strip().lower() for c in preferred_countries.split(",") if c.strip()]
-            if base_location is not None:
-                p.base_location = base_location
             if excluded_keywords is not None:
                 p.excluded_keywords = [k.strip() for k in excluded_keywords.split(",") if k.strip()]
             if english_only is not None:
