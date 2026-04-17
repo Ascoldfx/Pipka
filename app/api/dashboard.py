@@ -22,6 +22,8 @@ from app.models.application import Application
 from app.models.job import Job, JobScore
 from app.models.user import User, UserProfile
 from app.scoring.matcher import analyze_single_job
+from app.services.ops_service import build_ops_overview
+from app.services.scheduler_service import is_scan_running
 from app.services.tracker_service import mark_applied, mark_rejected, save_job
 
 logger = logging.getLogger(__name__)
@@ -340,9 +342,6 @@ async def analyze_job(job_id: int, request: Request):
 
 # ─── Manual Scan (admin only) ────────────────────────────────
 
-_manual_scan_lock = asyncio.Lock()
-
-
 @router.post("/api/scan")
 async def trigger_scan(request: Request):
     """Trigger a background job scan manually."""
@@ -352,7 +351,7 @@ async def trigger_scan(request: Request):
 
     from app.services.scheduler_service import _background_scan, scheduler
 
-    if _manual_scan_lock.locked():
+    if is_scan_running():
         return {"status": "already_running"}
 
     bg_job = scheduler.get_job("background_scan")
@@ -362,11 +361,10 @@ async def trigger_scan(request: Request):
     bot_app = bg_job.args[0]
 
     async def _run():
-        async with _manual_scan_lock:
-            try:
-                await _background_scan(bot_app)
-            except Exception as e:
-                logger.error("Manual scan failed: %s", e)
+        try:
+            await _background_scan(bot_app, trigger="manual")
+        except Exception as e:
+            logger.error("Manual scan failed: %s", e)
 
     task = asyncio.create_task(_run())
     task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
@@ -378,9 +376,32 @@ async def scan_status():
     from app.services.scheduler_service import scheduler
     bg_job = scheduler.get_job("background_scan")
     if not bg_job:
-        return {"next_run": None}
+        return {"next_run": None, "running": is_scan_running()}
     next_run = bg_job.next_run_time
-    return {"next_run": next_run.isoformat() if next_run else None}
+    return {"next_run": next_run.isoformat() if next_run else None, "running": is_scan_running()}
+
+
+@router.get("/api/ops/overview")
+async def get_ops_overview(request: Request, window_hours: int = Query(24, ge=6, le=168)):
+    from app.services.scheduler_service import scheduler
+
+    if _get_role(request, None) != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    async with async_session() as session:
+        user = await _get_user(request, session)
+        if not user:
+            return {"error": "No user"}
+
+        bg_job = scheduler.get_job("background_scan")
+        next_run = bg_job.next_run_time if bg_job else None
+        return await build_ops_overview(
+            session,
+            user_id=user.id,
+            window_hours=window_hours,
+            next_run_at=next_run,
+            scan_running=is_scan_running(),
+        )
 
 
 # ─── Profile / Settings ──────────────────────────────────────

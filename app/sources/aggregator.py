@@ -112,16 +112,34 @@ GERMAN_C1_REQUIRED = [
 class JobAggregator:
     def __init__(self, sources: list[JobSource]):
         self.sources = sources
+        self.last_stats: dict = {}
 
     async def search(self, params: SearchParams, session: AsyncSession) -> list[Job]:
         tasks = [source.search(params) for source in self.sources]
         all_results = await asyncio.gather(*tasks, return_exceptions=True)
 
         raw_jobs: list[RawJob] = []
+        source_stats: list[dict] = []
         for i, result in enumerate(all_results):
+            source_name = self.sources[i].source_name
             if isinstance(result, Exception):
-                logger.error("Source %s failed: %s", self.sources[i].source_name, result)
+                logger.error("Source %s failed: %s", source_name, result)
+                source_stats.append(
+                    {
+                        "source": source_name,
+                        "status": "error",
+                        "raw_count": 0,
+                        "error": str(result)[:200],
+                    }
+                )
                 continue
+            source_stats.append(
+                {
+                    "source": source_name,
+                    "status": "ok",
+                    "raw_count": len(result),
+                }
+            )
             raw_jobs.extend(result)
 
         logger.info("Aggregated %d raw jobs from %d sources", len(raw_jobs), len(self.sources))
@@ -161,6 +179,15 @@ class JobAggregator:
             "After filter: %d jobs (rejected: %d negative/german, %d old, %d wrong location)",
             len(filtered), rejected_negative, rejected_old, rejected_location,
         )
+        self.last_stats = {
+            "raw_count": len(raw_jobs),
+            "unique_count": len(unique),
+            "filtered_count": len(filtered),
+            "rejected_negative": rejected_negative,
+            "rejected_old": rejected_old,
+            "rejected_location": rejected_location,
+            "sources": source_stats,
+        }
 
         # Upsert into DB
         db_jobs: list[Job] = []

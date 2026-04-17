@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -16,6 +18,7 @@ from app.models.job import Job, JobScore
 from app.models.user import User
 from app.scoring.matcher import score_jobs
 from app.scoring.rules import pre_filter
+from app.services.ops_service import record_ops_event
 from app.services.tracker_service import get_hidden_dedup_hashes, get_hidden_job_ids
 from app.sources.aggregator import JobAggregator
 from app.sources.base import SearchParams
@@ -23,6 +26,7 @@ from app.sources import AdzunaSource, JobSpySource, ArbeitnowSource, RemotiveSou
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
+_scan_lock = asyncio.Lock()
 
 # All search queries for background scanning
 SCAN_QUERIES = [
@@ -44,6 +48,10 @@ SCAN_QUERIES = [
 ]
 
 TOP_SCORE_THRESHOLD = 80  # Push to Telegram if score >= this
+
+
+def is_scan_running() -> bool:
+    return _scan_lock.locked()
 
 
 def start_scheduler(bot_app):
@@ -87,53 +95,110 @@ def start_scheduler(bot_app):
     logger.info("Background scanner started (every 3 hours, first scan in 30s)")
 
 
-async def _background_scan(bot_app):
+async def _background_scan(bot_app, trigger: str = "scheduled"):
     """Scan all sources, score only NEW jobs, push top results to Telegram."""
-    logger.info("Background scan started")
-
-    aggregator = JobAggregator([AdzunaSource(), JobSpySource(), ArbeitnowSource(), RemotiveSource(), ArbeitsagenturSource(), XingSource()])
-
-    async with async_session() as session:
-        # 1. Find all users with profiles to determine dynamic search scope
-        users_result = await session.execute(
-            select(User).options(selectinload(User.profile)).where(User.is_active == True)
+    if _scan_lock.locked():
+        logger.warning("Skipping %s scan because another scan is already running", trigger)
+        await record_ops_event(
+            "scan",
+            "warning",
+            source=trigger,
+            message="Skipped overlapping scan",
         )
-        users = users_result.scalars().all()
+        return
 
-        dynamic_queries = set()
-        dynamic_countries = set()
-        
-        for user in users:
-            if user.profile:
-                if user.profile.target_titles:
-                    dynamic_queries.update(user.profile.target_titles)
-                if user.profile.preferred_countries:
-                    dynamic_countries.update(user.profile.preferred_countries)
-                    
-        # Fallbacks to defaults if nothing found in profiles
-        final_queries = list(dynamic_queries) if dynamic_queries else SCAN_QUERIES
-        final_countries = list(dynamic_countries) if dynamic_countries else ["de", "at", "nl", "ch", "be", "si", "sk", "ro", "hu"]
+    async with _scan_lock:
+        logger.info("Background scan started (%s)", trigger)
+        started_at = datetime.now()
+        started_perf = time.perf_counter()
 
-        params = SearchParams(
-            queries=final_queries,
-            countries=final_countries,
-            locations=[],
-        )
+        aggregator = JobAggregator([AdzunaSource(), JobSpySource(), ArbeitnowSource(), RemotiveSource(), ArbeitsagenturSource(), XingSource()])
 
-        # 2. Collect and store jobs (aggregator handles dedup + upsert)
-        all_jobs = await aggregator.search(params, session)
-        logger.info("Background scan: %d jobs in DB after aggregation (Params: %s / %s)", len(all_jobs), final_queries, final_countries)
+        try:
+            async with async_session() as session:
+                # 1. Find all users with profiles to determine dynamic search scope
+                users_result = await session.execute(
+                    select(User).options(selectinload(User.profile)).where(User.is_active == True)
+                )
+                users = users_result.scalars().all()
 
-        for user in users:
-            if not user.profile:
-                continue
+                dynamic_queries = set()
+                dynamic_countries = set()
+                
+                for user in users:
+                    if user.profile:
+                        if user.profile.target_titles:
+                            dynamic_queries.update(user.profile.target_titles)
+                        if user.profile.preferred_countries:
+                            dynamic_countries.update(user.profile.preferred_countries)
+                        
+                # Fallbacks to defaults if nothing found in profiles
+                final_queries = list(dynamic_queries) if dynamic_queries else SCAN_QUERIES
+                final_countries = list(dynamic_countries) if dynamic_countries else ["de", "at", "nl", "ch", "be", "si", "sk", "ro", "hu"]
 
-            try:
-                await _score_and_notify(bot_app, user, all_jobs, session)
-            except Exception as e:
-                logger.error("Background scan failed for user %s: %s", user.telegram_id, e)
+                params = SearchParams(
+                    queries=final_queries,
+                    countries=final_countries,
+                    locations=[],
+                )
 
-    logger.info("Background scan completed")
+                # 2. Collect and store jobs (aggregator handles dedup + upsert)
+                all_jobs = await aggregator.search(params, session)
+                logger.info("Background scan: %d jobs in DB after aggregation (Params: %s / %s)", len(all_jobs), final_queries, final_countries)
+
+                user_summaries = []
+                for user in users:
+                    if not user.profile:
+                        continue
+
+                    try:
+                        summary = await _score_and_notify(bot_app, user, all_jobs, session)
+                        user_summaries.append(summary)
+                    except Exception as e:
+                        logger.error("Background scan failed for user %s: %s", user.telegram_id, e)
+                        user_summaries.append(
+                            {
+                                "user_id": user.id,
+                                "telegram_id": user.telegram_id,
+                                "eligible_jobs": 0,
+                                "scored_jobs": 0,
+                                "top_results": 0,
+                                "pushed": 0,
+                                "error": str(e)[:200],
+                            }
+                        )
+
+                duration_seconds = round(time.perf_counter() - started_perf, 2)
+                await record_ops_event(
+                    "scan",
+                    "success",
+                    source=trigger,
+                    message=f"Scan finished in {duration_seconds}s",
+                    payload={
+                        "started_at": started_at.isoformat(),
+                        "duration_seconds": duration_seconds,
+                        "query_count": len(final_queries),
+                        "country_count": len(final_countries),
+                        "db_jobs_after_scan": len(all_jobs),
+                        "aggregator": aggregator.last_stats,
+                        "users": user_summaries,
+                    },
+                )
+        except Exception as e:
+            duration_seconds = round(time.perf_counter() - started_perf, 2)
+            await record_ops_event(
+                "scan",
+                "error",
+                source=trigger,
+                message=f"Scan failed after {duration_seconds}s: {str(e)[:180]}",
+                payload={
+                    "started_at": started_at.isoformat(),
+                    "duration_seconds": duration_seconds,
+                },
+            )
+            raise
+
+    logger.info("Background scan completed (%s)", trigger)
 
 
 async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
@@ -161,7 +226,14 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
 
     if not new_jobs:
         logger.info("No new jobs to score for user %s", user.telegram_id)
-        return
+        return {
+            "user_id": user.id,
+            "telegram_id": user.telegram_id,
+            "eligible_jobs": 0,
+            "scored_jobs": 0,
+            "top_results": 0,
+            "pushed": 0,
+        }
 
     logger.info("Scoring %d new jobs for user %s", len(new_jobs), user.telegram_id)
 
@@ -179,7 +251,14 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
 
     if not top_results:
         logger.info("No top results for user %s (scored %d)", user.telegram_id, len(scores))
-        return
+        return {
+            "user_id": user.id,
+            "telegram_id": user.telegram_id,
+            "eligible_jobs": len(new_jobs),
+            "scored_jobs": len(scores),
+            "top_results": 0,
+            "pushed": 0,
+        }
 
     # Sort by score desc
     top_results.sort(key=lambda x: x[1].score, reverse=True)
@@ -200,6 +279,14 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
         )
 
     logger.info("Pushed %d top jobs to user %s", min(count, 10), user.telegram_id)
+    return {
+        "user_id": user.id,
+        "telegram_id": user.telegram_id,
+        "eligible_jobs": len(new_jobs),
+        "scored_jobs": len(scores),
+        "top_results": len(top_results),
+        "pushed": min(count, 10),
+    }
 
 
 async def _backfill_score():
