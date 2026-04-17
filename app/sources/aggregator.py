@@ -262,9 +262,8 @@ NON_DACH_CITIES = [
     "ottawa", "winnipeg", "quebec city", "halifax", "victoria",
     "ontario", "british columbia", "alberta", "manitoba", "quebec",
     "nova scotia", "new brunswick", "saskatchewan",
-    # UK
-    "london", "manchester", "edinburgh", "glasgow", "leeds", "bristol",
-    "liverpool", "cambridge", "oxford", "cardiff", "belfast",
+    # UK — removed (now in ALLOWED_COUNTRIES + DACH_MARKERS)
+    # "london", "manchester", etc. → user has UK in target countries
     # Asia
     "singapore", "tokyo", "shanghai", "beijing", "seoul",
     "mumbai", "bangalore", "dubai", "hong kong", "kuala lumpur", "taipei", "jakarta", "bangkok",
@@ -275,8 +274,9 @@ NON_DACH_CITIES = [
     "cape town", "johannesburg", "nairobi", "lagos",
 ]
 
-# DACH + NL locations — if these appear, it's probably OK
+# European locations — if these appear in job text, job is considered valid
 DACH_MARKERS = [
+    # DACH
     "germany", "deutschland", "austria", "österreich", "oesterreich",
     "netherlands", "nederland", "schweiz", "switzerland",
     "berlin", "munich", "münchen", "muenchen",
@@ -290,32 +290,74 @@ DACH_MARKERS = [
     # Belgium
     "belgium", "belgien", "bruxelles", "brussels", "brüssel", "antwerp",
     "antwerpen", "gent", "ghent", "leuven", "liège", "liege",
+    # CEE (Slovenia, Slovakia, Romania, Hungary)
+    "slovenia", "slowenien", "ljubljana", "maribor",
+    "slovakia", "slowakei", "bratislava", "kosice", "košice",
+    "romania", "rumänien", "bucharest", "cluj", "timisoara", "iasi", "constanta",
+    "hungary", "ungarn", "budapest", "debrecen", "miskolc", "pecs",
+    # Poland
+    "poland", "polen", "warszawa", "warsaw", "krakow", "kraków", "wroclaw", "wrocław",
+    "gdansk", "gdańsk", "poznan", "poznań", "lodz", "łódź", "katowice",
+    "szczecin", "bydgoszcz", "lublin", "białystok", "gdynia", "silesia",
+    # Czech Republic
+    "czech", "tschechien", "czechia", "prague", "praha", "brno", "ostrava",
+    "plzen", "plzeň", "olomouc", "liberec", "hradec kralove",
+    # Western Europe (for user-expanded target countries)
+    "france", "frankreich", "paris", "lyon", "marseille", "toulouse",
+    "lille", "bordeaux", "nantes", "strasbourg", "nice",
+    "spain", "spanien", "madrid", "barcelona", "valencia", "seville", "bilbao",
+    "italy", "italien", "milan", "milano", "rome", "roma", "turin", "torino",
+    "florence", "firenze", "naples", "napoli", "bologna", "genova",
+    "portugal", "lissabon", "lisbon", "porto", "braga", "faro",
+    "ireland", "irland", "dublin", "cork", "galway",
+    "denmark", "dänemark", "copenhagen", "københavn", "aarhus",
+    "sweden", "schweden", "stockholm", "gothenburg", "göteborg", "malmö",
+    "norway", "norwegen", "oslo", "bergen", "trondheim",
+    "finland", "finnland", "helsinki", "tampere", "turku",
+    "uk", "united kingdom", "england", "scotland", "wales",
+    "london", "manchester", "edinburgh", "glasgow", "leeds", "bristol",
+    "liverpool", "cambridge", "oxford",
+    "luxembourg", "luxemburg",
     # Russian DACH names (LinkedIn)
     "германия", "берлин", "мюнхен", "гамбург", "франкфурт",
     "штутгарт", "дюссельдорф", "кёльн", "лейпциг", "дрезден",
     "ганновер", "нюрнберг", "бремен", "бонн", "дортмунд",
     "австрия", "вена", "грац", "зальцбург",
     "нидерланды", "амстердам", "роттердам", "гаага", "утрехт",
-    # CEE (Slovenia, Slovakia, Romania, Hungary)
-    "slovenia", "slowenien", "ljubljana", "maribor",
-    "slovakia", "slowakei", "bratislava", "kosice", "košice",
-    "romania", "rumänien", "bucharest", "cluj", "timisoara",
-    "hungary", "ungarn", "budapest", "debrecen",
     "словения", "любляна", "словакия", "братислава",
     "румыния", "бухарест", "венгрия", "будапешт",
+    "польша", "варшава", "краков", "вроцлав", "гданьск",
+    "чехия", "прага", "брно",
+    "франция", "париж", "испания", "мадрид", "барселона",
+    "италия", "милан", "рим", "португалия", "лиссабон",
+    "швеция", "стокгольм", "норвегия", "осло", "дания", "копенгаген",
+    "финляндия", "хельсинки", "ирландия", "дублин",
+    "великобритания", "лондон", "манчестер",
 ]
 
-
-ALLOWED_COUNTRIES = {"de", "at", "nl", "ch", "be", "si", "sk", "ro", "hu"}
+# All European country codes we're willing to index jobs for
+ALLOWED_COUNTRIES = {
+    "de", "at", "nl", "ch", "be",           # DACH + NL + BE
+    "si", "sk", "ro", "hu",                  # CEE (original)
+    "pl", "cz",                              # Poland, Czech Republic
+    "fr", "es", "it", "pt",                  # Southern/Western Europe
+    "gb", "uk", "ie",                        # British Isles
+    "dk", "se", "no", "fi",                  # Nordics
+    "lu",                                    # Luxembourg
+}
 
 
 def _is_wrong_location(job: RawJob) -> bool:
-    """Filter out jobs that are clearly outside DACH/NL region.
+    """Filter out jobs that are clearly outside European target region.
 
     Key insight: LinkedIn via JobSpy often returns location=None and country="DE"
     (search param, not actual country). So we MUST check description text and
-    REQUIRE a DACH marker if location is empty.
+    REQUIRE a European marker if location is empty.
     """
+    # If the source tagged the job with a known European country code → allow immediately
+    if job.country and job.country.lower() in ALLOWED_COUNTRIES:
+        return False
+
     # Hard block: if the source explicitly tagged the job as US or CA country,
     # reject immediately — no location text analysis needed.
     if job.country and job.country.lower() in {"us", "ca"}:
