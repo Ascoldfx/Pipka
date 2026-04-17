@@ -13,7 +13,7 @@ from app.services.job_service import search_and_score
 from app.services.user_service import get_or_create_user
 from app.sources.aggregator import JobAggregator
 from app.sources.base import SearchParams
-from app.sources import AdzunaSource, JobSpySource, ArbeitnowSource, RemotiveSource, ArbeitsagenturSource
+from app.sources import AdzunaSource, JobSpySource, ArbeitnowSource, RemotiveSource, ArbeitsagenturSource, XingSource
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,7 @@ SEARCH_PRESETS = {
 
 
 def _build_aggregator() -> JobAggregator:
-    return JobAggregator([AdzunaSource(), JobSpySource(), ArbeitnowSource(), RemotiveSource(), ArbeitsagenturSource()])
+    return JobAggregator([AdzunaSource(), JobSpySource(), ArbeitnowSource(), RemotiveSource(), ArbeitsagenturSource(), XingSource()])
 
 
 async def search_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):

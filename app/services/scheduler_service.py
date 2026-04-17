@@ -19,7 +19,7 @@ from app.scoring.rules import pre_filter
 from app.services.tracker_service import get_hidden_dedup_hashes, get_hidden_job_ids
 from app.sources.aggregator import JobAggregator
 from app.sources.base import SearchParams
-from app.sources import AdzunaSource, JobSpySource, ArbeitnowSource, RemotiveSource, ArbeitsagenturSource
+from app.sources import AdzunaSource, JobSpySource, ArbeitnowSource, RemotiveSource, ArbeitsagenturSource, XingSource
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
@@ -91,7 +91,7 @@ async def _background_scan(bot_app):
     """Scan all sources, score only NEW jobs, push top results to Telegram."""
     logger.info("Background scan started")
 
-    aggregator = JobAggregator([AdzunaSource(), JobSpySource(), ArbeitnowSource(), RemotiveSource(), ArbeitsagenturSource()])
+    aggregator = JobAggregator([AdzunaSource(), JobSpySource(), ArbeitnowSource(), RemotiveSource(), ArbeitsagenturSource(), XingSource()])
 
     async with async_session() as session:
         # 1. Find all users with profiles to determine dynamic search scope
