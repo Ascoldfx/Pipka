@@ -70,6 +70,7 @@
   .job-title:hover { text-decoration:underline; }
   .job-meta { color:var(--muted); font-size:11px; }
   .source-tag { font-size:9px; padding:1px 5px; border:1px solid var(--border); border-radius:3px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); white-space:nowrap; }
+  .source-tag.watchlist { background:#fff3cd; border-color:#ffc107; color:#856404; font-weight:600; }
 
 
   .actions-wrap { display:inline-flex; gap:4px; white-space:nowrap; }
@@ -300,6 +301,7 @@
       <option value="arbeitsagentur">Arbeitsagentur</option>
       <option value="arbeitnow">Arbeitnow</option>
       <option value="remotive">Remotive</option>
+      <option value="watchlist">⭐ Watchlist</option>
     </select>
   </div>
   <div class="table-wrap">
@@ -351,6 +353,13 @@
     <div class="field" style="margin-bottom:24px;">
       <label>Target job titles (comma-separated)</label>
       <textarea id="s-titles" rows="3" placeholder="Director Supply Chain, Head of Procurement, VP Operations..."></textarea>
+    </div>
+
+    <h3>Target Companies Watchlist</h3>
+    <div class="field" style="margin-bottom:24px;">
+      <label>Companies to monitor closely (comma-separated)</label>
+      <textarea id="s-companies" rows="3" placeholder="Nestlé, Unilever, Bayer, Roche, Mars, Mondelez, PepsiCo, Danone..."></textarea>
+      <small style="color:var(--text-muted)">Jobs from these companies will be highlighted and tracked separately. Background scan will search for vacancies from each company.</small>
     </div>
 
     <h3>Exclusions & Negative Keywords</h3>
@@ -660,7 +669,7 @@ function jobRow(j){
     <td><a class="job-title" href="${safeUrl(j.url)}" target="_blank" rel="noopener noreferrer">${esc(j.title)}</a>${date?`<div class="job-meta">${date}</div>`:''}</td>
     <td class="job-meta">${esc(j.company)}</td>
     <td class="job-meta">${esc(j.location)} (${esc(j.country)})</td>
-    <td><span class="source-tag">${esc(j.source)}</span></td>
+    <td><span class="source-tag${j.source==='watchlist'?' watchlist':''}">${j.source==='watchlist'?'⭐ watchlist':esc(j.source)}</span></td>
     <td><div class="actions-wrap">
       ${S.authenticated ? `
       <button onclick="doAction(${j.id},'applied',this)" title="Applied"${j.status==='applied'?' class="active"':''}>&#10004;</button>
@@ -680,6 +689,7 @@ async function loadProfile(){
     $('s-titles').value=(p.target_titles||[]).join(', ');
     if($('s-excluded')) $('s-excluded').value=(p.excluded_keywords||[]).join(', ');
     if($('s-english-only')) $('s-english-only').checked=!!p.english_only;
+    if($('s-companies')) $('s-companies').value=(p.target_companies||[]).join(', ');
     $('s-salary').value=p.min_salary||'';
     $('s-experience').value=p.experience_years||'';
     $('s-languages').value=p.languages?Object.entries(p.languages).map(([k,v])=>k+':'+v).join(', '):'';
@@ -698,6 +708,7 @@ async function saveProfile(){
   fd.append('target_titles',$('s-titles').value);
   if($('s-excluded')) fd.append('excluded_keywords',$('s-excluded').value);
   fd.append('english_only', $('s-english-only') && $('s-english-only').checked ? '1' : '0');
+  if($('s-companies')) fd.append('target_companies',$('s-companies').value);
   fd.append('min_salary',$('s-salary').value||0);
   fd.append('experience_years',$('s-experience').value||0);
   fd.append('languages',$('s-languages').value);

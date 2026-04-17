@@ -55,6 +55,7 @@ async def init_db():
         "ALTER TABLE users ALTER COLUMN telegram_id DROP NOT NULL",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS english_only BOOLEAN DEFAULT FALSE",
         # Create unique indexes if not exist
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS target_companies JSON",
         "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users(email) WHERE email IS NOT NULL",
         "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL",
         # NOTE: admin role is assigned via ADMIN_EMAILS env var in user_service.py, not here

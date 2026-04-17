@@ -22,7 +22,7 @@ from app.services.ops_service import record_ops_event
 from app.services.tracker_service import get_hidden_dedup_hashes, get_hidden_job_ids
 from app.sources.aggregator import JobAggregator
 from app.sources.base import SearchParams
-from app.sources import AdzunaSource, JobSpySource, ArbeitnowSource, RemotiveSource, ArbeitsagenturSource, XingSource
+from app.sources import AdzunaSource, JobSpySource, ArbeitnowSource, RemotiveSource, ArbeitsagenturSource, XingSource, WatchlistSource
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
@@ -89,6 +89,15 @@ def start_scheduler(bot_app):
         "interval",
         hours=6,
         id="backfill_score",
+        replace_existing=True,
+    )
+    # Watchlist scan: every 6 hours — search for jobs at target companies per user
+    scheduler.add_job(
+        _watchlist_scan,
+        "interval",
+        hours=6,
+        args=[bot_app],
+        id="watchlist_scan",
         replace_existing=True,
     )
     scheduler.start()
@@ -345,6 +354,51 @@ async def _backfill_score():
                 logger.error("Backfill scorer failed for user %s: %s", user.telegram_id, e)
 
     logger.info("Backfill scorer completed")
+
+
+async def _watchlist_scan(bot_app):
+    """For each user with target_companies, fetch jobs from those companies and notify."""
+    logger.info("Watchlist scan started")
+
+    from app.sources.aggregator import JobAggregator
+
+    async with async_session() as session:
+        users_result = await session.execute(
+            select(User).options(selectinload(User.profile)).where(User.is_active == True)
+        )
+        users = users_result.scalars().all()
+
+        for user in users:
+            if not user.profile:
+                continue
+            companies = getattr(user.profile, "target_companies", None) or []
+            if not companies:
+                continue
+            if not user.telegram_id:
+                continue
+
+            try:
+                countries = user.profile.preferred_countries or ["de"]
+                params = SearchParams(
+                    queries=companies,      # WatchlistSource treats queries as company names
+                    countries=countries,
+                    locations=[],
+                )
+                # Aggregator handles dedup, filtering, and DB upsert
+                aggregator = JobAggregator([WatchlistSource()])
+                stored_jobs = await aggregator.search(params, session)
+
+                if not stored_jobs:
+                    logger.info("Watchlist: no jobs found for user %s (%d companies)", user.telegram_id, len(companies))
+                    continue
+
+                logger.info("Watchlist: %d jobs found for user %s", len(stored_jobs), user.telegram_id)
+                await _score_and_notify(bot_app, user, stored_jobs, session)
+
+            except Exception as e:
+                logger.error("Watchlist scan failed for user %s: %s", user.telegram_id, e)
+
+    logger.info("Watchlist scan completed")
 
 
 async def _cleanup_old_jobs():

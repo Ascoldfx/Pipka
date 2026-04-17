@@ -427,6 +427,7 @@ async def get_profile(request: Request):
             "preferred_countries": p.preferred_countries or [],
             "excluded_keywords": p.excluded_keywords or [],
             "english_only": getattr(p, "english_only", False) or False,
+            "target_companies": getattr(p, "target_companies", None) or [],
         }}
 
 
@@ -446,6 +447,7 @@ async def update_profile(
     preferred_countries: str = Form(None),
     excluded_keywords: str = Form(None),
     english_only: str = Form(None),
+    target_companies: str = Form(None),
 ):
     if resume_text is not None and len(resume_text) > MAX_RESUME_CHARS:
         raise HTTPException(status_code=400, detail=f"Resume too long (>{MAX_RESUME_CHARS} chars)")
@@ -495,6 +497,8 @@ async def update_profile(
                 p.excluded_keywords = [k.strip() for k in excluded_keywords.split(",") if k.strip()]
             if english_only is not None:
                 p.english_only = english_only in ("1", "true", "True", "yes", "on")
+            if target_companies is not None:
+                p.target_companies = [c.strip() for c in target_companies.split(",") if c.strip()]
 
             await session.commit()
             _invalidate_stats_cache(user.id)
