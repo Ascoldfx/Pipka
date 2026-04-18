@@ -144,14 +144,14 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     # "Senior Manager" is borderline — allow but lower bucket
     is_senior_manager = "senior manager" in title_lower or "lead" in title_lower
 
-    # Plain "Manager" without Director/Head/VP → reject
+    # Plain "Manager" without Director/Head/VP → tier2 queue (scored after tier1 is clear)
     is_plain_manager = (
         "manager" in title_lower
         and not is_director
         and not is_senior_manager
     )
     if is_plain_manager:
-        return False, "low"
+        return False, "manager_tier2"
 
     # English-friendly signal
     english_friendly = any(signal in text for signal in ENGLISH_FRIENDLY_SIGNALS)

@@ -332,7 +332,8 @@ async def _backfill_score():
                 hidden_ids = await get_hidden_job_ids(user.id, session)
                 hidden_hashes = await get_hidden_dedup_hashes(user.id, session)
 
-                need_ai: list[Job] = []
+                need_ai_t1: list[Job] = []   # director/head/VP + domain
+                need_ai_t2: list[Job] = []   # plain manager + domain (lower priority)
                 skip_batch: list[JobScore] = []
 
                 for job in all_jobs:
@@ -342,9 +343,11 @@ async def _backfill_score():
                         continue
                     passed, bucket = pre_filter(job, user.profile)
                     if passed and bucket in ("high", "medium"):
-                        need_ai.append(job)
+                        need_ai_t1.append(job)
+                    elif not passed and bucket == "manager_tier2":
+                        need_ai_t2.append(job)
                     else:
-                        # Mark as processed (score=0) so it never re-enters the queue
+                        # Hard reject — mark score=0 so it never re-enters the queue
                         skip_batch.append(JobScore(
                             job_id=job.id,
                             user_id=user.id,
@@ -352,23 +355,34 @@ async def _backfill_score():
                             ai_analysis=None,
                         ))
 
-                # Bulk-insert skip scores (no API calls) — cap at 2000 per run
+                # Bulk-insert hard rejects (no API calls) — cap at 2000 per run
                 if skip_batch:
                     for rec in skip_batch[:2000]:
                         session.add(rec)
                     await session.commit()
                     logger.info(
-                        "Backfill: marked %d jobs as pre-filter rejected for user %s",
+                        "Backfill: marked %d jobs as rejected (pre-filter) for user %s",
                         min(len(skip_batch), 2000), user.telegram_id,
                     )
 
-                if not need_ai:
-                    continue
+                # Tier 1 first: director / head of / VP
+                if need_ai_t1:
+                    to_score = need_ai_t1[:500]
+                    logger.info(
+                        "Backfill tier1: AI-scoring %d director-level jobs for user %s",
+                        len(to_score), user.telegram_id,
+                    )
+                    await score_jobs(to_score, user, session)
+                    continue  # come back next run for tier2
 
-                # AI scoring — cap at 500 per run
-                to_score = need_ai[:500]
-                logger.info("Backfill: AI-scoring %d jobs for user %s", len(to_score), user.telegram_id)
-                await score_jobs(to_score, user, session)
+                # Tier 2: manager-level, only when tier1 is fully cleared
+                if need_ai_t2:
+                    to_score = need_ai_t2[:500]
+                    logger.info(
+                        "Backfill tier2: AI-scoring %d manager-level jobs for user %s",
+                        len(to_score), user.telegram_id,
+                    )
+                    await score_jobs(to_score, user, session)
 
             except Exception as e:
                 logger.error("Backfill scorer failed for user %s: %s", user.telegram_id, e)
