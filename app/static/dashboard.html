@@ -891,7 +891,7 @@ function applyLang() {
       </section>
     </div>
 
-    <div class="ops-panels" id="ops-dedup-wrap" style="grid-template-columns:1fr;display:none">
+    <div class="ops-panels" id="ops-dedup-wrap" style="grid-template-columns:1fr">
       <section class="ops-panel">
         <div class="panel-head">
           <h3>Дедупликация</h3>
@@ -1593,7 +1593,7 @@ async function loadOpsOverview(force=false){
         <div class="mini-list">
           <span>сырых ${fmtNumber(aggregator.raw_count || 0)}</span>
           <span>уникальных ${fmtNumber(aggregator.unique_count || 0)}</span>
-          ${aggregator.fuzzy_removed > 0 ? `<span id="ops-dedup-badge" title="Нажмите чтобы посмотреть список" onclick="loadDedupPanel()" style="color:var(--blue)">⊕ слито ${fmtNumber(aggregator.fuzzy_removed)}</span>` : ''}
+          ${aggregator.fuzzy_removed > 0 ? `<span style="color:var(--blue)">⊕ слито ${fmtNumber(aggregator.fuzzy_removed)}</span>` : ''}
           <span>негативных ${fmtNumber(aggregator.rejected_negative || 0)}</span>
           <span>старых ${fmtNumber(aggregator.rejected_old || 0)}</span>
           <span>по локации ${fmtNumber(aggregator.rejected_location || 0)}</span>
@@ -1630,6 +1630,8 @@ async function loadOpsOverview(force=false){
         `).join('')
       : '<div class="ops-empty">Событий пока не записано.</div>';
     // ── Users panel ──
+    loadDedupPanel();
+
     if(usersEl && d.users) {
       const u = d.users;
       const summary = $('ops-users-summary');
@@ -1701,9 +1703,7 @@ async function loadDedupPanel() {
   const el = $('ops-dedup');
   const summary = $('ops-dedup-summary');
   if (!wrap || !el) return;
-  wrap.style.display = '';
   el.innerHTML = '<div class="ops-empty">Загрузка...</div>';
-  wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
   try {
     const jobs = await (await fetch('/api/ops/dedup?limit=200')).json();
     if (!jobs.length) {
