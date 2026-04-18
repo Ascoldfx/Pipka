@@ -357,6 +357,24 @@
     .ops-shell { padding:16px; }
     .pipeline-row, .source-item, .event-item { grid-template-columns:1fr; }
   }
+
+  /* ── Global rounding — everything oval/pill ── */
+  #theme-toggle { border-radius:999px !important; }
+  .source-tag { border-radius:999px !important; }
+  .score { border-radius:999px !important; }
+  .actions-wrap button { border-radius:999px !important; }
+  .btn { border-radius:999px !important; padding:8px 24px; }
+  .pagination button { border-radius:999px !important; }
+  .ms-btn { border-radius:999px !important; }
+  .ms-actions button { border-radius:999px !important; }
+  .ms-drop { border-radius:16px !important; }
+  .filters input, .filters select { border-radius:10px !important; }
+  .field input, .field select { border-radius:10px !important; }
+  .field textarea { border-radius:14px !important; }
+  .upload-zone { border-radius:16px !important; }
+  .msg { border-radius:10px !important; }
+  .job-card { border-radius:18px !important; }
+  .modal { border-radius:24px !important; }
 </style>
 </head>
 <body>
@@ -522,7 +540,7 @@ function applyLang() {
       <button class="lang-btn" data-lang="de" onclick="setLang('de')" title="Deutsch"><span class="lf">🇩🇪</span><span class="lc">DE</span></button>
       <button class="lang-btn" data-lang="es" onclick="setLang('es')" title="Español"><span class="lf">🇪🇸</span><span class="lc">ES</span></button>
     </div>
-    <span id="role-badge" style="font-size:11px; padding:3px 8px; border-radius:4px; font-weight:600; cursor:pointer;" onclick="toggleLogin()">Guest</span>
+    <span id="role-badge" style="font-size:11px; padding:3px 10px; border-radius:999px; font-weight:600; cursor:pointer;" onclick="toggleLogin()">Guest</span>
     <button id="scan-btn" onclick="triggerScan()" style="display:none">
       <span id="scan-btn-label">▶ Scan</span>
       <span class="scan-sub" id="scan-btn-sub"></span>
