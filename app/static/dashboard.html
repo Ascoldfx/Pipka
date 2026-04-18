@@ -29,10 +29,17 @@
   .lang-btn.active { border-color:var(--fg); color:var(--fg); font-weight:600; }
 
   /* Stats bar */
-  .stats { display:flex; gap:24px; padding:10px 24px; border-bottom:1px solid var(--border); font-size:12px; color:var(--muted); flex-wrap:wrap; }
-  .stats .s { cursor:pointer; }
+  .stats { display:flex; padding:10px 24px; border-bottom:1px solid var(--border); font-size:12px; color:var(--muted); }
+  .stats .s { flex:1; text-align:center; cursor:pointer; padding:2px 4px; }
   .stats .s:hover { color:var(--fg); }
-  .stats .num { font-weight:700; color:var(--fg); font-size:16px; display:block; }
+  .stats .num { font-weight:700; color:var(--fg); font-size:18px; display:block; line-height:1.2; }
+
+  /* Scan button */
+  #scan-btn { font-family:inherit; border:1.5px solid var(--green); border-radius:999px; background:var(--bg); color:var(--green); cursor:pointer; padding:5px 16px 4px; display:flex; flex-direction:column; align-items:center; line-height:1.25; font-size:12px; font-weight:600; min-width:108px; transition:all .18s; }
+  #scan-btn:hover:not(:disabled) { background:var(--green); color:#fff; }
+  #scan-btn:disabled { opacity:.65; cursor:not-allowed; }
+  #scan-btn.running { border-color:var(--muted); color:var(--muted); }
+  #scan-btn .scan-sub { font-size:9px; font-weight:400; color:inherit; opacity:.75; white-space:nowrap; }
 
   /* Tabs */
   .tabs { display:flex; border-bottom:1px solid var(--border); padding:0 24px; gap:0; }
@@ -511,8 +518,10 @@ function applyLang() {
       <button class="lang-btn" data-lang="es" onclick="setLang('es')" title="Español">ES</button>
     </div>
     <span id="role-badge" style="font-size:11px; padding:3px 8px; border-radius:4px; font-weight:600; cursor:pointer;" onclick="toggleLogin()">Guest</span>
-    <button class="btn-outline" id="scan-btn" onclick="triggerScan()" style="font-size:11px;padding:4px 12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);cursor:pointer;display:none;" data-i18n="btn.scan">Scan Now</button>
-    <span id="scan-info" style="font-size:10px;color:var(--muted)"></span>
+    <button id="scan-btn" onclick="triggerScan()" style="display:none">
+      <span id="scan-btn-label">▶ Scan</span>
+      <span class="scan-sub" id="scan-btn-sub"></span>
+    </button>
   </div>
 </header>
 
@@ -529,6 +538,7 @@ function applyLang() {
   <div class="tab auth-only" data-tab="inbox" onclick="switchTab('inbox')" style="display:none"><span data-i18n="nav.inbox">Inbox</span> <span class="count" id="tab-inbox-count">0</span></div>
   <div class="tab auth-only" data-tab="applied" onclick="switchTab('applied')" style="display:none"><span data-i18n="nav.applied">Applied</span> <span class="count" id="tab-applied-count">0</span></div>
   <div class="tab auth-only" data-tab="rejected" onclick="switchTab('rejected')" style="display:none"><span data-i18n="nav.rejected">Rejected</span> <span class="count" id="tab-rejected-count">0</span></div>
+  <div style="flex:1"></div>
   <div class="tab auth-only" data-tab="settings" onclick="switchTab('settings')" style="display:none"><span data-i18n="nav.settings">Settings</span></div>
   <div class="tab auth-only" data-tab="ops" id="tab-ops" onclick="switchTab('ops')" style="display:none">Ops</div>
 </div>
@@ -1245,43 +1255,64 @@ document.querySelectorAll('.country-item').forEach(el => {
 });
 
 /* Scan */
+let _nextScanAt = null;
+let _scanCountdownTimer = null;
+
+function _scanCountdown(){
+  const sub=$('scan-btn-sub'); if(!sub) return;
+  if(!_nextScanAt){ sub.textContent=''; return; }
+  const diff=_nextScanAt-Date.now();
+  if(diff<=0){ sub.textContent='Soon…'; return; }
+  const h=Math.floor(diff/3600000);
+  const m=Math.floor((diff%3600000)/60000);
+  const s=Math.floor((diff%60000)/1000);
+  sub.textContent = h>0 ? `Next: ${h}h ${m}m` : m>0 ? `Next: ${m}m ${s}s` : `Next: ${s}s`;
+}
+
+function _setScanRunning(running){
+  const btn=$('scan-btn'), lbl=$('scan-btn-label'), sub=$('scan-btn-sub'); if(!btn) return;
+  if(running){
+    btn.classList.add('running'); btn.disabled=true;
+    if(lbl) lbl.textContent='⟳ Scanning…';
+    if(sub) sub.textContent='';
+    if(_scanCountdownTimer){clearInterval(_scanCountdownTimer);_scanCountdownTimer=null;}
+  } else {
+    btn.classList.remove('running'); btn.disabled=false;
+    if(lbl) lbl.textContent='▶ Scan';
+    if(!_scanCountdownTimer) _scanCountdownTimer=setInterval(_scanCountdown,1000);
+    _scanCountdown();
+  }
+}
+
 async function triggerScan(){
-  const btn=$('scan-btn'); btn.disabled=true; btn.textContent='Scanning...';
-  $('scan-info').textContent='Scan started, may take 2-5 min...';
+  _setScanRunning(true);
   try{
     const r=await fetch('/api/scan',{method:'POST'});
     const d=await r.json();
     if(d.status==='started'){
-      // Poll for new results
       let checks=0;
       const poll=setInterval(async()=>{
         checks++;
         const s=await(await fetch('/api/stats',{cache:'no-store'})).json();
-        $('scan-info').textContent=`Scanning... ${s.total_jobs} jobs (${checks*10}s)`;
+        const sub=$('scan-btn-sub'); if(sub) sub.textContent=`${s.total_jobs} jobs · ${checks*10}s`;
         $('stat-total').textContent=s.total_jobs;
         $('stat-scored').textContent=s.scored;
         $('stat-top').textContent=s.top_matches;
-        if(S.activeTab === 'ops') loadOpsOverview(true);
-        if(checks>=30){clearInterval(poll);btn.disabled=false;btn.textContent='Scan Now';$('scan-info').textContent='Done';loadJobs();loadStats();if(S.activeTab === 'ops') loadOpsOverview(true);}
+        if(S.activeTab==='ops') loadOpsOverview(true);
+        if(checks>=30){clearInterval(poll);_setScanRunning(false);loadJobs();loadStats();if(S.activeTab==='ops') loadOpsOverview(true);}
       },10000);
     } else {
-      $('scan-info').textContent=d.error||d.status;
-      btn.disabled=false; btn.textContent='Scan Now';
+      _setScanRunning(false);
     }
-  }catch(e){$('scan-info').textContent='Error';btn.disabled=false;btn.textContent='Scan Now';}
+  }catch(e){_setScanRunning(false);}
 }
 
 async function loadScanStatus(){
   try{
     const d=await(await fetch('/api/scan/status',{cache:'no-store'})).json();
-    if(d.running){
-      $('scan-info').textContent='Scan running now';
-      return;
-    }
-    if(d.next_run){
-      const t=new Date(d.next_run);
-      $('scan-info').textContent='Next: '+t.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
-    }
+    if(d.running){ _setScanRunning(true); return; }
+    _setScanRunning(false);
+    if(d.next_run){ _nextScanAt=new Date(d.next_run).getTime(); _scanCountdown(); }
   }catch(e){}
 }
 
@@ -1593,7 +1624,7 @@ async function initApp() {
 
       if (S.role === 'admin') {
         if (rb) { rb.textContent = 'Admin'; rb.style.background = 'var(--green)'; rb.style.color = '#fff'; }
-        if (scanBtn) { scanBtn.style.display = 'inline-block'; scanBtn.textContent = T('btn.scan'); }
+        if (scanBtn) { scanBtn.style.display = 'inline-flex'; }
         if (opsTab) opsTab.style.display = '';
       } else {
         if (rb) { rb.textContent = me.name || T('btn.guest'); rb.style.background = 'var(--badge)'; rb.style.color = 'var(--fg)'; }
