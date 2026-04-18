@@ -228,6 +228,7 @@ async def get_jobs(
                 "location": job.location or "N/A",
                 "country": job.country or "?",
                 "source": job.source,
+                "merged_sources": (job.raw_data or {}).get("merged_sources"),
                 "url": job.url,
                 "salary_min": job.salary_min,
                 "salary_max": job.salary_max,

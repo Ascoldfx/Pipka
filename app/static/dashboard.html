@@ -95,6 +95,8 @@
   .job-meta { color:var(--muted); font-size:11px; }
   .source-tag { font-size:9px; padding:1px 5px; border:1px solid var(--border); border-radius:3px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); white-space:nowrap; }
   .source-tag.watchlist { background:#fff3cd; border-color:#ffc107; color:#856404; font-weight:600; }
+  .source-tag.merged { border-color:var(--blue); color:var(--blue); }
+  .source-merged-tip { font-size:8px; color:var(--muted); display:block; margin-top:2px; letter-spacing:.3px; }
 
 
   .actions-wrap { display:inline-flex; gap:4px; white-space:nowrap; }
@@ -1176,6 +1178,20 @@ async function loadJobs(){
   }catch(e){tbody.innerHTML=`<tr><td colspan="6" class="loading">Error: ${e.message}</td></tr>`;console.error('loadJobs error:',e)}
 }
 
+function sourceCell(j) {
+  if (j.source === 'watchlist') {
+    return `<span class="source-tag watchlist">⭐ watchlist</span>`;
+  }
+  const ms = j.merged_sources;
+  if (ms && ms.length > 1) {
+    // Show primary source + compact "+N" badge, tooltip lists all
+    const others = ms.filter(s => s !== j.source);
+    const tip = ms.join(' · ').toUpperCase();
+    return `<span class="source-tag merged" title="${tip}">${esc(j.source)} +${others.length}</span>`;
+  }
+  return `<span class="source-tag">${esc(j.source)}</span>`;
+}
+
 function jobRow(j){
   const sc=j.score>=70?'high':j.score>=40?'mid':j.score!=null?'low':'none';
   const date=j.posted_at?new Date(j.posted_at).toLocaleDateString('de-DE'):'';
@@ -1184,7 +1200,7 @@ function jobRow(j){
     <td><a class="job-title" href="${safeUrl(j.url)}" target="_blank" rel="noopener noreferrer">${esc(j.title)}</a>${date?`<div class="job-meta">${date}</div>`:''}</td>
     <td class="job-meta">${esc(j.company)}</td>
     <td class="job-meta">${esc(j.location)} (${esc(j.country)})</td>
-    <td><span class="source-tag${j.source==='watchlist'?' watchlist':''}">${j.source==='watchlist'?'⭐ watchlist':esc(j.source)}</span></td>
+    <td>${sourceCell(j)}</td>
     <td><div class="actions-wrap">
       ${S.authenticated ? `
       <button onclick="doAction(${j.id},'applied',this)" title="Applied"${j.status==='applied'?' class="active"':''}>&#10004;</button>

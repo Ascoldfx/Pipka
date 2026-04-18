@@ -163,9 +163,17 @@ class JobAggregator:
             merged = False
             for i, seen in enumerate(fuzzy_deduped):
                 if is_fuzzy_duplicate(job, seen):
-                    # Keep the candidate with richer description
+                    # Accumulate all sources seen for this job
+                    all_sources: list[str] = seen.raw_data.get("merged_sources", [seen.source])
+                    if job.source not in all_sources:
+                        all_sources.append(job.source)
+
                     if len(job.description or "") > len(seen.description or ""):
+                        # Switch to richer candidate, carry over the merged sources list
+                        job.raw_data["merged_sources"] = all_sources
                         fuzzy_deduped[i] = job
+                    else:
+                        seen.raw_data["merged_sources"] = all_sources
                     merged = True
                     break
             if not merged:
