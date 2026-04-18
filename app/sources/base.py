@@ -115,15 +115,28 @@ def _location_root(location: str) -> str:
 
 
 def _locations_conflict(a: str | None, b: str | None) -> bool:
-    """True if locations are both known and clearly different.
+    """True if locations conflict — meaning jobs should NOT be merged.
 
-    Returns False (= no conflict) when either location is missing —
-    we give the benefit of the doubt rather than keeping duplicates.
+    Rules (conservative — prefer keeping jobs separate on any doubt):
+      • Both unknown          → False  (no info either way, allow merge)
+      • One known, one not    → True   (asymmetry = uncertainty = keep both)
+      • Both known, same city → False  (clearly same place, allow merge)
+      • Both known, diff city → True   (different places, keep both)
     """
-    if not a or not b:
+    a_has = bool(a and a.strip())
+    b_has = bool(b and b.strip())
+
+    # Both missing — no information to conflict on
+    if not a_has and not b_has:
         return False
-    ra = _location_root(a)
-    rb = _location_root(b)
+
+    # Asymmetry: one has location, other doesn't — too uncertain to merge
+    if a_has != b_has:
+        return True
+
+    # Both present — compare city roots
+    ra = _location_root(a)  # type: ignore[arg-type]
+    rb = _location_root(b)  # type: ignore[arg-type]
     if not ra or not rb:
         return False
     return ra != rb
