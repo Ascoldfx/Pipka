@@ -405,6 +405,39 @@ async def get_ops_overview(request: Request, window_hours: int = Query(24, ge=6,
         )
 
 
+@router.get("/api/ops/dedup")
+async def get_dedup_jobs(request: Request, limit: int = Query(200, ge=10, le=500)):
+    """Return jobs that were fuzzy-merged from multiple sources."""
+    if _get_role(request, None) != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    async with async_session() as session:
+        # Jobs where merged_sources array has more than 1 element
+        from sqlalchemy import cast, text
+        result = await session.execute(
+            select(Job)
+            .where(
+                Job.raw_data.op("->")("merged_sources").isnot(None),
+                func.jsonb_array_length(Job.raw_data.op("->")("merged_sources")) > 1,
+            )
+            .order_by(Job.scraped_at.desc())
+            .limit(limit)
+        )
+        jobs = result.scalars().all()
+        return [
+            {
+                "id": j.id,
+                "title": j.title,
+                "company": j.company_name or "",
+                "location": j.location or "",
+                "url": j.url,
+                "sources": (j.raw_data or {}).get("merged_sources", [j.source]),
+                "posted_at": j.posted_at.isoformat() if j.posted_at else None,
+            }
+            for j in jobs
+        ]
+
+
 # ─── Profile / Settings ──────────────────────────────────────
 
 @router.get("/api/profile")

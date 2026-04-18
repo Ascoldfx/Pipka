@@ -374,6 +374,18 @@
   .msg { border-radius:10px !important; }
   .job-card { border-radius:18px !important; }
   .modal { border-radius:24px !important; }
+
+  /* Dedup panel */
+  .dedup-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .dedup-table th { text-align:left; padding:8px 10px; font-size:10px; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); border-bottom:1px solid var(--border); }
+  .dedup-table td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  .dedup-table tr:last-child td { border-bottom:none; }
+  .dedup-table td a { color:var(--fg); text-decoration:none; }
+  .dedup-table td a:hover { text-decoration:underline; }
+  .dedup-sources { display:flex; gap:4px; flex-wrap:wrap; }
+  .dedup-src { font-size:10px; padding:2px 7px; border-radius:999px; background:var(--hover); color:var(--muted); }
+  .dedup-src:first-child { background:rgba(37,99,235,.1); color:var(--blue); }
+  #ops-dedup-badge { cursor:pointer; text-decoration:underline dotted; }
 </style>
 </head>
 <body>
@@ -879,6 +891,16 @@ function applyLang() {
           <span id="ops-users-summary">—</span>
         </div>
         <div id="ops-users"><div class="ops-empty">Загрузка пользователей...</div></div>
+      </section>
+    </div>
+
+    <div class="ops-panels" id="ops-dedup-wrap" style="grid-template-columns:1fr;display:none">
+      <section class="ops-panel">
+        <div class="panel-head">
+          <h3>Дедупликация</h3>
+          <span id="ops-dedup-summary">Объединённые вакансии</span>
+        </div>
+        <div id="ops-dedup"><div class="ops-empty">Загрузка...</div></div>
       </section>
     </div>
   </div>
@@ -1552,7 +1574,7 @@ async function loadOpsOverview(force=false){
         <div class="mini-list">
           <span>сырых ${fmtNumber(aggregator.raw_count || 0)}</span>
           <span>уникальных ${fmtNumber(aggregator.unique_count || 0)}</span>
-          ${aggregator.fuzzy_removed > 0 ? `<span title="Объединено нечётким дедупом" style="color:var(--blue)">⊕ слито ${fmtNumber(aggregator.fuzzy_removed)}</span>` : ''}
+          ${aggregator.fuzzy_removed > 0 ? `<span id="ops-dedup-badge" title="Нажмите чтобы посмотреть список" onclick="loadDedupPanel()" style="color:var(--blue)">⊕ слито ${fmtNumber(aggregator.fuzzy_removed)}</span>` : ''}
           <span>негативных ${fmtNumber(aggregator.rejected_negative || 0)}</span>
           <span>старых ${fmtNumber(aggregator.rejected_old || 0)}</span>
           <span>по локации ${fmtNumber(aggregator.rejected_location || 0)}</span>
@@ -1652,6 +1674,46 @@ async function loadOpsOverview(force=false){
     events.innerHTML = '<div class="ops-empty">Не удалось загрузить события.</div>';
     scan.innerHTML = '<div class="ops-empty">Не удалось загрузить состояние скана.</div>';
     if(usersEl) usersEl.innerHTML = '<div class="ops-empty">Не удалось загрузить данные пользователей.</div>';
+  }
+}
+
+async function loadDedupPanel() {
+  const wrap = $('ops-dedup-wrap');
+  const el = $('ops-dedup');
+  const summary = $('ops-dedup-summary');
+  if (!wrap || !el) return;
+  wrap.style.display = '';
+  el.innerHTML = '<div class="ops-empty">Загрузка...</div>';
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  try {
+    const jobs = await (await fetch('/api/ops/dedup?limit=200')).json();
+    if (!jobs.length) {
+      el.innerHTML = '<div class="ops-empty">Объединённых вакансий не найдено.</div>';
+      return;
+    }
+    if (summary) summary.textContent = `${jobs.length} объединённых`;
+    el.innerHTML = `
+      <table class="dedup-table">
+        <thead><tr>
+          <th>Вакансия</th>
+          <th>Компания</th>
+          <th>Локация</th>
+          <th>Источники</th>
+        </tr></thead>
+        <tbody>
+          ${jobs.map(j => `
+            <tr>
+              <td><a href="${esc(j.url || '#')}" target="_blank" rel="noopener">${esc(j.title)}</a></td>
+              <td>${esc(j.company)}</td>
+              <td>${esc(j.location)}</td>
+              <td><div class="dedup-sources">${(j.sources || []).map(s => `<span class="dedup-src">${esc(s)}</span>`).join('')}</div></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch(e) {
+    el.innerHTML = `<div class="ops-empty">Ошибка загрузки: ${esc(e.message)}</div>`;
   }
 }
 
