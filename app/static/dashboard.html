@@ -22,15 +22,15 @@
   #theme-toggle { background:none; border:1px solid var(--border); border-radius:6px; padding:4px 8px; cursor:pointer; font-size:15px; color:var(--fg); line-height:1; display:flex; align-items:center; gap:4px; }
   #theme-toggle:hover { border-color:var(--fg); }
 
-  /* Language switcher */
-  .lang-switcher { display:flex; gap:4px; }
-  .lang-btn { background:none; border:1.5px solid transparent; border-radius:10px; padding:4px 7px 3px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:1px; transition:all .18s; }
-  .lang-btn .lf { font-size:16px; line-height:1; }
-  .lang-btn .lc { font-size:9px; font-weight:700; color:var(--muted); letter-spacing:.4px; line-height:1; }
-  .lang-btn:hover { border-color:var(--border); background:var(--hover); }
-  .lang-btn:hover .lc { color:var(--fg); }
-  .lang-btn.active { border-color:var(--fg); background:var(--hover); }
-  .lang-btn.active .lc { color:var(--fg); }
+  /* Interface language selector (in Profile tab) */
+  .ui-lang-grid { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+  .ui-lang-btn { display:inline-flex; align-items:center; gap:9px; padding:10px 18px; border:1.5px solid var(--border); border-radius:999px; background:var(--bg); color:var(--fg); cursor:pointer; font-family:inherit; font-size:13px; font-weight:500; transition:all .18s; user-select:none; }
+  .ui-lang-btn .ul-flag { font-size:20px; line-height:1; }
+  .ui-lang-btn .ul-name { font-weight:600; }
+  .ui-lang-btn .ul-sub { font-size:11px; color:var(--muted); font-weight:400; }
+  .ui-lang-btn:hover { border-color:var(--muted); background:var(--hover); }
+  .ui-lang-btn.active { border-color:var(--fg); background:var(--fg); color:var(--bg); }
+  .ui-lang-btn.active .ul-sub { color:rgba(255,255,255,.65); }
 
   /* Scan button */
   #scan-btn { font-family:inherit; border:1.5px solid var(--green); border-radius:999px; background:var(--bg); color:var(--green); cursor:pointer; padding:5px 16px 4px; display:flex; flex-direction:column; align-items:center; line-height:1.25; font-size:12px; font-weight:600; min-width:108px; transition:all .18s; }
@@ -500,7 +500,14 @@ const TRANSLATIONS = {
   },
 };
 
-let _lang = localStorage.getItem('pipka_lang') || 'ru';
+const _SUPPORTED_LANGS = ['en','ru','de','es'];
+function _detectLang() {
+  const saved = localStorage.getItem('pipka_lang');
+  if (saved && _SUPPORTED_LANGS.includes(saved)) return saved;
+  const browser = (navigator.language || '').toLowerCase().slice(0,2);
+  return _SUPPORTED_LANGS.includes(browser) ? browser : 'en';
+}
+let _lang = _detectLang();
 function T(key) { return (TRANSLATIONS[_lang] || TRANSLATIONS.en)[key] || (TRANSLATIONS.en[key] || key); }
 function setLang(lang) {
   _lang = lang;
@@ -516,7 +523,7 @@ function applyLang() {
     if (attr) el.setAttribute(attr, T(key));
     else el.textContent = T(key);
   });
-  document.querySelectorAll('.lang-btn').forEach(btn => {
+  document.querySelectorAll('.ui-lang-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.lang === _lang);
   });
   const fcl = document.getElementById('f-country-label');
@@ -529,21 +536,15 @@ function applyLang() {
 <header>
   <h1>pipka<span>.net</span></h1>
   <div style="display:flex;align-items:center;gap:10px">
-    <div id="user-info" style="display:flex;align-items:center;gap:8px;">
-      <img id="user-avatar" src="" style="width:28px;height:28px;border-radius:50%;display:none;" />
-      <span id="user-name" style="font-size:12px;font-weight:500;display:none;"></span>
-    </div>
     <button id="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
-    <div class="lang-switcher">
-      <button class="lang-btn" data-lang="en" onclick="setLang('en')" title="English"><span class="lf">🇬🇧</span><span class="lc">EN</span></button>
-      <button class="lang-btn" data-lang="ru" onclick="setLang('ru')" title="Русский"><span class="lf">🇷🇺</span><span class="lc">RU</span></button>
-      <button class="lang-btn" data-lang="de" onclick="setLang('de')" title="Deutsch"><span class="lf">🇩🇪</span><span class="lc">DE</span></button>
-      <button class="lang-btn" data-lang="es" onclick="setLang('es')" title="Español"><span class="lf">🇪🇸</span><span class="lc">ES</span></button>
-    </div>
-    <span id="role-badge" style="font-size:11px; padding:3px 10px; border-radius:999px; font-weight:600; cursor:pointer;" onclick="toggleLogin()">Guest</span>
     <button id="scan-btn" onclick="triggerScan()" style="display:none">
       <span id="scan-btn-label">▶ Scan</span>
       <span class="scan-sub" id="scan-btn-sub"></span>
+    </button>
+    <button id="user-btn" onclick="toggleLogin()" style="display:flex;align-items:center;gap:7px;background:none;border:1.5px solid var(--border);border-radius:999px;padding:4px 10px 4px 5px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;color:var(--fg);transition:border-color .18s;" title="Account">
+      <img id="user-avatar" src="" style="width:22px;height:22px;border-radius:50%;display:none;flex-shrink:0;" />
+      <span id="user-avatar-icon" style="width:22px;height:22px;border-radius:50%;background:var(--hover);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">👤</span>
+      <span id="role-badge">Guest</span>
     </button>
   </div>
 </header>
@@ -779,7 +780,27 @@ function applyLang() {
 
     </div>
 
-    <div style="margin-top:16px; display:flex; gap:10px;">
+    <h3>Interface Language</h3>
+    <div class="ui-lang-grid">
+      <button class="ui-lang-btn" data-lang="en" onclick="setLang('en')">
+        <span class="ul-flag">🇬🇧</span>
+        <span class="ul-name">English</span>
+      </button>
+      <button class="ui-lang-btn" data-lang="ru" onclick="setLang('ru')">
+        <span class="ul-flag">🇷🇺</span>
+        <span class="ul-name">Русский</span>
+      </button>
+      <button class="ui-lang-btn" data-lang="de" onclick="setLang('de')">
+        <span class="ul-flag">🇩🇪</span>
+        <span class="ul-name">Deutsch</span>
+      </button>
+      <button class="ui-lang-btn" data-lang="es" onclick="setLang('es')">
+        <span class="ul-flag">🇪🇸</span>
+        <span class="ul-name">Español</span>
+      </button>
+    </div>
+
+    <div style="margin-top:24px; display:flex; gap:10px;">
       <button class="btn" onclick="saveProfile()" data-i18n="btn.save">Save Settings</button>
       <button class="btn btn-outline" onclick="loadProfile()" data-i18n="btn.reset">Reset</button>
     </div>
@@ -1626,32 +1647,37 @@ async function initApp() {
     S.authenticated = !!me.authenticated;
     const rb = $('role-badge');
     const avatar = $('user-avatar');
-    const uname = $('user-name');
+    const avatarIcon = $('user-avatar-icon');
     const scanBtn = $('scan-btn');
     const opsTab = $('tab-ops');
 
     if (!S.authenticated) {
-      // Guest — show login button, hide auth-only elements, reset filters to defaults
-      if (rb) { rb.textContent = T('btn.login'); rb.style.background = '#4285f4'; rb.style.color = '#fff'; }
+      // Guest
+      if (rb) rb.textContent = T('btn.login');
+      const userBtn = $('user-btn');
+      if (userBtn) { userBtn.style.borderColor = '#4285f4'; userBtn.style.color = '#4285f4'; }
       if (scanBtn) scanBtn.style.display = 'none';
       if (opsTab) opsTab.style.display = 'none';
-      // Show all jobs unfiltered for guests
       $('f-score').value = '0';
     } else {
-      // Logged in — show all auth-only tabs/stats
+      // Logged in
       document.querySelectorAll('.auth-only').forEach(el => el.style.display = '');
-      // Restore default score filter for logged-in users
       $('f-score').value = '70';
 
-      if (me.avatar) { avatar.src = me.avatar; avatar.style.display = 'inline'; }
-      if (me.name) { uname.textContent = me.name; uname.style.display = 'inline'; }
+      if (me.avatar) {
+        avatar.src = me.avatar; avatar.style.display = 'inline-block';
+        if (avatarIcon) avatarIcon.style.display = 'none';
+      }
 
       if (S.role === 'admin') {
-        if (rb) { rb.textContent = 'Admin'; rb.style.background = 'var(--green)'; rb.style.color = '#fff'; }
+        if (rb) rb.textContent = 'Admin';
+        const userBtn = $('user-btn');
+        if (userBtn) { userBtn.style.borderColor = 'var(--green)'; userBtn.style.color = 'var(--green)'; }
         if (scanBtn) { scanBtn.style.display = 'inline-flex'; }
         if (opsTab) opsTab.style.display = '';
       } else {
-        if (rb) { rb.textContent = me.name || T('btn.guest'); rb.style.background = 'var(--badge)'; rb.style.color = 'var(--fg)'; }
+        // Show first name only
+        if (rb) rb.textContent = (me.name || '').split(' ')[0] || T('btn.guest');
         if (scanBtn) scanBtn.style.display = 'none';
         if (opsTab) opsTab.style.display = 'none';
       }
