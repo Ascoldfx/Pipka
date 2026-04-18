@@ -1552,6 +1552,7 @@ async function loadOpsOverview(force=false){
         <div class="mini-list">
           <span>сырых ${fmtNumber(aggregator.raw_count || 0)}</span>
           <span>уникальных ${fmtNumber(aggregator.unique_count || 0)}</span>
+          ${aggregator.fuzzy_removed > 0 ? `<span title="Объединено нечётким дедупом" style="color:var(--blue)">⊕ слито ${fmtNumber(aggregator.fuzzy_removed)}</span>` : ''}
           <span>негативных ${fmtNumber(aggregator.rejected_negative || 0)}</span>
           <span>старых ${fmtNumber(aggregator.rejected_old || 0)}</span>
           <span>по локации ${fmtNumber(aggregator.rejected_location || 0)}</span>

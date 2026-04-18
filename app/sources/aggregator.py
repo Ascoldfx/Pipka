@@ -212,6 +212,7 @@ class JobAggregator:
         self.last_stats = {
             "raw_count": len(raw_jobs),
             "unique_count": len(unique),
+            "fuzzy_removed": removed,
             "filtered_count": len(filtered),
             "rejected_negative": rejected_negative,
             "rejected_old": rejected_old,
