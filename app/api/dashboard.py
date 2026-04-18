@@ -418,7 +418,7 @@ async def get_dedup_jobs(request: Request, limit: int = Query(200, ge=10, le=500
             select(Job)
             .where(
                 Job.raw_data.op("->")("merged_sources").isnot(None),
-                func.jsonb_array_length(Job.raw_data.op("->")("merged_sources")) > 1,
+                func.json_array_length(Job.raw_data.op("->")("merged_sources")) > 1,
             )
             .order_by(Job.scraped_at.desc())
             .limit(limit)
