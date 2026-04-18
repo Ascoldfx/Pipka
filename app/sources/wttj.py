@@ -131,7 +131,7 @@ class WTTJSource(JobSource):
                 {
                     "indexName": ALGOLIA_INDEX,
                     "query": query,
-                    "hitsPerPage": params_per_query := 50,
+                    "hitsPerPage": 50,
                     "page": 0,
                     "facetFilters": [country_facets],  # outer list = AND, inner = OR
                     "filters": "contract_type:full_time",
