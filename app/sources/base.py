@@ -92,15 +92,62 @@ def _are_same_company(a: str | None, b: str | None) -> bool:
     return wa[:n] == wb[:n]
 
 
+def _location_root(location: str) -> str:
+    """Return the first significant word of a location for loose comparison.
+
+    "Kleinostheim, BY, DE (DE)"  → "kleinostheim"
+    "Frankfurt am Main"          → "frankfurt"
+    "Munich, Bavaria"            → "munich"
+    "Germany"                    → "germany"
+    """
+    text = unicodedata.normalize("NFD", location)
+    text = "".join(c for c in text if unicodedata.category(c) != "Mn")
+    text = text.lower()
+    # Drop postal codes, country codes in parens like "(DE)"
+    text = re.sub(r"\([a-z]{2,3}\)", "", text)
+    text = re.sub(r"\b[a-z]{2}\b", "", text)   # short country/state codes
+    text = re.sub(r"\d+", "", text)             # postal codes
+    text = re.sub(r"[^\w\s]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    # Return the first word that is >= 4 chars (city name)
+    words = [w for w in text.split() if len(w) >= 4]
+    return words[0] if words else text[:8]
+
+
+def _locations_conflict(a: str | None, b: str | None) -> bool:
+    """True if locations are both known and clearly different.
+
+    Returns False (= no conflict) when either location is missing —
+    we give the benefit of the doubt rather than keeping duplicates.
+    """
+    if not a or not b:
+        return False
+    ra = _location_root(a)
+    rb = _location_root(b)
+    if not ra or not rb:
+        return False
+    return ra != rb
+
+
 def is_fuzzy_duplicate(a: "RawJob", b: "RawJob") -> bool:
     """True if two raw jobs are likely the same posting (different source/company spelling).
 
-    Criteria: normalised title must match exactly AND company names must be
-    compatible (one is a refinement/legal-expansion of the other).
+    All three conditions must hold:
+      1. Normalised title matches exactly.
+      2. Company names are compatible (one is a refinement of the other).
+      3. Locations do NOT clearly conflict (different cities = different roles).
+
+    The location guard prevents merging e.g.:
+      "Head of Procurement" @ Siemens Energy, Frankfurt
+      "Head of Procurement" @ Siemens Healthineers, Erlangen
     """
     if _normalize(a.title) != _normalize(b.title):
         return False
-    return _are_same_company(a.company_name, b.company_name)
+    if not _are_same_company(a.company_name, b.company_name):
+        return False
+    if _locations_conflict(a.location, b.location):
+        return False
+    return True
 
 
 @dataclass
