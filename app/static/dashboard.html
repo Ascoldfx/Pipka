@@ -310,6 +310,22 @@
   /* ── Dropdown animation ── */
   @keyframes dropIn { from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)} }
 
+  /* ── Experience pills ── */
+  .exp-pills { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+  .exp-pill { padding:7px 16px; border:1.5px solid var(--border); border-radius:999px; background:var(--bg); color:var(--muted); cursor:pointer; font-size:13px; font-weight:500; transition:all .18s; user-select:none; white-space:nowrap; }
+  .exp-pill:hover { border-color:var(--muted); color:var(--fg); }
+  .exp-pill.active { border-color:var(--fg); background:var(--fg); color:var(--bg); font-weight:600; }
+
+  /* ── Industry pills ── */
+  .ind-grid { display:flex; flex-wrap:wrap; gap:7px; margin-top:6px; }
+  .ind-pill { padding:6px 14px; border:1.5px solid var(--border); border-radius:999px; background:var(--bg); color:var(--muted); cursor:pointer; font-size:12px; font-weight:500; transition:all .18s; user-select:none; }
+  .ind-pill:hover { border-color:var(--muted); color:var(--fg); }
+  .ind-pill.active { border-color:var(--fg); background:var(--fg); color:var(--bg); font-weight:600; }
+
+  /* ── Settings 2-col grid ── */
+  .settings-2col { display:grid; grid-template-columns:1fr 1fr; gap:12px 28px; }
+  .settings-2col .span2 { grid-column:1/-1; }
+
   /* ── Unified Settings controls ── */
   .settings .btn { border-radius:999px; padding:10px 28px; }
   .settings .field input, .settings .field select { border-radius:10px; transition:border-color .18s,box-shadow .18s; }
@@ -360,8 +376,7 @@ const TRANSLATIONS = {
     'settings.prefs':'Preferences','settings.salary':'Min salary (EUR/year)','settings.experience':'Experience (years)',
     'settings.languages':'Languages','settings.workMode':'Work mode',
     'settings.workAny':'Any','settings.workRemote':'Remote','settings.workHybrid':'Hybrid','settings.workOnsite':'On-site',
-    'settings.countries':'Active Target Countries','settings.industries':'Industries (comma-separated)',
-    'settings.industriesPlaceholder':'FMCG, Manufacturing, Automotive, Pharma...',
+    'settings.countries':'Active Target Countries','settings.industries':'Industries',
     'msg.loading':'Loading...','msg.noJobs':'No jobs found.','msg.loginRequired':'Login required',
     'btn.guest':'Guest','btn.login':'Sign in with Google',
     'lang.label':'Language',
@@ -390,8 +405,7 @@ const TRANSLATIONS = {
     'settings.prefs':'Предпочтения','settings.salary':'Мин. зарплата (EUR/год)','settings.experience':'Опыт работы (лет)',
     'settings.languages':'Языки','settings.workMode':'Режим работы',
     'settings.workAny':'Любой','settings.workRemote':'Удалённо','settings.workHybrid':'Гибрид','settings.workOnsite':'В офисе',
-    'settings.countries':'Целевые страны поиска','settings.industries':'Отрасли (через запятую)',
-    'settings.industriesPlaceholder':'FMCG, производство, автомобили, фарма...',
+    'settings.countries':'Целевые страны поиска','settings.industries':'Отрасли',
     'msg.loading':'Загрузка...','msg.noJobs':'Вакансии не найдены.','msg.loginRequired':'Требуется вход',
     'btn.guest':'Гость','btn.login':'Войти через Google',
     'lang.label':'Язык',
@@ -420,8 +434,7 @@ const TRANSLATIONS = {
     'settings.prefs':'Einstellungen','settings.salary':'Mindestgehalt (EUR/Jahr)','settings.experience':'Erfahrung (Jahre)',
     'settings.languages':'Sprachen','settings.workMode':'Arbeitsmodell',
     'settings.workAny':'Beliebig','settings.workRemote':'Remote','settings.workHybrid':'Hybrid','settings.workOnsite':'Vor Ort',
-    'settings.countries':'Aktive Zielländer','settings.industries':'Branchen (kommagetrennt)',
-    'settings.industriesPlaceholder':'FMCG, Produktion, Automobil, Pharma...',
+    'settings.countries':'Aktive Zielländer','settings.industries':'Branchen',
     'msg.loading':'Wird geladen...','msg.noJobs':'Keine Stellen gefunden.','msg.loginRequired':'Anmeldung erforderlich',
     'btn.guest':'Gast','btn.login':'Mit Google anmelden',
     'lang.label':'Sprache',
@@ -450,8 +463,7 @@ const TRANSLATIONS = {
     'settings.prefs':'Preferencias','settings.salary':'Salario mínimo (EUR/año)','settings.experience':'Experiencia (años)',
     'settings.languages':'Idiomas','settings.workMode':'Modo de trabajo',
     'settings.workAny':'Cualquiera','settings.workRemote':'Remoto','settings.workHybrid':'Híbrido','settings.workOnsite':'Presencial',
-    'settings.countries':'Países objetivo activos','settings.industries':'Industrias (separadas por coma)',
-    'settings.industriesPlaceholder':'FMCG, Manufactura, Automotriz, Farma...',
+    'settings.countries':'Países objetivo activos','settings.industries':'Industrias',
     'msg.loading':'Cargando...','msg.noJobs':'No se encontraron trabajos.','msg.loginRequired':'Inicio de sesión requerido',
     'btn.guest':'Invitado','btn.login':'Iniciar sesión con Google',
     'lang.label':'Idioma',
@@ -632,38 +644,52 @@ function applyLang() {
     </div>
 
     <h3 data-i18n="settings.prefs">Preferences</h3>
-    <div class="field-row">
+    <div class="settings-2col">
+
+      <!-- Col 1: Salary -->
       <div class="field">
         <label data-i18n="settings.salary">Min salary (EUR/year)</label>
         <input type="number" id="s-salary" placeholder="100000">
       </div>
+
+      <!-- Col 2: Work mode -->
       <div class="field">
-        <label data-i18n="settings.experience">Experience (years)</label>
-        <input type="number" id="s-experience" placeholder="15">
-      </div>
-    </div>
-    <div class="field" style="margin-bottom:16px;">
-      <label data-i18n="settings.languages">Languages</label>
-      <div class="lang-picker" id="lang-picker"></div>
-    </div>
-    <div class="field" style="margin-bottom:24px;">
-      <label data-i18n="settings.workMode">Work mode</label>
-      <div class="wm-wrap" id="wm-wrap">
-        <button class="wm-pill" id="wm-pill-btn" onclick="toggleWMDrop(event)">
-          <span id="wm-pill-icon">🌐</span>
-          <span id="wm-pill-label" data-i18n="settings.workAny">Any</span>
-          <span class="wm-arrow">▾</span>
-        </button>
-        <div class="wm-drop" id="wm-drop">
-          <div class="wm-di active" data-mode="any" onclick="setWorkMode('any');closeWMDrop()"><span class="wm-di-icon">🌐</span><span data-i18n="settings.workAny">Any</span><span class="wm-di-chk">✓</span></div>
-          <div class="wm-di" data-mode="onsite" onclick="setWorkMode('onsite');closeWMDrop()"><span class="wm-di-icon">🏢</span><span data-i18n="settings.workOnsite">Office</span><span class="wm-di-chk">✓</span></div>
-          <div class="wm-di" data-mode="hybrid" onclick="setWorkMode('hybrid');closeWMDrop()"><span class="wm-di-icon">🔀</span><span data-i18n="settings.workHybrid">Hybrid</span><span class="wm-di-chk">✓</span></div>
-          <div class="wm-di" data-mode="remote" onclick="setWorkMode('remote');closeWMDrop()"><span class="wm-di-icon">🏠</span><span data-i18n="settings.workRemote">Remote</span><span class="wm-di-chk">✓</span></div>
+        <label data-i18n="settings.workMode">Work mode</label>
+        <div class="wm-wrap" id="wm-wrap">
+          <button class="wm-pill" id="wm-pill-btn" onclick="toggleWMDrop(event)">
+            <span id="wm-pill-icon">🌐</span>
+            <span id="wm-pill-label" data-i18n="settings.workAny">Any</span>
+            <span class="wm-arrow">▾</span>
+          </button>
+          <div class="wm-drop" id="wm-drop">
+            <div class="wm-di active" data-mode="any" onclick="setWorkMode('any');closeWMDrop()"><span class="wm-di-icon">🌐</span><span data-i18n="settings.workAny">Any</span><span class="wm-di-chk">✓</span></div>
+            <div class="wm-di" data-mode="onsite" onclick="setWorkMode('onsite');closeWMDrop()"><span class="wm-di-icon">🏢</span><span data-i18n="settings.workOnsite">Office</span><span class="wm-di-chk">✓</span></div>
+            <div class="wm-di" data-mode="hybrid" onclick="setWorkMode('hybrid');closeWMDrop()"><span class="wm-di-icon">🔀</span><span data-i18n="settings.workHybrid">Hybrid</span><span class="wm-di-chk">✓</span></div>
+            <div class="wm-di" data-mode="remote" onclick="setWorkMode('remote');closeWMDrop()"><span class="wm-di-icon">🏠</span><span data-i18n="settings.workRemote">Remote</span><span class="wm-di-chk">✓</span></div>
+          </div>
         </div>
       </div>
-    </div>
-    <div class="field-row">
-      <div class="field" style="flex:2">
+
+      <!-- Col 1: Experience -->
+      <div class="field">
+        <label data-i18n="settings.experience">Experience</label>
+        <div class="exp-pills" id="s-exp-pills">
+          <span class="exp-pill" data-val="2"  onclick="setExp(2)">0–2 yrs</span>
+          <span class="exp-pill" data-val="5"  onclick="setExp(5)">2–5 yrs</span>
+          <span class="exp-pill" data-val="8"  onclick="setExp(8)">5–8 yrs</span>
+          <span class="exp-pill" data-val="10" onclick="setExp(10)">8–10 yrs</span>
+          <span class="exp-pill" data-val="15" onclick="setExp(15)">10+ yrs</span>
+        </div>
+      </div>
+
+      <!-- Col 2: Languages -->
+      <div class="field">
+        <label data-i18n="settings.languages">Languages</label>
+        <div class="lang-picker" id="lang-picker"></div>
+      </div>
+
+      <!-- Full width: Countries -->
+      <div class="field span2">
         <label data-i18n="settings.countries">Active Target Countries</label>
         <div class="country-grid" id="s-countries-grid">
           <div class="country-item" data-code="de">🇩🇪 Germany</div>
@@ -689,10 +715,29 @@ function applyLang() {
           <div class="country-item" data-code="fi">🇫🇮 Finland</div>
         </div>
       </div>
-    </div>
-    <div class="field">
-      <label data-i18n="settings.industries">Industries (comma-separated)</label>
-      <input type="text" id="s-industries" data-i18n="settings.industriesPlaceholder" data-i18n-attr="placeholder" placeholder="FMCG, Manufacturing, Automotive, Pharma...">
+
+      <!-- Full width: Industries -->
+      <div class="field span2">
+        <label data-i18n="settings.industries">Industries</label>
+        <div class="ind-grid" id="s-ind-grid">
+          <span class="ind-pill" data-ind="FMCG / Consumer Goods"     onclick="toggleInd(this)">FMCG / Consumer Goods</span>
+          <span class="ind-pill" data-ind="Manufacturing"             onclick="toggleInd(this)">Manufacturing</span>
+          <span class="ind-pill" data-ind="Automotive"                onclick="toggleInd(this)">Automotive</span>
+          <span class="ind-pill" data-ind="Pharma & Life Sciences"    onclick="toggleInd(this)">Pharma & Life Sciences</span>
+          <span class="ind-pill" data-ind="Chemicals"                 onclick="toggleInd(this)">Chemicals</span>
+          <span class="ind-pill" data-ind="Logistics & Transport"     onclick="toggleInd(this)">Logistics & Transport</span>
+          <span class="ind-pill" data-ind="Retail & E-commerce"       onclick="toggleInd(this)">Retail & E-commerce</span>
+          <span class="ind-pill" data-ind="Technology & Electronics"  onclick="toggleInd(this)">Technology & Electronics</span>
+          <span class="ind-pill" data-ind="Energy & Utilities"        onclick="toggleInd(this)">Energy & Utilities</span>
+          <span class="ind-pill" data-ind="Construction & Engineering" onclick="toggleInd(this)">Construction & Engineering</span>
+          <span class="ind-pill" data-ind="Food & Beverage"           onclick="toggleInd(this)">Food & Beverage</span>
+          <span class="ind-pill" data-ind="Healthcare"                onclick="toggleInd(this)">Healthcare</span>
+          <span class="ind-pill" data-ind="Aerospace & Defense"       onclick="toggleInd(this)">Aerospace & Defense</span>
+          <span class="ind-pill" data-ind="Financial Services"        onclick="toggleInd(this)">Financial Services</span>
+          <span class="ind-pill" data-ind="Other"                     onclick="toggleInd(this)">Other</span>
+        </div>
+      </div>
+
     </div>
 
     <div style="margin-top:16px; display:flex; gap:10px;">
@@ -803,6 +848,50 @@ const LANG_LEVELS = [
 const LEVEL_MIGRATE = {'A1-A2':'basic','B1-B2':'conversational','C1-C2':'fluent','Native':'native'};
 let _langs = {};
 let _workMode = 'any';
+let _expLevel = null; // stored as int: 2/5/8/10/15
+
+const EXP_MAP = [
+  {val:2,  label:'0–2 yrs'},
+  {val:5,  label:'2–5 yrs'},
+  {val:8,  label:'5–8 yrs'},
+  {val:10, label:'8–10 yrs'},
+  {val:15, label:'10+ yrs'},
+];
+
+function setExp(val){
+  _expLevel=val;
+  document.querySelectorAll('#s-exp-pills .exp-pill').forEach(p=>p.classList.toggle('active',+p.dataset.val===val));
+}
+
+function _expFromYears(n){
+  if(!n) return null;
+  if(n<=2) return 2;
+  if(n<=5) return 5;
+  if(n<=8) return 8;
+  if(n<=10) return 10;
+  return 15;
+}
+
+const INDUSTRIES = [
+  'FMCG / Consumer Goods','Manufacturing','Automotive','Pharma & Life Sciences',
+  'Chemicals','Logistics & Transport','Retail & E-commerce','Technology & Electronics',
+  'Energy & Utilities','Construction & Engineering','Food & Beverage','Healthcare',
+  'Aerospace & Defense','Financial Services','Other'
+];
+let _industries = new Set();
+
+function toggleInd(el){
+  const name=el.dataset.ind;
+  if(_industries.has(name)){ _industries.delete(name); el.classList.remove('active'); }
+  else { _industries.add(name); el.classList.add('active'); }
+}
+
+function _loadIndustries(arr){
+  _industries=new Set(arr||[]);
+  document.querySelectorAll('#s-ind-grid .ind-pill').forEach(p=>{
+    p.classList.toggle('active', _industries.has(p.dataset.ind));
+  });
+}
 
 function _normLevel(v){ return LEVEL_MIGRATE[v]||(['basic','conversational','fluent','native'].includes(v)?v:'fluent'); }
 
@@ -1059,14 +1148,14 @@ async function loadProfile(){
     if($('s-english-only')) $('s-english-only').checked=!!p.english_only;
     if($('s-companies')) $('s-companies').value=(p.target_companies||[]).join(', ');
     $('s-salary').value=p.min_salary||'';
-    $('s-experience').value=p.experience_years||'';
+    setExp(_expFromYears(p.experience_years));
     _langs=p.languages||{}; renderLangPicker();
     setWorkMode(p.work_mode||'any');
     const pc = p.preferred_countries||[];
     document.querySelectorAll('#s-countries-grid .country-item').forEach(el => {
       el.classList.toggle('active', pc.includes(el.dataset.code));
     });
-    $('s-industries').value=(p.industries||[]).join(', ');
+    _loadIndustries(p.industries||[]);
   }catch(e){console.error(e)}
 }
 
@@ -1078,12 +1167,12 @@ async function saveProfile(){
   fd.append('english_only', $('s-english-only') && $('s-english-only').checked ? '1' : '0');
   if($('s-companies')) fd.append('target_companies',$('s-companies').value);
   fd.append('min_salary',$('s-salary').value||0);
-  fd.append('experience_years',$('s-experience').value||0);
+  fd.append('experience_years',_expLevel||0);
   fd.append('languages',JSON.stringify(_langs));
   fd.append('work_mode',_workMode);
   const activeCountries = Array.from(document.querySelectorAll('#s-countries-grid .country-item.active')).map(el => el.dataset.code);
   fd.append('preferred_countries', activeCountries.join(','));
-  fd.append('industries',$('s-industries').value);
+  fd.append('industries',[..._industries].join(','));
   try{
     const r=await fetch('/api/profile',{method:'POST',body:fd});
     const d=await r.json();
