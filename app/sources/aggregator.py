@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.job import Job
-from app.sources.base import JobSource, RawJob, SearchParams
+from app.sources.base import JobSource, RawJob, SearchParams, is_fuzzy_duplicate
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +144,7 @@ class JobAggregator:
 
         logger.info("Aggregated %d raw jobs from %d sources", len(raw_jobs), len(self.sources))
 
-        # Deduplicate
+        # Pass 1 — exact dedup by SHA-256(title+company)
         seen_hashes: set[str] = set()
         unique: list[RawJob] = []
         for job in raw_jobs:
@@ -152,7 +152,29 @@ class JobAggregator:
                 seen_hashes.add(job.dedup_hash)
                 unique.append(job)
 
-        logger.info("After dedup: %d unique jobs", len(unique))
+        logger.info("After exact dedup: %d unique jobs", len(unique))
+
+        # Pass 2 — fuzzy dedup: same normalised title + company-name subset match
+        # Handles "Heraeus" vs "Heraeus Quarzglas GmbH & Co. KG HRdirekt" and
+        # the same job posted on Indeed + LinkedIn + Arbeitsagentur simultaneously.
+        # O(n²) but n < 500 per scan in practice — negligible.
+        fuzzy_deduped: list[RawJob] = []
+        for job in unique:
+            merged = False
+            for i, seen in enumerate(fuzzy_deduped):
+                if is_fuzzy_duplicate(job, seen):
+                    # Keep the candidate with richer description
+                    if len(job.description or "") > len(seen.description or ""):
+                        fuzzy_deduped[i] = job
+                    merged = True
+                    break
+            if not merged:
+                fuzzy_deduped.append(job)
+
+        removed = len(unique) - len(fuzzy_deduped)
+        if removed:
+            logger.info("After fuzzy dedup: %d jobs (removed %d near-duplicates)", len(fuzzy_deduped), removed)
+        unique = fuzzy_deduped
 
         # Filter with stats
         cutoff = datetime.now() - timedelta(days=params.max_age_days)
