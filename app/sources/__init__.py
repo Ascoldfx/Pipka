@@ -6,6 +6,7 @@ from app.sources.arbeitsagentur import ArbeitsagenturSource
 from app.sources.xing import XingSource
 from app.sources.watchlist import WatchlistSource
 from app.sources.berlinstartupjobs import BerlinStartupJobsSource
+from app.sources.wttj import WTTJSource
 
 __all__ = [
     "AdzunaSource",
@@ -16,4 +17,5 @@ __all__ = [
     "XingSource",
     "WatchlistSource",
     "BerlinStartupJobsSource",
+    "WTTJSource",
 ]
