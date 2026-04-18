@@ -135,9 +135,11 @@
   .btn:hover { background:var(--bg); color:var(--fg); }
   .btn-outline { background:var(--bg); color:var(--fg); }
   .btn-outline:hover { background:var(--fg); color:var(--bg); }
-  .upload-zone { border:2px dashed var(--border); border-radius:8px; padding:20px; text-align:center; color:var(--muted); cursor:pointer; margin-bottom:12px; }
-  .upload-zone:hover { border-color:var(--fg); color:var(--fg); }
-  .upload-zone input { display:none; }
+  .resume-upload-btn { display:inline-flex; align-items:center; gap:7px; padding:7px 16px; border:1.5px solid var(--green); border-radius:999px; background:transparent; color:var(--green); cursor:pointer; font-family:inherit; font-size:12px; font-weight:600; transition:all .18s; white-space:nowrap; }
+  .resume-upload-btn:hover { background:var(--green); color:#fff; }
+  .resume-upload-btn .ru-icon { font-size:14px; }
+  .resume-upload-btn.loaded { border-color:var(--muted); color:var(--muted); }
+  .resume-upload-btn.loaded:hover { background:var(--hover); color:var(--fg); border-color:var(--fg); }
   .msg { padding:8px 12px; border-radius:4px; margin:8px 0; font-size:12px; }
   .msg.ok { background:#e8f5e9; color:var(--green); }
   /* Settings page */
@@ -155,9 +157,6 @@
   .btn:hover { background:var(--bg); color:var(--fg); }
   .btn-outline { background:var(--bg); color:var(--fg); }
   .btn-outline:hover { background:var(--fg); color:var(--bg); }
-  .upload-zone { border:2px dashed var(--border); border-radius:8px; padding:20px; text-align:center; color:var(--muted); cursor:pointer; margin-bottom:12px; }
-  .upload-zone:hover { border-color:var(--fg); color:var(--fg); }
-  .upload-zone input { display:none; }
   .msg { padding:8px 12px; border-radius:4px; margin:8px 0; font-size:12px; }
   .msg.ok { background:#e8f5e9; color:var(--green); }
   .msg.err { background:#fce4ec; color:var(--red); }
@@ -342,7 +341,6 @@
   .settings .field textarea { border-radius:12px; transition:border-color .18s,box-shadow .18s; }
   .settings .field input:focus, .settings .field textarea:focus, .settings .field select:focus { box-shadow:0 0 0 3px rgba(128,128,128,.12); }
   .settings h3 { font-size:11px; font-weight:700; letter-spacing:.9px; text-transform:uppercase; color:var(--muted); margin:22px 0 8px; }
-  .upload-zone { border-radius:14px; transition:border-color .18s,color .18s; }
   .country-item { border-radius:999px; transition:all .18s; }
   .country-item.active { background:var(--fg); border-color:var(--fg); color:var(--bg); font-weight:600; box-shadow:none; }
 
@@ -371,7 +369,6 @@
   .filters input, .filters select { border-radius:10px !important; }
   .field input, .field select { border-radius:10px !important; }
   .field textarea { border-radius:14px !important; }
-  .upload-zone { border-radius:16px !important; }
   .msg { border-radius:10px !important; }
   .job-card { border-radius:18px !important; }
   .modal { border-radius:24px !important; }
@@ -649,9 +646,13 @@ function applyLang() {
     <div id="settings-msg"></div>
 
     <h3 data-i18n="settings.resume">Resume</h3>
-    <div class="upload-zone" id="upload-zone" onclick="document.getElementById('resume-file').click()">
-      <input type="file" id="resume-file" accept=".pdf,.txt,.doc,.docx">
-      <span data-i18n="btn.upload">Click to upload resume (PDF or TXT)</span>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+      <button class="resume-upload-btn" id="upload-zone" onclick="document.getElementById('resume-file').click()">
+        <span class="ru-icon">📎</span>
+        <span id="resume-upload-label" data-i18n="btn.upload">Upload Resume</span>
+      </button>
+      <input type="file" id="resume-file" accept=".pdf,.txt,.doc,.docx" style="display:none">
+      <span id="resume-upload-status" style="font-size:11px;color:var(--muted);"></span>
     </div>
     <div class="field">
       <label data-i18n="settings.resumeLabel">Resume text / keywords</label>
@@ -1239,21 +1240,27 @@ async function saveProfile(){
 }
 
 /* Resume upload */
+function _setUploadStatus(text, ok) {
+  const st = $('resume-upload-status');
+  const btn = $('upload-zone');
+  if (st) st.textContent = text;
+  if (btn) btn.classList.toggle('loaded', !!ok);
+}
 $('resume-file').addEventListener('change', async(e)=>{
   const file=e.target.files[0]; if(!file) return;
-  $('upload-zone').textContent='Uploading '+file.name+'...';
+  _setUploadStatus('Uploading ' + file.name + '…', false);
   const fd=new FormData(); fd.append('file',file);
   try{
     const r=await fetch('/api/profile/resume',{method:'POST',body:fd});
     const d=await r.json();
     if(d.ok){
-      $('upload-zone').textContent='Uploaded! '+d.length+' chars extracted';
-      $('s-resume').value=d.preview+(d.length>500?'...(truncated in preview)':'');
+      _setUploadStatus('✓ ' + file.name + ' · ' + d.length.toLocaleString() + ' chars', true);
+      $('s-resume').value=d.preview+(d.length>500?'…':'');
       loadProfile();
     } else {
-      $('upload-zone').textContent='Error: '+(d.error||'unknown');
+      _setUploadStatus('⚠ ' + (d.error||'unknown error'), false);
     }
-  }catch(e){$('upload-zone').textContent='Upload failed';}
+  }catch(e){ _setUploadStatus('Upload failed', false); }
 });
 
 /* ── Actions & Modal ── */
