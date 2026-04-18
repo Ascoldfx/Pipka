@@ -5,6 +5,7 @@ from app.sources.remotive import RemotiveSource
 from app.sources.arbeitsagentur import ArbeitsagenturSource
 from app.sources.xing import XingSource
 from app.sources.watchlist import WatchlistSource
+from app.sources.berlinstartupjobs import BerlinStartupJobsSource
 
 __all__ = [
     "AdzunaSource",
@@ -14,4 +15,5 @@ __all__ = [
     "ArbeitsagenturSource",
     "XingSource",
     "WatchlistSource",
+    "BerlinStartupJobsSource",
 ]
