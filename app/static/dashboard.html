@@ -23,10 +23,14 @@
   #theme-toggle:hover { border-color:var(--fg); }
 
   /* Language switcher */
-  .lang-switcher { display:flex; gap:2px; }
-  .lang-btn { background:none; border:1px solid transparent; border-radius:4px; padding:3px 6px; cursor:pointer; font-size:12px; color:var(--muted); }
-  .lang-btn:hover { border-color:var(--border); color:var(--fg); }
-  .lang-btn.active { border-color:var(--fg); color:var(--fg); font-weight:600; }
+  .lang-switcher { display:flex; gap:4px; }
+  .lang-btn { background:none; border:1.5px solid transparent; border-radius:10px; padding:4px 7px 3px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:1px; transition:all .18s; }
+  .lang-btn .lf { font-size:16px; line-height:1; }
+  .lang-btn .lc { font-size:9px; font-weight:700; color:var(--muted); letter-spacing:.4px; line-height:1; }
+  .lang-btn:hover { border-color:var(--border); background:var(--hover); }
+  .lang-btn:hover .lc { color:var(--fg); }
+  .lang-btn.active { border-color:var(--fg); background:var(--hover); }
+  .lang-btn.active .lc { color:var(--fg); }
 
   /* Scan button */
   #scan-btn { font-family:inherit; border:1.5px solid var(--green); border-radius:999px; background:var(--bg); color:var(--green); cursor:pointer; padding:5px 16px 4px; display:flex; flex-direction:column; align-items:center; line-height:1.25; font-size:12px; font-weight:600; min-width:108px; transition:all .18s; }
@@ -37,14 +41,15 @@
 
   /* Tabs — single unified nav row with embedded counts */
   .tabs { display:flex; border-bottom:1px solid var(--border); padding:0 24px; align-items:stretch; }
-  .tab { padding:10px 20px; cursor:pointer; text-align:center; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px; display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:72px; }
+  .tabs-left { display:flex; width:50%; }
+  .tab { flex:1; padding:10px 12px; cursor:pointer; text-align:center; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
   .tab:hover { color:var(--fg); }
   .tab.active { color:var(--fg); border-bottom-color:var(--fg); }
   .tab .t-num { font-size:22px; font-weight:700; color:var(--muted); display:block; line-height:1.2; transition:color .15s; }
   .tab.active .t-num { color:var(--fg); }
   .tab:hover .t-num { color:var(--fg); }
   .tab .t-lbl { font-size:11px; font-weight:500; display:block; white-space:nowrap; }
-  .tab-plain { font-size:13px; font-weight:500; flex-direction:row; min-width:unset; align-self:center; padding:10px 16px; }
+  .tab-plain { font-size:13px; font-weight:500; flex-direction:row; flex:0 0 auto; align-self:center; padding:10px 16px; }
 
   /* Tab content */
   .tab-content { display:none; }
@@ -512,10 +517,10 @@ function applyLang() {
     </div>
     <button id="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
     <div class="lang-switcher">
-      <button class="lang-btn" data-lang="en" onclick="setLang('en')" title="English">EN</button>
-      <button class="lang-btn" data-lang="ru" onclick="setLang('ru')" title="Русский">RU</button>
-      <button class="lang-btn" data-lang="de" onclick="setLang('de')" title="Deutsch">DE</button>
-      <button class="lang-btn" data-lang="es" onclick="setLang('es')" title="Español">ES</button>
+      <button class="lang-btn" data-lang="en" onclick="setLang('en')" title="English"><span class="lf">🇬🇧</span><span class="lc">EN</span></button>
+      <button class="lang-btn" data-lang="ru" onclick="setLang('ru')" title="Русский"><span class="lf">🇷🇺</span><span class="lc">RU</span></button>
+      <button class="lang-btn" data-lang="de" onclick="setLang('de')" title="Deutsch"><span class="lf">🇩🇪</span><span class="lc">DE</span></button>
+      <button class="lang-btn" data-lang="es" onclick="setLang('es')" title="Español"><span class="lf">🇪🇸</span><span class="lc">ES</span></button>
     </div>
     <span id="role-badge" style="font-size:11px; padding:3px 8px; border-radius:4px; font-weight:600; cursor:pointer;" onclick="toggleLogin()">Guest</span>
     <button id="scan-btn" onclick="triggerScan()" style="display:none">
@@ -526,21 +531,23 @@ function applyLang() {
 </header>
 
 <div class="tabs" id="stats">
-  <div class="tab active" data-tab="jobs" onclick="switchTab('jobs')">
-    <span class="t-num" id="stat-total">—</span>
-    <span class="t-lbl" data-i18n="nav.jobs">All Jobs</span>
-  </div>
-  <div class="tab auth-only" data-tab="inbox" onclick="switchTab('inbox')" style="display:none">
-    <span class="t-num" id="tab-inbox-count">—</span>
-    <span class="t-lbl" data-i18n="nav.inbox">Inbox</span>
-  </div>
-  <div class="tab auth-only" data-tab="applied" onclick="switchTab('applied')" style="display:none">
-    <span class="t-num" id="tab-applied-count">—</span>
-    <span class="t-lbl" data-i18n="nav.applied">Applied</span>
-  </div>
-  <div class="tab auth-only" data-tab="rejected" onclick="switchTab('rejected')" style="display:none">
-    <span class="t-num" id="tab-rejected-count">—</span>
-    <span class="t-lbl" data-i18n="nav.rejected">Rejected</span>
+  <div class="tabs-left">
+    <div class="tab active" data-tab="jobs" onclick="switchTab('jobs')">
+      <span class="t-num" id="stat-total">—</span>
+      <span class="t-lbl" data-i18n="nav.jobs">All Jobs</span>
+    </div>
+    <div class="tab auth-only" data-tab="inbox" onclick="switchTab('inbox')" style="display:none">
+      <span class="t-num" id="tab-inbox-count">—</span>
+      <span class="t-lbl" data-i18n="nav.inbox">Inbox</span>
+    </div>
+    <div class="tab auth-only" data-tab="applied" onclick="switchTab('applied')" style="display:none">
+      <span class="t-num" id="tab-applied-count">—</span>
+      <span class="t-lbl" data-i18n="nav.applied">Applied</span>
+    </div>
+    <div class="tab auth-only" data-tab="rejected" onclick="switchTab('rejected')" style="display:none">
+      <span class="t-num" id="tab-rejected-count">—</span>
+      <span class="t-lbl" data-i18n="nav.rejected">Rejected</span>
+    </div>
   </div>
   <div style="flex:1"></div>
   <div class="tab tab-plain auth-only" data-tab="settings" onclick="switchTab('settings')" style="display:none"><span data-i18n="nav.settings">Settings</span></div>
