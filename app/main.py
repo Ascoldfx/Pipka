@@ -51,7 +51,9 @@ class NoCacheAPIMiddleware(BaseHTTPMiddleware):
                     "%s %s → %s (user=%s)",
                     request.method, path, response.status_code, user_id,
                 )
-                if path.startswith("/api"):
+                # Skip GET 404 — scanner probes (/api/.env, /api/config…), not our errors
+                is_probe = response.status_code == 404 and request.method == "GET"
+                if path.startswith("/api") and not is_probe:
                     await record_ops_event(
                         "api_error",
                         "error" if response.status_code >= 500 else "warn",
