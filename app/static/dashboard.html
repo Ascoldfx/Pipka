@@ -619,11 +619,6 @@ function applyLang() {
       <option value="glassdoor">Glassdoor</option>
       <option value="xing">Xing</option>
       <option value="arbeitsagentur">Arbeitsagentur</option>
-      <option value="arbeitnow">Arbeitnow</option>
-      <option value="remotive">Remotive</option>
-      <option value="berlinstartupjobs">BerlinStartupJobs</option>
-      <option value="wttj">WTTJ (Otta)</option>
-      <option value="watchlist">⭐ Watchlist</option>
     </select>
   </div>
   <div class="table-wrap">
@@ -1167,6 +1162,14 @@ function updateSortHeaders(){
 
 /* ── Stats ── */
 const setStat=(id,v)=>{const el=$(id);if(el)el.textContent=v;};
+// Pretty-print source names for the filter dropdown
+const SOURCE_LABELS = {
+  adzuna:'Adzuna', indeed:'Indeed', linkedin:'LinkedIn', glassdoor:'Glassdoor',
+  xing:'Xing', arbeitsagentur:'Arbeitsagentur', arbeitnow:'Arbeitnow',
+  remotive:'Remotive', berlinstartupjobs:'BerlinStartupJobs', wttj:'WTTJ (Otta)',
+  watchlist:'⭐ Watchlist',
+};
+
 async function loadStats(){
   try{
     const d=await(await fetch('/api/stats',{cache:'no-store'})).json();
@@ -1174,6 +1177,20 @@ async function loadStats(){
     setStat('tab-inbox-count',  d.inbox||0);
     setStat('tab-applied-count',d.applied||0);
     setStat('tab-rejected-count',d.rejected||0);
+    // Populate source filter dynamically from live data
+    const sel = $('f-source');
+    if(sel && d.sources){
+      const current = sel.value;
+      // Sort: watchlist last, rest alphabetically by label
+      const entries = Object.entries(d.sources)
+        .sort(([a],[b]) => a === 'watchlist' ? 1 : b === 'watchlist' ? -1 : a.localeCompare(b));
+      sel.innerHTML = `<option value="" data-i18n="filter.all">${T('filter.all')}</option>` +
+        entries.map(([src, cnt]) =>
+          `<option value="${esc(src)}">${SOURCE_LABELS[src] || esc(src)} (${cnt})</option>`
+        ).join('');
+      // Restore previous selection if still valid
+      if(current) sel.value = current;
+    }
   }catch(e){console.error(e)}
 }
 
