@@ -83,11 +83,11 @@ def start_scheduler(bot_app):
         id="daily_cleanup",
         replace_existing=True,
     )
-    # Backfill scorer: every 6 hours — score existing unscored jobs for each user
+    # Backfill scorer: every 2 hours — score existing unscored jobs for each user
     scheduler.add_job(
         _backfill_score,
         "interval",
-        hours=6,
+        hours=2,
         id="backfill_score",
         replace_existing=True,
     )
@@ -301,8 +301,10 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
 async def _backfill_score():
     """Score existing DB jobs that haven't been scored yet for each user.
 
-    Runs every 6 hours. Picks up jobs that were added during scans but skipped
-    due to the per-run 80-job cap, or jobs loaded before a user created their profile.
+    Runs every 2 hours. Two-pass approach:
+      1. Pre-filter rejects → immediately write JobScore(score=0) — no Claude call needed.
+         This drains the "unscored" queue for irrelevant jobs without burning API credits.
+      2. Pre-filter passes  → send up to 500 per run to Claude for AI scoring.
     """
     logger.info("Backfill scorer started")
 
@@ -316,14 +318,12 @@ async def _backfill_score():
             if not user.profile:
                 continue
             try:
-                # All jobs in DB (newest first, limit to recent window)
                 cutoff = datetime.now() - timedelta(days=settings.job_max_age_days)
                 all_jobs_result = await session.execute(
                     select(Job).where(Job.scraped_at >= cutoff)
                 )
                 all_jobs = all_jobs_result.scalars().all()
 
-                # Already scored for this user
                 scored_result = await session.execute(
                     select(JobScore.job_id).where(JobScore.user_id == user.id)
                 )
@@ -332,7 +332,9 @@ async def _backfill_score():
                 hidden_ids = await get_hidden_job_ids(user.id, session)
                 hidden_hashes = await get_hidden_dedup_hashes(user.id, session)
 
-                unscored = []
+                need_ai: list[Job] = []
+                skip_batch: list[JobScore] = []
+
                 for job in all_jobs:
                     if job.id in already_scored_ids:
                         continue
@@ -340,14 +342,32 @@ async def _backfill_score():
                         continue
                     passed, bucket = pre_filter(job, user.profile)
                     if passed and bucket in ("high", "medium"):
-                        unscored.append(job)
+                        need_ai.append(job)
+                    else:
+                        # Mark as processed (score=0) so it never re-enters the queue
+                        skip_batch.append(JobScore(
+                            job_id=job.id,
+                            user_id=user.id,
+                            score=0,
+                            ai_analysis=None,
+                        ))
 
-                if not unscored:
+                # Bulk-insert skip scores (no API calls) — cap at 2000 per run
+                if skip_batch:
+                    for rec in skip_batch[:2000]:
+                        session.add(rec)
+                    await session.commit()
+                    logger.info(
+                        "Backfill: marked %d jobs as pre-filter rejected for user %s",
+                        min(len(skip_batch), 2000), user.telegram_id,
+                    )
+
+                if not need_ai:
                     continue
 
-                # Score up to 120 per run (3 batches of 8 × 5 batches)
-                to_score = unscored[:120]
-                logger.info("Backfill: scoring %d unscored jobs for user %s", len(to_score), user.telegram_id)
+                # AI scoring — cap at 500 per run
+                to_score = need_ai[:500]
+                logger.info("Backfill: AI-scoring %d jobs for user %s", len(to_score), user.telegram_id)
                 await score_jobs(to_score, user, session)
 
             except Exception as e:
