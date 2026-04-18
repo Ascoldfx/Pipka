@@ -28,12 +28,6 @@
   .lang-btn:hover { border-color:var(--border); color:var(--fg); }
   .lang-btn.active { border-color:var(--fg); color:var(--fg); font-weight:600; }
 
-  /* Stats bar */
-  .stats { display:flex; padding:10px 24px; border-bottom:1px solid var(--border); font-size:12px; color:var(--muted); }
-  .stats .s { flex:1; text-align:center; cursor:pointer; padding:2px 4px; }
-  .stats .s:hover { color:var(--fg); }
-  .stats .num { font-weight:700; color:var(--fg); font-size:18px; display:block; line-height:1.2; }
-
   /* Scan button */
   #scan-btn { font-family:inherit; border:1.5px solid var(--green); border-radius:999px; background:var(--bg); color:var(--green); cursor:pointer; padding:5px 16px 4px; display:flex; flex-direction:column; align-items:center; line-height:1.25; font-size:12px; font-weight:600; min-width:108px; transition:all .18s; }
   #scan-btn:hover:not(:disabled) { background:var(--green); color:#fff; }
@@ -41,12 +35,16 @@
   #scan-btn.running { border-color:var(--muted); color:var(--muted); }
   #scan-btn .scan-sub { font-size:9px; font-weight:400; color:inherit; opacity:.75; white-space:nowrap; }
 
-  /* Tabs */
-  .tabs { display:flex; border-bottom:1px solid var(--border); padding:0 24px; gap:0; }
-  .tab { padding:10px 20px; cursor:pointer; font-size:13px; font-weight:500; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px; }
+  /* Tabs — single unified nav row with embedded counts */
+  .tabs { display:flex; border-bottom:1px solid var(--border); padding:0 24px; align-items:stretch; }
+  .tab { padding:10px 20px; cursor:pointer; text-align:center; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px; display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:72px; }
   .tab:hover { color:var(--fg); }
   .tab.active { color:var(--fg); border-bottom-color:var(--fg); }
-  .tab .count { font-size:11px; background:var(--badge); border-radius:8px; padding:1px 6px; margin-left:4px; }
+  .tab .t-num { font-size:22px; font-weight:700; color:var(--muted); display:block; line-height:1.2; transition:color .15s; }
+  .tab.active .t-num { color:var(--fg); }
+  .tab:hover .t-num { color:var(--fg); }
+  .tab .t-lbl { font-size:11px; font-weight:500; display:block; white-space:nowrap; }
+  .tab-plain { font-size:13px; font-weight:500; flex-direction:row; min-width:unset; align-self:center; padding:10px 16px; }
 
   /* Tab content */
   .tab-content { display:none; }
@@ -344,7 +342,9 @@
   .country-item.active { background:var(--fg); border-color:var(--fg); color:var(--bg); font-weight:600; box-shadow:none; }
 
   @media (max-width:768px) {
-    .filters,.stats { padding:8px 12px; }
+    .filters { padding:8px 12px; }
+    .tabs { padding:0 12px; }
+    .tab { padding:8px 10px; min-width:unset; }
     td,th { padding:6px 5px; }
     header { padding:10px 12px; }
     .settings { padding:16px; }
@@ -360,7 +360,7 @@
 /* ── i18n ── */
 const TRANSLATIONS = {
   en: {
-    'nav.jobs':'All Jobs','nav.inbox':'Inbox','nav.applied':'Applied','nav.rejected':'Rejected','nav.settings':'Settings',
+    'nav.jobs':'All Jobs','nav.inbox':'Inbox','nav.applied':'Applied','nav.rejected':'Rejected','nav.settings':'Profile',
     'stats.jobs':'Jobs','stats.scored':'Scored','stats.top':'Top','stats.applied':'Applied','stats.rejected':'Rejected',
     'filter.search':'Search title or company...','filter.score':'Score','filter.country':'Country',
     'filter.allCountries':'All Countries','filter.source':'Source','filter.all':'All','filter.status':'Status',
@@ -389,7 +389,7 @@ const TRANSLATIONS = {
     'lang.label':'Language',
   },
   ru: {
-    'nav.jobs':'Все вакансии','nav.inbox':'Входящие','nav.applied':'Отклики','nav.rejected':'Отклонённые','nav.settings':'Настройки',
+    'nav.jobs':'Все вакансии','nav.inbox':'Входящие','nav.applied':'Отклики','nav.rejected':'Отклонённые','nav.settings':'Профиль',
     'stats.jobs':'Вакансий','stats.scored':'Оценённых','stats.top':'Топ','stats.applied':'Откликов','stats.rejected':'Отклонённых',
     'filter.search':'Поиск по названию или компании...','filter.score':'Оценка','filter.country':'Страна',
     'filter.allCountries':'Все страны','filter.source':'Источник','filter.all':'Все','filter.status':'Статус',
@@ -418,7 +418,7 @@ const TRANSLATIONS = {
     'lang.label':'Язык',
   },
   de: {
-    'nav.jobs':'Alle Stellen','nav.inbox':'Eingang','nav.applied':'Bewerbungen','nav.rejected':'Abgelehnt','nav.settings':'Einstellungen',
+    'nav.jobs':'Alle Stellen','nav.inbox':'Eingang','nav.applied':'Bewerbungen','nav.rejected':'Abgelehnt','nav.settings':'Profil',
     'stats.jobs':'Stellen','stats.scored':'Bewertet','stats.top':'Top','stats.applied':'Bewerbungen','stats.rejected':'Abgelehnt',
     'filter.search':'Titel oder Firma suchen...','filter.score':'Bewertung','filter.country':'Land',
     'filter.allCountries':'Alle Länder','filter.source':'Quelle','filter.all':'Alle','filter.status':'Status',
@@ -447,7 +447,7 @@ const TRANSLATIONS = {
     'lang.label':'Sprache',
   },
   es: {
-    'nav.jobs':'Todos los trabajos','nav.inbox':'Bandeja','nav.applied':'Aplicados','nav.rejected':'Rechazados','nav.settings':'Configuración',
+    'nav.jobs':'Todos los trabajos','nav.inbox':'Bandeja','nav.applied':'Aplicados','nav.rejected':'Rechazados','nav.settings':'Perfil',
     'stats.jobs':'Trabajos','stats.scored':'Puntuados','stats.top':'Top','stats.applied':'Aplicados','stats.rejected':'Rechazados',
     'filter.search':'Buscar título o empresa...','filter.score':'Puntuación','filter.country':'País',
     'filter.allCountries':'Todos los países','filter.source':'Fuente','filter.all':'Todos','filter.status':'Estado',
@@ -525,22 +525,26 @@ function applyLang() {
   </div>
 </header>
 
-<div class="stats" id="stats">
-  <div class="s" onclick="switchTab('jobs')"><span class="num" id="stat-total">—</span><span data-i18n="stats.jobs">Jobs</span></div>
-  <div class="s auth-only" onclick="switchTab('jobs')" style="display:none"><span class="num" id="stat-scored">—</span><span data-i18n="stats.scored">Scored</span></div>
-  <div class="s auth-only" onclick="switchTab('jobs')" style="display:none"><span class="num" id="stat-top">—</span><span data-i18n="stats.top">Top</span></div>
-  <div class="s auth-only" onclick="switchTab('applied')" style="display:none"><span class="num" id="stat-applied">—</span><span data-i18n="stats.applied">Applied</span></div>
-  <div class="s auth-only" onclick="switchTab('rejected')" style="display:none"><span class="num" id="stat-rejected">—</span><span data-i18n="stats.rejected">Rejected</span></div>
-</div>
-
-<div class="tabs">
-  <div class="tab active" data-tab="jobs" onclick="switchTab('jobs')"><span data-i18n="nav.jobs">All Jobs</span></div>
-  <div class="tab auth-only" data-tab="inbox" onclick="switchTab('inbox')" style="display:none"><span data-i18n="nav.inbox">Inbox</span> <span class="count" id="tab-inbox-count">0</span></div>
-  <div class="tab auth-only" data-tab="applied" onclick="switchTab('applied')" style="display:none"><span data-i18n="nav.applied">Applied</span> <span class="count" id="tab-applied-count">0</span></div>
-  <div class="tab auth-only" data-tab="rejected" onclick="switchTab('rejected')" style="display:none"><span data-i18n="nav.rejected">Rejected</span> <span class="count" id="tab-rejected-count">0</span></div>
+<div class="tabs" id="stats">
+  <div class="tab active" data-tab="jobs" onclick="switchTab('jobs')">
+    <span class="t-num" id="stat-total">—</span>
+    <span class="t-lbl" data-i18n="nav.jobs">All Jobs</span>
+  </div>
+  <div class="tab auth-only" data-tab="inbox" onclick="switchTab('inbox')" style="display:none">
+    <span class="t-num" id="tab-inbox-count">—</span>
+    <span class="t-lbl" data-i18n="nav.inbox">Inbox</span>
+  </div>
+  <div class="tab auth-only" data-tab="applied" onclick="switchTab('applied')" style="display:none">
+    <span class="t-num" id="tab-applied-count">—</span>
+    <span class="t-lbl" data-i18n="nav.applied">Applied</span>
+  </div>
+  <div class="tab auth-only" data-tab="rejected" onclick="switchTab('rejected')" style="display:none">
+    <span class="t-num" id="tab-rejected-count">—</span>
+    <span class="t-lbl" data-i18n="nav.rejected">Rejected</span>
+  </div>
   <div style="flex:1"></div>
-  <div class="tab auth-only" data-tab="settings" onclick="switchTab('settings')" style="display:none"><span data-i18n="nav.settings">Settings</span></div>
-  <div class="tab auth-only" data-tab="ops" id="tab-ops" onclick="switchTab('ops')" style="display:none">Ops</div>
+  <div class="tab tab-plain auth-only" data-tab="settings" onclick="switchTab('settings')" style="display:none"><span data-i18n="nav.settings">Settings</span></div>
+  <div class="tab tab-plain auth-only" data-tab="ops" id="tab-ops" onclick="switchTab('ops')" style="display:none">Ops</div>
 </div>
 
 <!-- TAB: ALL JOBS -->
@@ -1089,17 +1093,14 @@ function updateSortHeaders(){
 }
 
 /* ── Stats ── */
+const setStat=(id,v)=>{const el=$(id);if(el)el.textContent=v;};
 async function loadStats(){
   try{
     const d=await(await fetch('/api/stats',{cache:'no-store'})).json();
-    $('stat-total').textContent=d.total_jobs||0;
-    $('stat-scored').textContent=d.scored||0;
-    $('stat-top').textContent=d.top_matches||0;
-    $('stat-applied').textContent=d.applied||0;
-    $('stat-rejected').textContent=d.rejected||0;
-    $('tab-inbox-count').textContent=d.inbox||0;
-    $('tab-applied-count').textContent=d.applied||0;
-    $('tab-rejected-count').textContent=d.rejected||0;
+    setStat('stat-total',    d.total_jobs||0);
+    setStat('tab-inbox-count',  d.inbox||0);
+    setStat('tab-applied-count',d.applied||0);
+    setStat('tab-rejected-count',d.rejected||0);
   }catch(e){console.error(e)}
 }
 
@@ -1295,9 +1296,7 @@ async function triggerScan(){
         checks++;
         const s=await(await fetch('/api/stats',{cache:'no-store'})).json();
         const sub=$('scan-btn-sub'); if(sub) sub.textContent=`${s.total_jobs} jobs · ${checks*10}s`;
-        $('stat-total').textContent=s.total_jobs;
-        $('stat-scored').textContent=s.scored;
-        $('stat-top').textContent=s.top_matches;
+        setStat('stat-total',s.total_jobs);
         if(S.activeTab==='ops') loadOpsOverview(true);
         if(checks>=30){clearInterval(poll);_setScanRunning(false);loadJobs();loadStats();if(S.activeTab==='ops') loadOpsOverview(true);}
       },10000);
