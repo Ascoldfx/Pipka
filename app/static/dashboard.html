@@ -156,7 +156,6 @@
   .country-grid { display:flex; flex-wrap:wrap; gap:8px; margin-top:5px; }
   .country-item { padding:8px 12px; border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:12px; font-weight:500; background:var(--bg); color:var(--fg); user-select:none; transition: all 0.1s; }
   .country-item:hover { border-color:var(--muted); }
-  .country-item.active { background:#e8f5e9; border-color:var(--green); color:var(--green); font-weight:600; box-shadow: 0 1px 3px rgba(45,138,78,0.2); }
 
   /* Applied/Rejected cards */
   .card-list { padding:12px 24px; }
@@ -271,27 +270,55 @@
   :root[data-theme="dark"] .event-item { border-top-color:#2a2a2a; }
   :root[data-theme="dark"] .mini-list span { background:#1e1e1e; }
 
-  /* Language picker */
-  .lang-picker { display:flex; flex-wrap:wrap; gap:8px; min-height:36px; }
-  .lang-chip { display:inline-flex; align-items:stretch; border:1px solid var(--border); border-radius:6px; background:var(--hover); overflow:hidden; font-size:12px; }
-  .lang-chip .lc-name { padding:5px 9px; font-weight:600; border-right:1px solid var(--border); white-space:nowrap; }
-  .lang-chip .lc-levels { display:flex; }
-  .lang-chip .lc-level { padding:5px 7px; color:var(--muted); cursor:pointer; border-right:1px solid var(--border); user-select:none; }
-  .lang-chip .lc-level:hover { background:var(--border); color:var(--fg); }
-  .lang-chip .lc-level.active { background:var(--fg); color:var(--bg); font-weight:600; }
-  .lang-chip .lc-remove { padding:5px 8px; cursor:pointer; color:var(--muted); }
-  .lang-chip .lc-remove:hover { background:#fee2e2; color:var(--red); }
-  .lang-add-row { display:flex; align-items:center; gap:8px; margin-top:8px; }
-  .lang-add-row select { font-family:inherit; font-size:12px; padding:5px 8px; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--fg); outline:none; cursor:pointer; }
-  .lang-add-row select:focus { border-color:var(--fg); }
+  /* ── Language picker ── */
+  .lang-picker { display:flex; flex-wrap:wrap; gap:8px; padding:4px 0; min-height:40px; }
+  .lp-pill { position:relative; display:inline-flex; align-items:center; gap:6px; padding:7px 14px 7px 12px; border:1.5px solid var(--border); border-radius:999px; background:var(--bg); cursor:pointer; font-size:13px; font-weight:500; transition:border-color .18s,background .18s; user-select:none; }
+  .lp-pill:hover { border-color:var(--muted); }
+  .lp-pill.has-level { border-color:var(--fg); background:var(--hover); }
+  .lp-pill .lp-lvl { font-size:11px; color:var(--muted); font-weight:400; }
+  .lp-pill.has-level .lp-lvl { color:var(--fg); font-weight:600; }
+  .lp-pill .lp-arrow { font-size:9px; color:var(--muted); }
+  .lp-rm { display:none; position:absolute; right:-5px; top:-5px; width:16px; height:16px; border-radius:999px; background:var(--fg); color:var(--bg); font-size:9px; line-height:1; align-items:center; justify-content:center; cursor:pointer; z-index:2; }
+  .lp-pill:hover .lp-rm { display:flex; }
+  .lp-rm:hover { background:var(--red) !important; }
+  .lp-drop { display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:250; background:var(--bg); border:1.5px solid var(--fg); border-radius:14px; padding:5px; min-width:190px; box-shadow:0 8px 28px rgba(0,0,0,.13); }
+  .lp-drop.open { display:block; animation:dropIn .14s ease; }
+  .lp-di { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border-radius:10px; cursor:pointer; font-size:13px; gap:8px; transition:background .1s; }
+  .lp-di:hover { background:var(--hover); }
+  .lp-di.active { font-weight:700; }
+  .lp-di .lp-di-sub { font-size:10px; color:var(--muted); margin-left:auto; margin-right:6px; }
+  .lp-di .lp-di-chk { font-size:11px; color:var(--green); opacity:0; flex-shrink:0; }
+  .lp-di.active .lp-di-chk { opacity:1; }
+  .lp-add-pill { display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border:1.5px dashed var(--border); border-radius:999px; background:transparent; color:var(--muted); cursor:pointer; font-size:13px; font-family:inherit; transition:all .18s; position:relative; overflow:hidden; }
+  .lp-add-pill:hover { border-color:var(--fg); color:var(--fg); background:var(--hover); }
+  .lp-add-pill select { position:absolute; inset:0; opacity:0; cursor:pointer; font-size:1px; width:100%; }
 
-  /* Work mode toggle */
-  .wm-toggle { display:flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; margin-top:6px; }
-  .wm-btn { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:10px 6px; font-family:inherit; font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:.5px; border:none; border-right:1px solid var(--border); background:var(--bg); color:var(--muted); cursor:pointer; transition:background .12s,color .12s; }
-  .wm-btn:last-child { border-right:none; }
-  .wm-btn:hover { background:var(--hover); color:var(--fg); }
-  .wm-btn.active { background:var(--fg); color:var(--bg); }
-  .wm-btn .wm-icon { font-size:18px; }
+  /* ── Work mode pill ── */
+  .wm-wrap { position:relative; display:inline-block; margin-top:6px; }
+  .wm-pill { display:inline-flex; align-items:center; gap:8px; padding:10px 20px; border:1.5px solid var(--fg); border-radius:999px; background:var(--fg); color:var(--bg); cursor:pointer; font-family:inherit; font-size:13px; font-weight:600; transition:opacity .18s; }
+  .wm-pill:hover { opacity:.82; }
+  .wm-pill .wm-arrow { font-size:10px; opacity:.65; }
+  .wm-drop { display:none; position:absolute; top:calc(100% + 8px); left:0; z-index:250; background:var(--bg); border:1.5px solid var(--fg); border-radius:16px; padding:6px; min-width:200px; box-shadow:0 8px 28px rgba(0,0,0,.13); }
+  .wm-drop.open { display:block; animation:dropIn .14s ease; }
+  .wm-di { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; cursor:pointer; font-size:13px; color:var(--fg); transition:background .1s; }
+  .wm-di:hover { background:var(--hover); }
+  .wm-di.active { font-weight:700; }
+  .wm-di .wm-di-icon { font-size:16px; flex-shrink:0; }
+  .wm-di .wm-di-chk { margin-left:auto; font-size:11px; color:var(--green); opacity:0; }
+  .wm-di.active .wm-di-chk { opacity:1; }
+
+  /* ── Dropdown animation ── */
+  @keyframes dropIn { from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)} }
+
+  /* ── Unified Settings controls ── */
+  .settings .btn { border-radius:999px; padding:10px 28px; }
+  .settings .field input, .settings .field select { border-radius:10px; transition:border-color .18s,box-shadow .18s; }
+  .settings .field textarea { border-radius:12px; transition:border-color .18s,box-shadow .18s; }
+  .settings .field input:focus, .settings .field textarea:focus, .settings .field select:focus { box-shadow:0 0 0 3px rgba(128,128,128,.12); }
+  .settings h3 { font-size:11px; font-weight:700; letter-spacing:.9px; text-transform:uppercase; color:var(--muted); margin:22px 0 8px; }
+  .upload-zone { border-radius:14px; transition:border-color .18s,color .18s; }
+  .country-item { border-radius:999px; transition:all .18s; }
+  .country-item.active { background:var(--fg); border-color:var(--fg); color:var(--bg); font-weight:600; box-shadow:none; }
 
   @media (max-width:768px) {
     .filters,.stats { padding:8px 12px; }
@@ -331,7 +358,7 @@ const TRANSLATIONS = {
     'settings.excludedPlaceholder':'Junior, Developer, German C1, Sales, Part-time...',
     'settings.englishOnly':'English Only — prioritise jobs with English as working language; skip positions posted entirely in German / French / Dutch',
     'settings.prefs':'Preferences','settings.salary':'Min salary (EUR/year)','settings.experience':'Experience (years)',
-    'settings.languages':'Languages (e.g. en:C2, de:B1)','settings.workMode':'Work mode',
+    'settings.languages':'Languages','settings.workMode':'Work mode',
     'settings.workAny':'Any','settings.workRemote':'Remote','settings.workHybrid':'Hybrid','settings.workOnsite':'On-site',
     'settings.countries':'Active Target Countries','settings.industries':'Industries (comma-separated)',
     'settings.industriesPlaceholder':'FMCG, Manufacturing, Automotive, Pharma...',
@@ -361,7 +388,7 @@ const TRANSLATIONS = {
     'settings.excludedPlaceholder':'Junior, Developer, German C1, Sales, Part-time...',
     'settings.englishOnly':'Только английский — приоритет вакансиям с английским рабочим языком; пропускать позиции полностью на немецком / французском / голландском',
     'settings.prefs':'Предпочтения','settings.salary':'Мин. зарплата (EUR/год)','settings.experience':'Опыт работы (лет)',
-    'settings.languages':'Языки (напр. en:C2, de:B1)','settings.workMode':'Режим работы',
+    'settings.languages':'Языки','settings.workMode':'Режим работы',
     'settings.workAny':'Любой','settings.workRemote':'Удалённо','settings.workHybrid':'Гибрид','settings.workOnsite':'В офисе',
     'settings.countries':'Целевые страны поиска','settings.industries':'Отрасли (через запятую)',
     'settings.industriesPlaceholder':'FMCG, производство, автомобили, фарма...',
@@ -391,7 +418,7 @@ const TRANSLATIONS = {
     'settings.excludedPlaceholder':'Junior, Developer, German C1, Sales, Teilzeit...',
     'settings.englishOnly':'Nur Englisch — Priorität für englischsprachige Stellen; deutschsprachige / französische / niederländische Inserate überspringen',
     'settings.prefs':'Einstellungen','settings.salary':'Mindestgehalt (EUR/Jahr)','settings.experience':'Erfahrung (Jahre)',
-    'settings.languages':'Sprachen (z.B. en:C2, de:B1)','settings.workMode':'Arbeitsmodell',
+    'settings.languages':'Sprachen','settings.workMode':'Arbeitsmodell',
     'settings.workAny':'Beliebig','settings.workRemote':'Remote','settings.workHybrid':'Hybrid','settings.workOnsite':'Vor Ort',
     'settings.countries':'Aktive Zielländer','settings.industries':'Branchen (kommagetrennt)',
     'settings.industriesPlaceholder':'FMCG, Produktion, Automobil, Pharma...',
@@ -421,7 +448,7 @@ const TRANSLATIONS = {
     'settings.excludedPlaceholder':'Junior, Developer, German C1, Sales, Media jornada...',
     'settings.englishOnly':'Solo inglés — priorizar trabajos con inglés como idioma de trabajo; omitir posiciones publicadas en alemán / francés / neerlandés',
     'settings.prefs':'Preferencias','settings.salary':'Salario mínimo (EUR/año)','settings.experience':'Experiencia (años)',
-    'settings.languages':'Idiomas (ej. en:C2, de:B1)','settings.workMode':'Modo de trabajo',
+    'settings.languages':'Idiomas','settings.workMode':'Modo de trabajo',
     'settings.workAny':'Cualquiera','settings.workRemote':'Remoto','settings.workHybrid':'Híbrido','settings.workOnsite':'Presencial',
     'settings.countries':'Países objetivo activos','settings.industries':'Industrias (separadas por coma)',
     'settings.industriesPlaceholder':'FMCG, Manufactura, Automotriz, Farma...',
@@ -618,42 +645,21 @@ function applyLang() {
     <div class="field" style="margin-bottom:16px;">
       <label data-i18n="settings.languages">Languages</label>
       <div class="lang-picker" id="lang-picker"></div>
-      <div class="lang-add-row">
-        <select id="lang-add-select">
-          <option value="">＋ Add language…</option>
-          <option value="en">🇬🇧 English</option>
-          <option value="de">🇩🇪 Deutsch</option>
-          <option value="fr">🇫🇷 Français</option>
-          <option value="es">🇪🇸 Español</option>
-          <option value="it">🇮🇹 Italiano</option>
-          <option value="pt">🇵🇹 Português</option>
-          <option value="nl">🇳🇱 Nederlands</option>
-          <option value="pl">🇵🇱 Polski</option>
-          <option value="ru">🇷🇺 Русский</option>
-          <option value="sv">🇸🇪 Svenska</option>
-          <option value="cs">🇨🇿 Čeština</option>
-          <option value="hu">🇭🇺 Magyar</option>
-          <option value="ro">🇷🇴 Română</option>
-          <option value="da">🇩🇰 Dansk</option>
-          <option value="fi">🇫🇮 Suomi</option>
-        </select>
-      </div>
     </div>
     <div class="field" style="margin-bottom:24px;">
       <label data-i18n="settings.workMode">Work mode</label>
-      <div class="wm-toggle" id="s-workmode-toggle">
-        <button class="wm-btn active" data-mode="any" onclick="setWorkMode('any')">
-          <span class="wm-icon">🌐</span><span class="wm-label" data-i18n="settings.workAny">Any</span>
+      <div class="wm-wrap" id="wm-wrap">
+        <button class="wm-pill" id="wm-pill-btn" onclick="toggleWMDrop(event)">
+          <span id="wm-pill-icon">🌐</span>
+          <span id="wm-pill-label" data-i18n="settings.workAny">Any</span>
+          <span class="wm-arrow">▾</span>
         </button>
-        <button class="wm-btn" data-mode="onsite" onclick="setWorkMode('onsite')">
-          <span class="wm-icon">🏢</span><span class="wm-label" data-i18n="settings.workOnsite">Office</span>
-        </button>
-        <button class="wm-btn" data-mode="hybrid" onclick="setWorkMode('hybrid')">
-          <span class="wm-icon">🔀</span><span class="wm-label" data-i18n="settings.workHybrid">Hybrid</span>
-        </button>
-        <button class="wm-btn" data-mode="remote" onclick="setWorkMode('remote')">
-          <span class="wm-icon">🏠</span><span class="wm-label" data-i18n="settings.workRemote">Remote</span>
-        </button>
+        <div class="wm-drop" id="wm-drop">
+          <div class="wm-di active" data-mode="any" onclick="setWorkMode('any');closeWMDrop()"><span class="wm-di-icon">🌐</span><span data-i18n="settings.workAny">Any</span><span class="wm-di-chk">✓</span></div>
+          <div class="wm-di" data-mode="onsite" onclick="setWorkMode('onsite');closeWMDrop()"><span class="wm-di-icon">🏢</span><span data-i18n="settings.workOnsite">Office</span><span class="wm-di-chk">✓</span></div>
+          <div class="wm-di" data-mode="hybrid" onclick="setWorkMode('hybrid');closeWMDrop()"><span class="wm-di-icon">🔀</span><span data-i18n="settings.workHybrid">Hybrid</span><span class="wm-di-chk">✓</span></div>
+          <div class="wm-di" data-mode="remote" onclick="setWorkMode('remote');closeWMDrop()"><span class="wm-di-icon">🏠</span><span data-i18n="settings.workRemote">Remote</span><span class="wm-di-chk">✓</span></div>
+        </div>
       </div>
     </div>
     <div class="field-row">
@@ -786,26 +792,79 @@ const $ = id => document.getElementById(id);
 
 /* ── Language Picker ── */
 const LANG_NAMES = {en:'🇬🇧 English',de:'🇩🇪 Deutsch',fr:'🇫🇷 Français',es:'🇪🇸 Español',it:'🇮🇹 Italiano',pt:'🇵🇹 Português',nl:'🇳🇱 Nederlands',pl:'🇵🇱 Polski',ru:'🇷🇺 Русский',sv:'🇸🇪 Svenska',cs:'🇨🇿 Čeština',hu:'🇭🇺 Magyar',ro:'🇷🇴 Română',da:'🇩🇰 Dansk',fi:'🇫🇮 Suomi'};
-const LANG_LEVELS = ['A1-A2','B1-B2','C1-C2','Native'];
+/* Proficiency: universal descriptors (not raw CEFR codes) */
+const LANG_LEVELS = [
+  {key:'basic',         label:'Basic',         sub:'A1–A2'},
+  {key:'conversational',label:'Conversational', sub:'B1–B2'},
+  {key:'fluent',        label:'Fluent',         sub:'C1–C2'},
+  {key:'native',        label:'Native',         sub:''},
+];
+/* Migrate old CEFR string values saved before this redesign */
+const LEVEL_MIGRATE = {'A1-A2':'basic','B1-B2':'conversational','C1-C2':'fluent','Native':'native'};
 let _langs = {};
 let _workMode = 'any';
+
+function _normLevel(v){ return LEVEL_MIGRATE[v]||(['basic','conversational','fluent','native'].includes(v)?v:'fluent'); }
 
 function renderLangPicker(){
   const p=$('lang-picker'); if(!p) return;
   p.innerHTML='';
-  for(const [code,level] of Object.entries(_langs)){
-    const chip=document.createElement('div');
-    chip.className='lang-chip';
-    chip.innerHTML=`<span class="lc-name">${LANG_NAMES[code]||code}</span><span class="lc-levels">${LANG_LEVELS.map(l=>`<span class="lc-level${level===l?' active':''}" onclick="_setLangLevel('${code}','${l}')">${l}</span>`).join('')}</span><span class="lc-remove" onclick="_removeLang('${code}')">✕</span>`;
-    p.appendChild(chip);
+  for(const [code,raw] of Object.entries(_langs)){
+    const lvlKey=_normLevel(raw);
+    const lvlObj=LANG_LEVELS.find(l=>l.key===lvlKey)||LANG_LEVELS[2];
+    const pill=document.createElement('div');
+    pill.className='lp-pill has-level';
+    pill.dataset.code=code;
+    const dropId='lpdrop-'+code;
+    pill.innerHTML=`${LANG_NAMES[code]||code}<span class="lp-lvl">· ${lvlObj.label}</span><span class="lp-arrow">▾</span>`+
+      `<div class="lp-drop" id="${dropId}">`+
+      LANG_LEVELS.map(l=>`<div class="lp-di${lvlKey===l.key?' active':''}" onclick="_setLangLevel('${code}','${l.key}');event.stopPropagation()">`+
+        `<span>${l.label}</span><span class="lp-di-sub">${l.sub}</span><span class="lp-di-chk">✓</span></div>`).join('')+
+      `</div>`+
+      `<span class="lp-rm" onclick="_removeLang('${code}');event.stopPropagation()">✕</span>`;
+    pill.addEventListener('click',()=>_toggleLangDrop(code));
+    p.appendChild(pill);
   }
+  /* Add language pill */
+  const addWrap=document.createElement('div'); addWrap.style.position='relative';
+  const used=Object.keys(_langs);
+  addWrap.innerHTML=`<button class="lp-add-pill">＋ Add language`+
+    `<select id="lang-add-select"><option value=""></option>`+
+    Object.entries(LANG_NAMES).filter(([c])=>!used.includes(c)).map(([c,n])=>`<option value="${c}">${n}</option>`).join('')+
+    `</select></button>`;
+  p.appendChild(addWrap);
+  const sel=p.querySelector('#lang-add-select');
+  if(sel) sel.addEventListener('change',function(){
+    if(!this.value) return;
+    if(!_langs[this.value]) _langs[this.value]='fluent';
+    this.value=''; renderLangPicker();
+  });
 }
-function _setLangLevel(code,level){_langs[code]=level;renderLangPicker();}
+
+function _toggleLangDrop(code){
+  document.querySelectorAll('.lp-drop.open').forEach(d=>{if(d.id!=='lpdrop-'+code)d.classList.remove('open');});
+  const d=$('lpdrop-'+code); if(d) d.classList.toggle('open');
+}
+function _setLangLevel(code,lvl){_langs[code]=lvl;renderLangPicker();}
 function _removeLang(code){delete _langs[code];renderLangPicker();}
+
+/* ── Work Mode Pill ── */
+const WM_OPT={
+  any:    {icon:'🌐',i18n:'settings.workAny'},
+  onsite: {icon:'🏢',i18n:'settings.workOnsite'},
+  hybrid: {icon:'🔀',i18n:'settings.workHybrid'},
+  remote: {icon:'🏠',i18n:'settings.workRemote'},
+};
 function setWorkMode(mode){
   _workMode=mode;
-  document.querySelectorAll('#s-workmode-toggle .wm-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
+  const opt=WM_OPT[mode]||WM_OPT.any;
+  const icon=$('wm-pill-icon'), lbl=$('wm-pill-label');
+  if(icon) icon.textContent=opt.icon;
+  if(lbl){ lbl.dataset.i18n=opt.i18n; lbl.textContent=T(opt.i18n); }
+  document.querySelectorAll('#wm-drop .wm-di').forEach(el=>el.classList.toggle('active',el.dataset.mode===mode));
 }
+function toggleWMDrop(e){ e&&e.stopPropagation(); const d=$('wm-drop'); if(d) d.classList.toggle('open'); }
+function closeWMDrop(){ const d=$('wm-drop'); if(d) d.classList.remove('open'); }
 
 /* ── Dark Mode ── */
 (function() {
@@ -872,6 +931,8 @@ function toggleCountryDrop(e) {
 }
 document.addEventListener('click', (e) => {
   if (!$('country-wrap').contains(e.target)) $('f-country-drop').classList.remove('open');
+  if(!e.target.closest('#wm-wrap')) closeWMDrop();
+  if(!e.target.closest('.lp-pill')) document.querySelectorAll('.lp-drop.open').forEach(d=>d.classList.remove('open'));
 });
 
 async function loadCountries() {
@@ -1030,14 +1091,6 @@ async function saveProfile(){
     setTimeout(()=>$('settings-msg').innerHTML='',3000);
   }catch(e){$('settings-msg').innerHTML='<div class="msg err">Network error</div>';}
 }
-
-/* ── Lang add select ── */
-const _langAddSel=$('lang-add-select');
-if(_langAddSel) _langAddSel.addEventListener('change',function(){
-  const code=this.value; if(!code) return;
-  if(!_langs[code]) _langs[code]='B1-B2';
-  this.value=''; renderLangPicker();
-});
 
 /* Resume upload */
 $('resume-file').addEventListener('change', async(e)=>{
