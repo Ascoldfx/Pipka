@@ -115,6 +115,24 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
         if job.salary_min < profile.min_salary * 0.7:  # 70k floor for 100k target
             return False, "low"
 
+    # Work mode filter
+    if profile and profile.work_mode and profile.work_mode != "any":
+        if profile.work_mode == "remote":
+            # Reject explicitly onsite jobs
+            if job.is_remote is False:
+                return False, "low"
+            # If is_remote is unknown, require "remote" keyword in text
+            if job.is_remote is None and "remote" not in text:
+                return False, "low"
+        elif profile.work_mode == "onsite":
+            # Reject explicitly remote jobs
+            if job.is_remote is True:
+                return False, "low"
+        elif profile.work_mode == "hybrid":
+            # Reject explicitly remote-only (no hybrid mention) jobs
+            if job.is_remote is True and "hybrid" not in text:
+                return False, "low"
+
     # Country check
     if profile and profile.preferred_countries and job.country:
         if job.country.lower() not in [c.lower() for c in profile.preferred_countries]:

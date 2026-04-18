@@ -271,6 +271,28 @@
   :root[data-theme="dark"] .event-item { border-top-color:#2a2a2a; }
   :root[data-theme="dark"] .mini-list span { background:#1e1e1e; }
 
+  /* Language picker */
+  .lang-picker { display:flex; flex-wrap:wrap; gap:8px; min-height:36px; }
+  .lang-chip { display:inline-flex; align-items:stretch; border:1px solid var(--border); border-radius:6px; background:var(--hover); overflow:hidden; font-size:12px; }
+  .lang-chip .lc-name { padding:5px 9px; font-weight:600; border-right:1px solid var(--border); white-space:nowrap; }
+  .lang-chip .lc-levels { display:flex; }
+  .lang-chip .lc-level { padding:5px 7px; color:var(--muted); cursor:pointer; border-right:1px solid var(--border); user-select:none; }
+  .lang-chip .lc-level:hover { background:var(--border); color:var(--fg); }
+  .lang-chip .lc-level.active { background:var(--fg); color:var(--bg); font-weight:600; }
+  .lang-chip .lc-remove { padding:5px 8px; cursor:pointer; color:var(--muted); }
+  .lang-chip .lc-remove:hover { background:#fee2e2; color:var(--red); }
+  .lang-add-row { display:flex; align-items:center; gap:8px; margin-top:8px; }
+  .lang-add-row select { font-family:inherit; font-size:12px; padding:5px 8px; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--fg); outline:none; cursor:pointer; }
+  .lang-add-row select:focus { border-color:var(--fg); }
+
+  /* Work mode toggle */
+  .wm-toggle { display:flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; margin-top:6px; }
+  .wm-btn { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:10px 6px; font-family:inherit; font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:.5px; border:none; border-right:1px solid var(--border); background:var(--bg); color:var(--muted); cursor:pointer; transition:background .12s,color .12s; }
+  .wm-btn:last-child { border-right:none; }
+  .wm-btn:hover { background:var(--hover); color:var(--fg); }
+  .wm-btn.active { background:var(--fg); color:var(--bg); }
+  .wm-btn .wm-icon { font-size:18px; }
+
   @media (max-width:768px) {
     .filters,.stats { padding:8px 12px; }
     td,th { padding:6px 5px; }
@@ -428,13 +450,6 @@ function applyLang() {
   document.querySelectorAll('.lang-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.lang === _lang);
   });
-  const wm = document.getElementById('s-workmode');
-  if (wm) {
-    wm.options[0].text = T('settings.workAny');
-    wm.options[1].text = T('settings.workRemote');
-    wm.options[2].text = T('settings.workHybrid');
-    wm.options[3].text = T('settings.workOnsite');
-  }
   const fcl = document.getElementById('f-country-label');
   if (fcl && fcl.textContent === 'All Countries' || (fcl && fcl.getAttribute('data-default') === '1')) {
     fcl.textContent = T('filter.allCountries');
@@ -600,19 +615,45 @@ function applyLang() {
         <input type="number" id="s-experience" placeholder="15">
       </div>
     </div>
-    <div class="field-row">
-      <div class="field">
-        <label data-i18n="settings.languages">Languages (e.g. en:C2, de:B1)</label>
-        <input type="text" id="s-languages" placeholder="en:C2, de:B1">
-      </div>
-      <div class="field">
-        <label data-i18n="settings.workMode">Work mode</label>
-        <select id="s-workmode">
-          <option value="any" data-i18n="settings.workAny">Any</option>
-          <option value="remote" data-i18n="settings.workRemote">Remote</option>
-          <option value="hybrid" data-i18n="settings.workHybrid">Hybrid</option>
-          <option value="onsite" data-i18n="settings.workOnsite">On-site</option>
+    <div class="field" style="margin-bottom:16px;">
+      <label data-i18n="settings.languages">Languages</label>
+      <div class="lang-picker" id="lang-picker"></div>
+      <div class="lang-add-row">
+        <select id="lang-add-select">
+          <option value="">＋ Add language…</option>
+          <option value="en">🇬🇧 English</option>
+          <option value="de">🇩🇪 Deutsch</option>
+          <option value="fr">🇫🇷 Français</option>
+          <option value="es">🇪🇸 Español</option>
+          <option value="it">🇮🇹 Italiano</option>
+          <option value="pt">🇵🇹 Português</option>
+          <option value="nl">🇳🇱 Nederlands</option>
+          <option value="pl">🇵🇱 Polski</option>
+          <option value="ru">🇷🇺 Русский</option>
+          <option value="sv">🇸🇪 Svenska</option>
+          <option value="cs">🇨🇿 Čeština</option>
+          <option value="hu">🇭🇺 Magyar</option>
+          <option value="ro">🇷🇴 Română</option>
+          <option value="da">🇩🇰 Dansk</option>
+          <option value="fi">🇫🇮 Suomi</option>
         </select>
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:24px;">
+      <label data-i18n="settings.workMode">Work mode</label>
+      <div class="wm-toggle" id="s-workmode-toggle">
+        <button class="wm-btn active" data-mode="any" onclick="setWorkMode('any')">
+          <span class="wm-icon">🌐</span><span class="wm-label" data-i18n="settings.workAny">Any</span>
+        </button>
+        <button class="wm-btn" data-mode="onsite" onclick="setWorkMode('onsite')">
+          <span class="wm-icon">🏢</span><span class="wm-label" data-i18n="settings.workOnsite">Office</span>
+        </button>
+        <button class="wm-btn" data-mode="hybrid" onclick="setWorkMode('hybrid')">
+          <span class="wm-icon">🔀</span><span class="wm-label" data-i18n="settings.workHybrid">Hybrid</span>
+        </button>
+        <button class="wm-btn" data-mode="remote" onclick="setWorkMode('remote')">
+          <span class="wm-icon">🏠</span><span class="wm-label" data-i18n="settings.workRemote">Remote</span>
+        </button>
       </div>
     </div>
     <div class="field-row">
@@ -742,6 +783,29 @@ function applyLang() {
 /* ── State ── */
 const S = { page:1, perPage:50, sort:'score', order:'desc', totalPages:1, tabStatus:'', role:'guest', authenticated:false, activeTab:'jobs', opsWindow:24 };
 const $ = id => document.getElementById(id);
+
+/* ── Language Picker ── */
+const LANG_NAMES = {en:'🇬🇧 English',de:'🇩🇪 Deutsch',fr:'🇫🇷 Français',es:'🇪🇸 Español',it:'🇮🇹 Italiano',pt:'🇵🇹 Português',nl:'🇳🇱 Nederlands',pl:'🇵🇱 Polski',ru:'🇷🇺 Русский',sv:'🇸🇪 Svenska',cs:'🇨🇿 Čeština',hu:'🇭🇺 Magyar',ro:'🇷🇴 Română',da:'🇩🇰 Dansk',fi:'🇫🇮 Suomi'};
+const LANG_LEVELS = ['A1-A2','B1-B2','C1-C2','Native'];
+let _langs = {};
+let _workMode = 'any';
+
+function renderLangPicker(){
+  const p=$('lang-picker'); if(!p) return;
+  p.innerHTML='';
+  for(const [code,level] of Object.entries(_langs)){
+    const chip=document.createElement('div');
+    chip.className='lang-chip';
+    chip.innerHTML=`<span class="lc-name">${LANG_NAMES[code]||code}</span><span class="lc-levels">${LANG_LEVELS.map(l=>`<span class="lc-level${level===l?' active':''}" onclick="_setLangLevel('${code}','${l}')">${l}</span>`).join('')}</span><span class="lc-remove" onclick="_removeLang('${code}')">✕</span>`;
+    p.appendChild(chip);
+  }
+}
+function _setLangLevel(code,level){_langs[code]=level;renderLangPicker();}
+function _removeLang(code){delete _langs[code];renderLangPicker();}
+function setWorkMode(mode){
+  _workMode=mode;
+  document.querySelectorAll('#s-workmode-toggle .wm-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
+}
 
 /* ── Dark Mode ── */
 (function() {
@@ -935,8 +999,8 @@ async function loadProfile(){
     if($('s-companies')) $('s-companies').value=(p.target_companies||[]).join(', ');
     $('s-salary').value=p.min_salary||'';
     $('s-experience').value=p.experience_years||'';
-    $('s-languages').value=p.languages?Object.entries(p.languages).map(([k,v])=>k+':'+v).join(', '):'';
-    $('s-workmode').value=p.work_mode||'any';
+    _langs=p.languages||{}; renderLangPicker();
+    setWorkMode(p.work_mode||'any');
     const pc = p.preferred_countries||[];
     document.querySelectorAll('#s-countries-grid .country-item').forEach(el => {
       el.classList.toggle('active', pc.includes(el.dataset.code));
@@ -954,8 +1018,8 @@ async function saveProfile(){
   if($('s-companies')) fd.append('target_companies',$('s-companies').value);
   fd.append('min_salary',$('s-salary').value||0);
   fd.append('experience_years',$('s-experience').value||0);
-  fd.append('languages',$('s-languages').value);
-  fd.append('work_mode',$('s-workmode').value);
+  fd.append('languages',JSON.stringify(_langs));
+  fd.append('work_mode',_workMode);
   const activeCountries = Array.from(document.querySelectorAll('#s-countries-grid .country-item.active')).map(el => el.dataset.code);
   fd.append('preferred_countries', activeCountries.join(','));
   fd.append('industries',$('s-industries').value);
@@ -966,6 +1030,14 @@ async function saveProfile(){
     setTimeout(()=>$('settings-msg').innerHTML='',3000);
   }catch(e){$('settings-msg').innerHTML='<div class="msg err">Network error</div>';}
 }
+
+/* ── Lang add select ── */
+const _langAddSel=$('lang-add-select');
+if(_langAddSel) _langAddSel.addEventListener('change',function(){
+  const code=this.value; if(!code) return;
+  if(!_langs[code]) _langs[code]='B1-B2';
+  this.value=''; renderLangPicker();
+});
 
 /* Resume upload */
 $('resume-file').addEventListener('change', async(e)=>{
