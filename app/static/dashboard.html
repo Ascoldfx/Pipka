@@ -1436,6 +1436,19 @@ function fmtNumber(v){
   return (v ?? 0).toLocaleString('de-DE');
 }
 
+function renderJooblebudget(j){
+  if(!j) return '';
+  const pct = j.pct_used;
+  const color = pct >= 90 ? 'var(--red)' : pct >= 70 ? 'var(--yellow)' : 'var(--green)';
+  const warn = pct >= 80 ? '<span style="color:var(--red);font-weight:600">⚠ Пора заказать новый ключ</span>' : '';
+  return '<div class="mini-list" style="margin-top:6px">'
+    + '<span style="font-weight:600">Jooble API бюджет:</span>'
+    + '<span style="color:' + color + '">' + fmtNumber(j.requests_total) + ' / ' + fmtNumber(j.budget) + ' запросов (' + pct + '%)</span>'
+    + '<span style="color:var(--muted)">осталось: ' + fmtNumber(j.remaining) + '</span>'
+    + warn
+    + '</div>';
+}
+
 function fmtRelative(dateStr){
   if(!dateStr) return '—';
   const d = new Date(dateStr);
@@ -1612,17 +1625,7 @@ async function loadOpsOverview(force=false){
           const errNote = s.status === 'error' ? ' <span style="color:var(--red)">error</span>' : '';
           return `<span>${esc(s.source)}: ${fmtNumber(s.raw_count || 0)}${reqNote}${errNote}</span>`;
         }).join('')}</div>` : ''}
-        ${d.jooble ? (() => {
-          const j = d.jooble;
-          const pct = j.pct_used;
-          const color = pct >= 90 ? 'var(--red)' : pct >= 70 ? 'var(--yellow)' : 'var(--green)';
-          return `<div class="mini-list" style="margin-top:6px">
-            <span style="font-weight:600">Jooble API бюджет:</span>
-            <span style="color:${color}">${fmtNumber(j.requests_total)} / ${fmtNumber(j.budget)} запросов (${pct}%)</span>
-            <span style="color:var(--muted)">осталось: ${fmtNumber(j.remaining)}</span>
-            ${pct >= 80 ? '<span style="color:var(--red);font-weight:600">⚠ Пора заказать новый ключ</span>' : ''}
-          </div>`;
-        })() : ''}
+        ${renderJooblebudget(d.jooble)}
       </div>
     `;
 
