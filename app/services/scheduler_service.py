@@ -400,6 +400,19 @@ async def _backfill_score():
                         backend, len(to_score), user.telegram_id,
                     )
                     await _score_fn(to_score, user, session)
+                    continue  # recheck only after tier2 is also empty
+
+                # Both queues empty → safety recheck of pre-filter rejects
+                # Sends score=0/ai_analysis=NULL jobs to Gemini for a second opinion.
+                # Catches anything the rule-based filter may have wrongly rejected.
+                if settings.gemini_api_key:
+                    from app.scoring.gemini_matcher import recheck_zero_scores  # noqa: PLC0415
+                    checked, upgraded = await recheck_zero_scores(user, session, limit=500)
+                    if checked:
+                        logger.info(
+                            "Backfill recheck: %d pre-filter rejects checked, %d upgraded for user %s",
+                            checked, upgraded, user.telegram_id,
+                        )
 
             except Exception as e:
                 logger.error("Backfill scorer failed for user %s: %s", user.telegram_id, e)
