@@ -117,13 +117,8 @@ def start_scheduler(bot_app):
 async def _background_scan(bot_app, trigger: str = "scheduled"):
     """Scan all sources, score only NEW jobs, push top results to Telegram."""
     if _scan_lock.locked():
-        logger.warning("Skipping %s scan because another scan is already running", trigger)
-        await record_ops_event(
-            "scan",
-            "warning",
-            source=trigger,
-            message="Skipped overlapping scan",
-        )
+        # Normal — manual scan still running when scheduled one fires; just skip silently
+        logger.info("Skipping %s scan — previous scan still in progress", trigger)
         return
 
     async with _scan_lock:
@@ -132,6 +127,7 @@ async def _background_scan(bot_app, trigger: str = "scheduled"):
         started_perf = time.perf_counter()
 
         aggregator = JobAggregator([AdzunaSource(), JobSpySource(), ArbeitnowSource(), RemotiveSource(), ArbeitsagenturSource(), XingSource(), BerlinStartupJobsSource(), WTTJSource(), JoobleSource()])
+
 
         try:
             async with async_session() as session:

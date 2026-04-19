@@ -42,6 +42,7 @@ class NoCacheAPIMiddleware(BaseHTTPMiddleware):
         if path.startswith("/api/") or path.startswith("/auth/"):
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
             response.headers["Pragma"] = "no-cache"
+            # Log to access log for 4xx/5xx and all mutating methods (debug aid)
             if response.status_code >= 400 or request.method in ("POST", "DELETE", "PATCH"):
                 try:
                     user_id = request.session.get("user_id", "anon")
@@ -51,9 +52,11 @@ class NoCacheAPIMiddleware(BaseHTTPMiddleware):
                     "%s %s → %s (user=%s)",
                     request.method, path, response.status_code, user_id,
                 )
+            # Record ops events ONLY for real errors (≥400), not successful POSTs
+            if response.status_code >= 400 and path.startswith("/api"):
                 # Skip GET 404 — scanner probes (/api/.env, /api/config…), not our errors
                 is_probe = response.status_code == 404 and request.method == "GET"
-                if path.startswith("/api") and not is_probe:
+                if not is_probe:
                     await record_ops_event(
                         "api_error",
                         "error" if response.status_code >= 500 else "warn",
