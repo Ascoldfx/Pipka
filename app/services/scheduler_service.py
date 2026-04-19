@@ -298,15 +298,32 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
     }
 
 
+def _backfill_score_fn():
+    """Return the appropriate scoring function for backfill.
+
+    Uses Gemini Flash (free tier) when GEMINI_API_KEY is set in .env,
+    otherwise falls back to Claude (paid).
+    """
+    if settings.gemini_api_key:
+        from app.scoring.gemini_matcher import score_jobs_gemini  # noqa: PLC0415
+        logger.debug("Backfill scorer: using Gemini Flash (%s)", settings.gemini_model)
+        return score_jobs_gemini
+    logger.debug("Backfill scorer: using Claude (%s)", settings.claude_model)
+    return score_jobs
+
+
 async def _backfill_score():
     """Score existing DB jobs that haven't been scored yet for each user.
 
     Runs every 2 hours. Two-pass approach:
       1. Pre-filter rejects → immediately write JobScore(score=0) — no Claude call needed.
          This drains the "unscored" queue for irrelevant jobs without burning API credits.
-      2. Pre-filter passes  → send up to 500 per run to Claude for AI scoring.
+      2. Pre-filter passes  → send up to 500 per run to the AI scorer
+         (Gemini Flash if GEMINI_API_KEY is set, Claude otherwise).
     """
-    logger.info("Backfill scorer started")
+    _score_fn = _backfill_score_fn()
+    backend = "Gemini" if settings.gemini_api_key else "Claude"
+    logger.info("Backfill scorer started (backend=%s)", backend)
 
     async with async_session() as session:
         users_result = await session.execute(
@@ -369,20 +386,20 @@ async def _backfill_score():
                 if need_ai_t1:
                     to_score = need_ai_t1[:500]
                     logger.info(
-                        "Backfill tier1: AI-scoring %d director-level jobs for user %s",
-                        len(to_score), user.telegram_id,
+                        "Backfill tier1 [%s]: AI-scoring %d director-level jobs for user %s",
+                        backend, len(to_score), user.telegram_id,
                     )
-                    await score_jobs(to_score, user, session)
+                    await _score_fn(to_score, user, session)
                     continue  # come back next run for tier2
 
                 # Tier 2: manager-level, only when tier1 is fully cleared
                 if need_ai_t2:
                     to_score = need_ai_t2[:500]
                     logger.info(
-                        "Backfill tier2: AI-scoring %d manager-level jobs for user %s",
-                        len(to_score), user.telegram_id,
+                        "Backfill tier2 [%s]: AI-scoring %d manager-level jobs for user %s",
+                        backend, len(to_score), user.telegram_id,
                     )
-                    await score_jobs(to_score, user, session)
+                    await _score_fn(to_score, user, session)
 
             except Exception as e:
                 logger.error("Backfill scorer failed for user %s: %s", user.telegram_id, e)
