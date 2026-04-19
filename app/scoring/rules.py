@@ -110,10 +110,8 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     if not domain_match:
         return False, "low"
 
-    # Salary floor check (strict: 100k+)
-    if profile and profile.min_salary and job.salary_min:
-        if job.salary_min < profile.min_salary * 0.7:  # 70k floor for 100k target
-            return False, "low"
+    # Salary floor check removed — salary is rarely available in job listings.
+    # AI scorer handles salary assessment when data is present.
 
     # Work mode filter
     if profile and profile.work_mode and profile.work_mode != "any":
