@@ -60,6 +60,13 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
+    # Backblaze B2 backups (optional — local backup always runs when DB is PostgreSQL)
+    # Set all three to enable cloud upload; leave empty to use local-only backups
+    b2_key_id: str = ""
+    b2_app_key: str = ""
+    b2_bucket: str = ""
+    b2_endpoint: str = "https://s3.us-west-004.backblazeb2.com"
+
     # `extra="ignore"` lets us share .env with docker-compose interpolation vars
     # (e.g. POSTGRES_PASSWORD) without breaking Settings validation.
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}

@@ -1327,6 +1327,21 @@ $('resume-file').addEventListener('change', async(e)=>{
   }catch(e){ _setUploadStatus('Upload failed', false); }
 });
 
+/* ── Toast notification ── */
+function showToast(msg, duration=4000){
+  let t = document.getElementById('pipka-toast');
+  if(!t){
+    t = document.createElement('div');
+    t.id='pipka-toast';
+    t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--accent,#4f8ef7);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3);transition:opacity .3s';
+    document.body.appendChild(t);
+  }
+  t.textContent=msg;
+  t.style.opacity='1';
+  clearTimeout(t._timer);
+  t._timer=setTimeout(()=>{ t.style.opacity='0'; },duration);
+}
+
 /* ── Actions & Modal ── */
 async function doAction(jobId,action,btn){
   btn.disabled=true;
@@ -1343,6 +1358,10 @@ async function doAction(jobId,action,btn){
       console.error('Action failed',resp.status,body);
       btn.disabled=false;
       return;
+    }
+    const data = await resp.json().catch(()=>({}));
+    if(data.auto_excluded){
+      showToast(`🚫 Компания «${data.auto_excluded}» добавлена в исключения (5 отклонений)`);
     }
     loadJobs(); loadStats();
   }catch(e){console.error('doAction error:',e)}

@@ -4,7 +4,7 @@ WORKDIR /app
 
 # System deps for JobSpy (headless Chrome for LinkedIn scraping)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    chromium chromium-driver curl \
+    chromium chromium-driver curl postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python deps first (cache layer)

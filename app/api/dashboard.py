@@ -24,7 +24,7 @@ from app.models.user import User, UserProfile
 from app.scoring.matcher import analyze_single_job
 from app.services.ops_service import build_ops_overview
 from app.services.scheduler_service import is_scan_running
-from app.services.tracker_service import mark_applied, mark_rejected, save_job
+from app.services.tracker_service import check_auto_exclude_company, mark_applied, mark_rejected, save_job
 
 logger = logging.getLogger(__name__)
 
@@ -309,14 +309,16 @@ async def job_action(job_id: int, request: Request, action: str = Query(...)):
             user = await _get_user(request, session)
             if not user:
                 raise HTTPException(status_code=401, detail="Login required")
+            auto_excluded: str | None = None
             if action == "save":
                 await save_job(user.id, job_id, session)
             elif action == "applied":
                 await mark_applied(user.id, job_id, session)
             elif action == "reject":
                 await mark_rejected(user.id, job_id, session)
+                auto_excluded = await check_auto_exclude_company(user.id, job_id, session)
             _invalidate_stats_cache(user.id)
-            return {"ok": True, "action": action}
+            return {"ok": True, "action": action, "auto_excluded": auto_excluded}
         except HTTPException:
             raise
         except Exception:

@@ -18,6 +18,7 @@ from app.models.job import Job, JobScore
 from app.models.user import User
 from app.scoring.matcher import score_jobs
 from app.scoring.rules import pre_filter
+from app.services.backup_service import run_backup
 from app.services.ops_service import record_ops_event
 from app.services.tracker_service import get_hidden_dedup_hashes, get_hidden_job_ids
 from app.sources.aggregator import JobAggregator
@@ -81,6 +82,15 @@ def start_scheduler(bot_app):
         hour=3,
         minute=0,
         id="daily_cleanup",
+        replace_existing=True,
+    )
+    # Daily DB backup at 02:30 UTC — pg_dump → gzip → local + optional B2
+    scheduler.add_job(
+        _daily_backup,
+        "cron",
+        hour=2,
+        minute=30,
+        id="daily_backup",
         replace_existing=True,
     )
     # Backfill scorer: every 2 hours — score existing unscored jobs for each user
@@ -463,6 +473,20 @@ async def _watchlist_scan(bot_app):
                 logger.error("Watchlist scan failed for user %s: %s", user.telegram_id, e)
 
     logger.info("Watchlist scan completed")
+
+
+async def _daily_backup():
+    """Daily DB backup at 02:30 UTC. Saves gzipped pg_dump to /app/data/backups/ (keeps last 7)."""
+    from pathlib import Path  # noqa: PLC0415
+
+    try:
+        path = await run_backup()
+        name = Path(path).name if path else "skipped"
+        await record_ops_event("backup", "success", message=name)
+        logger.info("Daily backup OK: %s", name)
+    except Exception as e:
+        logger.error("Daily backup failed: %s", e)
+        await record_ops_event("backup", "error", message=str(e)[:250])
 
 
 async def _cleanup_old_jobs():
