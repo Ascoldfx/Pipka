@@ -155,6 +155,20 @@ async def build_ops_overview(
     recent_scans = list(scan_rows.scalars())
     last_scan = recent_scans[0] if recent_scans else None
 
+    # Jooble API budget: sum api_requests from ALL scan events to track total usage
+    all_scan_rows = await session.execute(
+        select(OpsEvent)
+        .where(OpsEvent.event_type == "scan", OpsEvent.status == "success")
+    )
+    jooble_requests_total = 0
+    for ev in all_scan_rows.scalars():
+        if not ev.payload:
+            continue
+        for src in (ev.payload.get("aggregator") or {}).get("sources", []):
+            if src.get("source") == "jooble":
+                jooble_requests_total += src.get("api_requests", 0)
+    jooble_budget = 500  # default free tier
+
     api_401 = (
         await session.execute(
             select(func.count(OpsEvent.id)).where(
@@ -311,6 +325,12 @@ async def build_ops_overview(
             "via_google": users_google,
             "new_in_window": new_users_window,
             "activity": user_activity,
+        },
+        "jooble": {
+            "requests_total": jooble_requests_total,
+            "budget": jooble_budget,
+            "remaining": max(0, jooble_budget - jooble_requests_total),
+            "pct_used": round(jooble_requests_total / jooble_budget * 100, 1) if jooble_budget else 0,
         },
         "scan": {
             "running": scan_running,

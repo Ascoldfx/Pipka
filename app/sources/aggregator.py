@@ -133,12 +133,16 @@ class JobAggregator:
                     }
                 )
                 continue
-            source_stats.append(
-                {
-                    "source": source_name,
-                    "status": "ok",
-                    "raw_count": len(result),
-                }
+            stat: dict = {
+                "source": source_name,
+                "status": "ok",
+                "raw_count": len(result),
+            }
+            # Include API request count if the source tracked it (e.g. Jooble budget)
+            src_obj = self.sources[i]
+            if hasattr(src_obj, "_last_request_count"):
+                stat["api_requests"] = src_obj._last_request_count
+            source_stats.append(stat)
             )
             raw_jobs.extend(result)
 

@@ -1607,7 +1607,22 @@ async function loadOpsOverview(force=false){
           <span>запросов ${fmtNumber(scanPayload.query_count || 0)}</span>
           <span>стран ${fmtNumber(scanPayload.country_count || 0)}</span>
         </div>
-        ${sourceStats.length ? `<div class="mini-list">${sourceStats.map(s => `<span>${esc(s.source)}: ${fmtNumber(s.raw_count || 0)}${s.status === 'error' ? ' error' : ''}</span>`).join('')}</div>` : ''}
+        ${sourceStats.length ? `<div class="mini-list">${sourceStats.map(s => {
+          const reqNote = s.api_requests != null ? ` <span style="color:var(--muted)">(${s.api_requests} req)</span>` : '';
+          const errNote = s.status === 'error' ? ' <span style="color:var(--red)">error</span>' : '';
+          return `<span>${esc(s.source)}: ${fmtNumber(s.raw_count || 0)}${reqNote}${errNote}</span>`;
+        }).join('')}</div>` : ''}
+        ${d.jooble ? (() => {
+          const j = d.jooble;
+          const pct = j.pct_used;
+          const color = pct >= 90 ? 'var(--red)' : pct >= 70 ? 'var(--yellow)' : 'var(--green)';
+          return `<div class="mini-list" style="margin-top:6px">
+            <span style="font-weight:600">Jooble API бюджет:</span>
+            <span style="color:${color}">${fmtNumber(j.requests_total)} / ${fmtNumber(j.budget)} запросов (${pct}%)</span>
+            <span style="color:var(--muted)">осталось: ${fmtNumber(j.remaining)}</span>
+            ${pct >= 80 ? '<span style="color:var(--red);font-weight:600">⚠ Пора заказать новый ключ</span>' : ''}
+          </div>`;
+        })() : ''}
       </div>
     `;
 

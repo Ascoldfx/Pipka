@@ -69,6 +69,12 @@ class JoobleSource(JobSource):
 
     _auth_failed: bool = False  # class-level flag — stop retrying on 403
 
+    # Budget control: free tier = 500 requests total (not per day).
+    # We run 8 queries × 1 country × 1 page = 8 requests per scan (every 3 h).
+    # At that rate 500 req ≈ 62 scans ≈ ~8 days before needing a new key.
+    # Override via JOOBLE_REQUESTS_PER_SCAN in .env if you have a higher-limit key.
+    REQUESTS_PER_SCAN: int = 8   # = len(JOOBLE_QUERIES) × 1 country × 1 page
+
     async def search(self, params: SearchParams) -> list[RawJob]:
         if not settings.jooble_api_key:
             logger.debug("Jooble: no API key configured, skipping")
@@ -79,37 +85,34 @@ class JoobleSource(JobSource):
 
         api_url = JOOBLE_API_URL.format(api_key=settings.jooble_api_key)
 
-        # Intersect user's preferred countries with Jooble-supported ones
-        target_countries = [c for c in params.countries if c in COUNTRY_LOCATIONS]
-        if not target_countries:
-            target_countries = ["de"]
-
-        # Use JOOBLE_QUERIES; fall back to first N user queries if profile has custom ones
-        queries = JOOBLE_QUERIES
-        if params.queries:
-            # Include any user queries that aren't covered by JOOBLE_QUERIES
-            extra = [q for q in params.queries if q not in JOOBLE_QUERIES][:4]
-            queries = JOOBLE_QUERIES + extra
+        # Primary country only (DE or first preferred DACH country) — 1 request per query
+        dach_preferred = [c for c in params.countries if c in COUNTRY_LOCATIONS]
+        primary_country = dach_preferred[0] if dach_preferred else "de"
+        location_str, country_upper = COUNTRY_LOCATIONS[primary_country]
 
         results: list[RawJob] = []
         seen: set[str] = set()
+        request_count = 0
 
         async with aiohttp.ClientSession() as http:
-            for query in queries:
-                for country_code in target_countries[:3]:  # max 3 countries per query
-                    location_str, country_upper = COUNTRY_LOCATIONS[country_code]
-                    for page in range(1, 3):  # max 2 pages per query/country
-                        batch = await self._fetch(
-                            http, api_url, query, location_str, country_upper, page
-                        )
-                        for job in batch:
-                            if job.external_id not in seen:
-                                seen.add(job.external_id)
-                                results.append(job)
-                        if not batch:
-                            break  # no more pages
+            for query in JOOBLE_QUERIES:  # 8 queries × 1 page = 8 requests/scan
+                batch = await self._fetch(
+                    http, api_url, query, location_str, country_upper, page=1
+                )
+                request_count += 1
+                for job in batch:
+                    if job.external_id not in seen:
+                        seen.add(job.external_id)
+                        results.append(job)
+                if JoobleSource._auth_failed:
+                    break  # stop all queries on first 403
 
-        logger.info("Jooble: %d jobs fetched", len(results))
+        logger.info(
+            "Jooble: %d jobs fetched (%d API requests, budget ~500 total)",
+            len(results), request_count,
+        )
+        # Expose for aggregator stats
+        self._last_request_count = request_count
         return results
 
     async def _fetch(
