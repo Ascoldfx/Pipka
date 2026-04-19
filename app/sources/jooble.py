@@ -67,9 +67,14 @@ class JoobleSource(JobSource):
     def source_name(self) -> str:
         return "jooble"
 
+    _auth_failed: bool = False  # class-level flag — stop retrying on 403
+
     async def search(self, params: SearchParams) -> list[RawJob]:
         if not settings.jooble_api_key:
             logger.debug("Jooble: no API key configured, skipping")
+            return []
+        if JoobleSource._auth_failed:
+            logger.warning("Jooble: skipping — previous 403, check JOOBLE_API_KEY in .env")
             return []
 
         api_url = JOOBLE_API_URL.format(api_key=settings.jooble_api_key)
@@ -129,7 +134,8 @@ class JoobleSource(JobSource):
                 timeout=aiohttp.ClientTimeout(total=20),
             ) as resp:
                 if resp.status == 403:
-                    logger.warning("Jooble: 403 Forbidden — invalid API key?")
+                    logger.warning("Jooble: 403 Forbidden — invalid API key, disabling until restart")
+                    JoobleSource._auth_failed = True
                     return []
                 if resp.status != 200:
                     logger.warning(
