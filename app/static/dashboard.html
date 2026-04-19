@@ -89,6 +89,11 @@
 
   .score { display:inline-block; font-weight:700; font-size:14px; min-width:28px; text-align:center; border-radius:4px; }
   .score.high { color:var(--green); } .score.mid { color:var(--yellow); } .score.low { color:var(--red); } .score.none { color:var(--muted); }
+  /* Data quality dot next to the score */
+  .score-wrap { display:inline-flex; align-items:center; gap:4px; }
+  .dq-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; cursor:default; }
+  .dq-dot.full    { background:var(--green); }
+  .dq-dot.partial { background:var(--yellow); }
 
   .job-title { font-weight:600; color:var(--fg); text-decoration:none; }
   .job-title:hover { text-decoration:underline; }
@@ -1236,8 +1241,10 @@ function sourceCell(j) {
 function jobRow(j){
   const sc=j.score>=70?'high':j.score>=40?'mid':j.score!=null?'low':'none';
   const date=j.posted_at?new Date(j.posted_at).toLocaleDateString('de-DE'):'';
+  const dq=j.data_quality||'partial';
+  const dqTitle=dq==='full'?'Полное описание доступно':'Описание отсутствует или неполное — оценка приблизительная';
   return `<tr>
-    <td><span class="score ${sc}">${j.score!=null?j.score:'—'}</span></td>
+    <td><span class="score-wrap"><span class="score ${sc}">${j.score!=null?j.score:'—'}</span><span class="dq-dot ${dq}" title="${dqTitle}"></span></span></td>
     <td><a class="job-title" href="${safeUrl(j.url)}" target="_blank" rel="noopener noreferrer">${esc(j.title)}</a>${date?`<div class="job-meta">${date}</div>`:''}</td>
     <td class="job-meta">${esc(j.company)}</td>
     <td class="job-meta">${esc(j.location)} (${esc(j.country)})</td>

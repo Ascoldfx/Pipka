@@ -238,6 +238,7 @@ async def get_jobs(
                 "score": row[1],
                 "analysis": row[2],
                 "status": row[3],
+                "data_quality": "full" if len(job.description or "") >= 300 else "partial",
             })
 
         pages = (total + per_page - 1) // per_page
