@@ -7,6 +7,7 @@ from app.sources.xing import XingSource
 from app.sources.watchlist import WatchlistSource
 from app.sources.berlinstartupjobs import BerlinStartupJobsSource
 from app.sources.wttj import WTTJSource
+from app.sources.jooble import JoobleSource
 
 __all__ = [
     "AdzunaSource",
@@ -18,4 +19,5 @@ __all__ = [
     "WatchlistSource",
     "BerlinStartupJobsSource",
     "WTTJSource",
+    "JoobleSource",
 ]

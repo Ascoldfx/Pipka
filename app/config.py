@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # Arbeitsagentur
     arbeitsagentur_api_key: str = "jobboerse-jobsuche"
 
+    # Jooble meta-aggregator (covers Stepstone, Monster, regional boards)
+    jooble_api_key: str = ""
+
     # Scoring
     max_jobs_per_scoring_batch: int = 8
     max_scored_per_search: int = 30

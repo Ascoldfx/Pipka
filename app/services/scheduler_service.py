@@ -22,7 +22,7 @@ from app.services.ops_service import record_ops_event
 from app.services.tracker_service import get_hidden_dedup_hashes, get_hidden_job_ids
 from app.sources.aggregator import JobAggregator
 from app.sources.base import SearchParams
-from app.sources import AdzunaSource, JobSpySource, ArbeitnowSource, RemotiveSource, ArbeitsagenturSource, XingSource, WatchlistSource, BerlinStartupJobsSource, WTTJSource
+from app.sources import AdzunaSource, JobSpySource, ArbeitnowSource, RemotiveSource, ArbeitsagenturSource, XingSource, WatchlistSource, BerlinStartupJobsSource, WTTJSource, JoobleSource
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
@@ -121,7 +121,7 @@ async def _background_scan(bot_app, trigger: str = "scheduled"):
         started_at = datetime.now()
         started_perf = time.perf_counter()
 
-        aggregator = JobAggregator([AdzunaSource(), JobSpySource(), ArbeitnowSource(), RemotiveSource(), ArbeitsagenturSource(), XingSource(), BerlinStartupJobsSource(), WTTJSource()])
+        aggregator = JobAggregator([AdzunaSource(), JobSpySource(), ArbeitnowSource(), RemotiveSource(), ArbeitsagenturSource(), XingSource(), BerlinStartupJobsSource(), WTTJSource(), JoobleSource()])
 
         try:
             async with async_session() as session:
