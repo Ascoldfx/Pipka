@@ -1618,6 +1618,15 @@ async function loadOpsOverview(force=false){
       .map(([label, value]) => renderPipelineRow(PIPELINE_RU[label] || label.replace('_', ' '), value, pipelineMax))
       .join('');
 
+    // Sync scan button countdown with freshest next_run from server
+    if(d.scan.next_run && !d.scan.running){
+      const freshTs = new Date(d.scan.next_run).getTime();
+      if(!_nextScanAt || Math.abs(freshTs - _nextScanAt) > 60000){
+        _nextScanAt = freshTs;
+        _scanCountdown();
+      }
+    }
+
     const scanStatus = d.scan.running ? 'running' : (d.scan.last_status || 'unknown');
     $('ops-scan-pill').outerHTML = `<span id="ops-scan-pill" class="pill ${scanStatus === 'success' ? 'success' : scanStatus === 'error' ? 'error' : scanStatus === 'running' ? 'running' : 'warning'}">${scanStatus}</span>`;
     scan.innerHTML = `

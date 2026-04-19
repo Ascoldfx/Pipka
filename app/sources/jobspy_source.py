@@ -48,6 +48,8 @@ COUNTRY_NAME = {
 }
 
 
+JOBSPY_MAX_QUERIES = 8  # cap to avoid timeout; top-ranked queries are most valuable
+
 class JobSpySource:
     @property
     def source_name(self) -> str:
@@ -57,12 +59,23 @@ class JobSpySource:
         results: list[RawJob] = []
         seen: set[str] = set()
 
+        # Cap queries — LinkedIn/Indeed scraping is slow; too many sequential calls → timeout
+        queries = params.queries[:JOBSPY_MAX_QUERIES]
+
         for country in params.countries:
             sites = SITE_MAP.get(country, ["indeed", "linkedin", "google"])
-            for query in params.queries:
-                location = ", ".join(params.locations) if params.locations else None
-                jobs = await self._scrape(query, sites, location, country, min(params.results_per_query, 25))
-                for job in jobs:
+            location = ", ".join(params.locations) if params.locations else None
+            limit = min(params.results_per_query, 25)
+
+            # Run all queries for this country concurrently (each in its own thread)
+            tasks = [self._scrape(q, sites, location, country, limit) for q in queries]
+            batch = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for item in batch:
+                if isinstance(item, Exception):
+                    logger.warning("JobSpy scrape failed: %s", item)
+                    continue
+                for job in item:
                     if job.external_id not in seen:
                         seen.add(job.external_id)
                         results.append(job)

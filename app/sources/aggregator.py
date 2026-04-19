@@ -114,15 +114,18 @@ class JobAggregator:
         self.sources = sources
         self.last_stats: dict = {}
 
-    SOURCE_TIMEOUT = 120  # seconds per source; LinkedIn ~60s, generous buffer
+    SOURCE_TIMEOUT = 120   # default timeout per source
+    # JobSpy scrapes LinkedIn + Indeed sequentially; needs more time for many queries
+    SOURCE_TIMEOUT_OVERRIDES: dict[str, int] = {"jobspy": 240}
 
     async def _search_source(self, source: JobSource, params: SearchParams):
         """Run one source with a hard timeout so a hung source can't block the scan."""
+        timeout = self.SOURCE_TIMEOUT_OVERRIDES.get(source.source_name, self.SOURCE_TIMEOUT)
         try:
-            return await asyncio.wait_for(source.search(params), timeout=self.SOURCE_TIMEOUT)
+            return await asyncio.wait_for(source.search(params), timeout=timeout)
         except asyncio.TimeoutError:
             raise asyncio.TimeoutError(
-                f"{source.source_name} timed out after {self.SOURCE_TIMEOUT}s"
+                f"{source.source_name} timed out after {timeout}s"
             )
 
     async def search(self, params: SearchParams, session: AsyncSession) -> list[Job]:
