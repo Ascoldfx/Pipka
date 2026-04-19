@@ -1632,7 +1632,7 @@ async function loadOpsOverview(force=false){
     $('ops-scan-pill').outerHTML = `<span id="ops-scan-pill" class="pill ${scanStatus === 'success' ? 'success' : scanStatus === 'error' ? 'error' : scanStatus === 'running' ? 'running' : 'warning'}">${scanStatus}</span>`;
     scan.innerHTML = `
       <div class="scan-grid">
-        <div class="scan-stat"><span class="label">Последний скан</span><span class="value">${fmtRelative(d.scan.last_at)}</span></div>
+        <div class="scan-stat"><span class="label">Последний скан</span><span class="value">${fmtDateTime(d.scan.last_at)}</span><span style="font-size:11px;color:var(--muted);margin-top:2px;display:block">${fmtRelative(d.scan.last_at)}</span></div>
         <div class="scan-stat"><span class="label">Следующий запуск</span><span class="value">${d.scan.running ? 'Идёт сейчас' : fmtDateTime(d.scan.next_run)}</span></div>
         <div class="scan-stat"><span class="label">Длительность</span><span class="value">${scanPayload.duration_seconds != null ? `${scanPayload.duration_seconds}с` : '—'}</span></div>
         <div class="scan-stat"><span class="label">Отфильтровано</span><span class="value">${fmtNumber(aggregator.filtered_count || 0)}</span></div>
