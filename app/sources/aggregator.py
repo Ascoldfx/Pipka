@@ -143,7 +143,6 @@ class JobAggregator:
             if hasattr(src_obj, "_last_request_count"):
                 stat["api_requests"] = src_obj._last_request_count
             source_stats.append(stat)
-            )
             raw_jobs.extend(result)
 
         logger.info("Aggregated %d raw jobs from %d sources", len(raw_jobs), len(self.sources))
