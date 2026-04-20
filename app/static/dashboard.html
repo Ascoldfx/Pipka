@@ -342,6 +342,14 @@
   .settings-2col { display:grid; grid-template-columns:1fr 1fr; gap:12px 28px; }
   .settings-2col .span2 { grid-column:1/-1; }
 
+  /* ── Exclusion keyword chips ── */
+  .chip-wrap { display:flex; flex-wrap:wrap; gap:6px; min-height:32px; padding:6px 8px; border:1px solid var(--border); border-radius:4px; background:var(--bg); margin-bottom:6px; }
+  .chip-wrap:empty { padding:0; border:none; min-height:0; margin:0; }
+  .kw-chip { display:inline-flex; align-items:center; gap:5px; padding:3px 10px 3px 12px; background:var(--bg); border:1.5px solid var(--border); border-radius:999px; font-size:12px; color:var(--fg); white-space:nowrap; }
+  .kw-chip .chip-x { cursor:pointer; color:var(--muted); font-size:14px; line-height:1; padding-left:2px; }
+  .kw-chip .chip-x:hover { color:var(--red,#e05); }
+  .chip-input-field { font-family:inherit; font-size:13px; padding:7px 10px; border:1px solid var(--border); border-radius:4px; width:100%; background:var(--bg); color:var(--fg); outline:none; }
+
   /* ── Unified Settings controls ── */
   .settings .btn { border-radius:999px; padding:10px 28px; }
   .settings .field input, .settings .field select { border-radius:10px; transition:border-color .18s,box-shadow .18s; }
@@ -691,8 +699,9 @@ function applyLang() {
 
     <h3 data-i18n="settings.exclusions">Exclusions & Negative Keywords</h3>
     <div class="field" style="margin-bottom:12px;">
-      <label data-i18n="settings.excludedLabel">Do not show jobs requiring (comma-separated)</label>
-      <textarea id="s-excluded" rows="2" data-i18n="settings.excludedPlaceholder" data-i18n-attr="placeholder" placeholder="Junior, Developer, German C1, Sales, Part-time..."></textarea>
+      <label data-i18n="settings.excludedLabel">Do not show jobs with these keywords — applied automatically</label>
+      <div id="excluded-chips" class="chip-wrap"></div>
+      <input type="text" id="s-excluded-input" class="chip-input-field" placeholder="Add keyword, press Enter or comma...">
     </div>
     <div class="field" style="margin-bottom:24px;">
       <label class="toggle-label">
@@ -1262,6 +1271,36 @@ function jobRow(j){
     </div></td></tr>`;
 }
 
+/* ── Excluded-keyword chips ── */
+let _excludedKws = [];
+function _renderExcludedChips(){
+  const wrap = $('excluded-chips');
+  if(!wrap) return;
+  wrap.innerHTML = _excludedKws.map((kw,i) =>
+    `<span class="kw-chip">${esc(kw)}<span class="chip-x" onclick="_removeExcludedKw(${i})">×</span></span>`
+  ).join('');
+}
+function _removeExcludedKw(i){ _excludedKws.splice(i,1); _renderExcludedChips(); }
+function _addExcludedKw(raw){
+  raw.split(',').map(s=>s.trim()).filter(Boolean).forEach(kw => {
+    if(kw && !_excludedKws.map(k=>k.toLowerCase()).includes(kw.toLowerCase()))
+      _excludedKws.push(kw);
+  });
+  _renderExcludedChips();
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const inp = $('s-excluded-input');
+  if(inp){
+    inp.addEventListener('keydown', e => {
+      if(e.key === 'Enter' || e.key === ','){
+        e.preventDefault();
+        _addExcludedKw(inp.value); inp.value='';
+      }
+    });
+    inp.addEventListener('blur', () => { if(inp.value.trim()){ _addExcludedKw(inp.value); inp.value=''; } });
+  }
+});
+
 /* ── Settings / Profile ── */
 async function loadProfile(){
   try{
@@ -1270,7 +1309,7 @@ async function loadProfile(){
     const p=d.profile;
     $('s-resume').value=p.resume_text||'';
     $('s-titles').value=(p.target_titles||[]).join(', ');
-    if($('s-excluded')) $('s-excluded').value=(p.excluded_keywords||[]).join(', ');
+    _excludedKws = p.excluded_keywords||[]; _renderExcludedChips();
     if($('s-english-only')) $('s-english-only').checked=!!p.english_only;
     if($('s-companies')) $('s-companies').value=(p.target_companies||[]).join(', ');
     $('s-salary').value=p.min_salary||'';
@@ -1289,7 +1328,7 @@ async function saveProfile(){
   const fd=new FormData();
   fd.append('resume_text',$('s-resume').value);
   fd.append('target_titles',$('s-titles').value);
-  if($('s-excluded')) fd.append('excluded_keywords',$('s-excluded').value);
+  fd.append('excluded_keywords', _excludedKws.join(', '));
   fd.append('english_only', $('s-english-only') && $('s-english-only').checked ? '1' : '0');
   if($('s-companies')) fd.append('target_companies',$('s-companies').value);
   fd.append('min_salary',$('s-salary').value||0);
@@ -1605,6 +1644,8 @@ async function loadOpsOverview(force=false){
     const sourceStats = aggregator.sources || [];
 
     kpis.innerHTML = [
+      { kicker:'Сырых (посл. скан)', value:fmtNumber(aggregator.raw_count||0), sub:`уник. ${fmtNumber(aggregator.unique_count||0)} · слито ${fmtNumber(aggregator.fuzzy_removed||0)}`, delta:'до агрегатор-фильтра', action:'jobs_recent' },
+      { kicker:'В базу (посл. скан)', value:fmtNumber(aggregator.filtered_count||0), sub:`neg. ${aggregator.rejected_negative||0} · стар. ${aggregator.rejected_old||0} · loc. ${aggregator.rejected_location||0}`, delta:'прошло агрегатор', action:'jobs_recent' },
       { kicker:'Вакансий в базе', value:fmtNumber(d.kpis.total_jobs), sub:`+${fmtNumber(d.kpis.jobs_recent)} за период`, delta:`${fmtNumber(d.kpis.active_sources)} источников активно`, action:'jobs_recent' },
       { kicker:'Покрытие скорингом', value:`${d.kpis.coverage_pct}%`, sub:`${fmtNumber(d.kpis.scored_total)} оценено всего`, delta:`${fmtNumber(d.kpis.unscored_total)} в очереди`, action:'coverage' },
       { kicker:'Топ-совпадения', value:fmtNumber(d.kpis.top_matches), sub:`${fmtNumber(d.kpis.top_recent)} новых топ-совпадений`, delta:d.kpis.avg_score_recent != null ? `ср. ${d.kpis.avg_score_recent}` : 'ср. —', action:'top_matches' },
