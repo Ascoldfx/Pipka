@@ -282,8 +282,8 @@ async def build_ops_overview(
             "scores_window": scores_window,
             "actions_total": actions_total,
             "actions_window": actions_window,
-            "last_active": last_score_at.isoformat() if last_score_at else None,
-            "joined": u.created_at.isoformat() if u.created_at else None,
+            "last_active": last_score_at.isoformat() + "Z" if last_score_at else None,
+            "joined": u.created_at.isoformat() + "Z" if u.created_at else None,
         })
 
     return {
@@ -336,13 +336,13 @@ async def build_ops_overview(
             "running": scan_running,
             "next_run": next_run_at.isoformat() if next_run_at else None,
             "last_status": last_scan.status if last_scan else "unknown",
-            "last_at": last_scan.created_at.isoformat() if last_scan else None,
+            "last_at": last_scan.created_at.isoformat() + "Z" if last_scan else None,
             "last_message": last_scan.message if last_scan else None,
             "last_payload": last_scan.payload if last_scan else None,
             "recent": [
                 {
                     "status": event.status,
-                    "at": event.created_at.isoformat(),
+                    "at": event.created_at.isoformat() + "Z",
                     "message": event.message,
                     "payload": event.payload,
                 }
@@ -355,7 +355,7 @@ async def build_ops_overview(
                 "status": event.status,
                 "source": event.source,
                 "message": event.message,
-                "at": event.created_at.isoformat(),
+                "at": event.created_at.isoformat() + "Z",
                 "payload": event.payload,
             }
             for event in recent_events
