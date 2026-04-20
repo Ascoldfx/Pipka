@@ -593,6 +593,7 @@ function applyLang() {
 <div class="tab-content active" id="tc-jobs">
   <div class="filters">
     <input type="text" id="f-search" data-i18n="filter.search" data-i18n-attr="placeholder" placeholder="Search title or company...">
+    <span id="search-count" style="font-size:12px;color:var(--muted);white-space:nowrap;display:none"></span>
     <label data-i18n="filter.score">Score</label>
     <select id="f-score">
       <option value="0" data-i18n="filter.all">All</option>
@@ -1214,6 +1215,9 @@ async function loadJobs(){
     S.totalPages=data.pages;
     $('page-info').textContent=`Page ${data.page} of ${data.pages} (${data.total} jobs)`;
     $('prev-btn').disabled=data.page<=1; $('next-btn').disabled=data.page>=data.pages;
+    // Search counter badge
+    const sc=$('search-count');
+    if(sc){ const q=$('f-search').value.trim(); sc.textContent=`${fmtNumber(data.total)} вак.`; sc.style.display=q?'inline':'none'; }
     if(!data.jobs.length){tbody.innerHTML=`<tr><td colspan="6" class="loading">${T('msg.noJobs')}</td></tr>`;return;}
     let rows='';
     for(let i=0;i<data.jobs.length;i++){
@@ -1605,6 +1609,7 @@ async function loadOpsOverview(force=false){
       { kicker:'Покрытие скорингом', value:`${d.kpis.coverage_pct}%`, sub:`${fmtNumber(d.kpis.scored_total)} оценено всего`, delta:`${fmtNumber(d.kpis.unscored_total)} в очереди`, action:'coverage' },
       { kicker:'Топ-совпадения', value:fmtNumber(d.kpis.top_matches), sub:`${fmtNumber(d.kpis.top_recent)} новых топ-совпадений`, delta:d.kpis.avg_score_recent != null ? `ср. ${d.kpis.avg_score_recent}` : 'ср. —', action:'top_matches' },
       { kicker:'Нагрузка очереди', value:`${d.kpis.pending_pct}%`, sub:'Вакансии без оценки', delta:`${fmtNumber(d.kpis.unscored_total)} вакансий`, action:'queue' },
+      { kicker:'Отсечено фильтром', value:fmtNumber(d.kpis.prefilter_rejected), sub:'pre-filter, без AI-оценки', delta:'hard reject (score=0)', action:'queue' },
       { kicker:'Ошибки API', value:fmtNumber(d.kpis.api_401 + d.kpis.api_500), sub:`${fmtNumber(d.kpis.api_401)} авт. · ${fmtNumber(d.kpis.api_500)} сервер`, delta:'Последние проблемы', action:'api' },
     ].map(card => `
       <div class="ops-card clickable" onclick="handleOpsCardAction('${card.action}')">

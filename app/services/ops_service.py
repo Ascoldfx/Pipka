@@ -98,6 +98,16 @@ async def build_ops_overview(
         )
     ).scalar()
 
+    prefilter_rejected = (
+        await session.execute(
+            select(func.count(JobScore.id)).where(
+                JobScore.user_id == user_id,
+                JobScore.score == 0,
+                JobScore.ai_analysis.is_(None),
+            )
+        )
+    ).scalar() or 0
+
     score_alias = aliased(JobScore)
     unscored_total = (
         await session.execute(
@@ -301,6 +311,7 @@ async def build_ops_overview(
             "top_recent": top_recent,
             "avg_score_recent": round(float(avg_score_recent), 1) if avg_score_recent is not None else None,
             "active_sources": len(total_by_source),
+            "prefilter_rejected": prefilter_rejected,
             "api_401": api_401,
             "api_500": api_500,
         },
