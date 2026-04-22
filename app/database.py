@@ -45,24 +45,4 @@ async def init_db():
     async with _get_engine().begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # Soft migrations — each in its own transaction (PG aborts tx on error)
-    migrations = [
-        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS excluded_keywords JSON",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(320)",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub VARCHAR(255)",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500)",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'user'",
-        "ALTER TABLE users ALTER COLUMN telegram_id DROP NOT NULL",
-        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS english_only BOOLEAN DEFAULT FALSE",
-        # Create unique indexes if not exist
-        "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users(email) WHERE email IS NOT NULL",
-        "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL",
-        # NOTE: admin role is assigned via ADMIN_EMAILS env var in user_service.py, not here
-    ]
-    for sql in migrations:
-        try:
-            async with _get_engine().begin() as conn:
-                await conn.execute(text(sql))
-            logging.info("Migration OK: %s", sql[:60])
-        except Exception as e:
-            logging.debug("Migration skipped (%s): %s", sql[:40], e)
+    # База данных будет управляться через мануальные миграции Alembic

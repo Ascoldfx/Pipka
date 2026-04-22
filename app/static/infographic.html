@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pipka Service Operations</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f111a;
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --card-border: rgba(255, 255, 255, 0.05);
+            --text-main: #f8f9fa;
+            --text-muted: #a0aabf;
+            --accent-1: #8a2be2;
+            --accent-2: #4169e1;
+            --accent-3: #00ffcc;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(138, 43, 226, 0.15), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(65, 105, 225, 0.15), transparent 25%);
+            overflow: hidden;
+        }
+
+        .dashboard-container {
+            width: 100%;
+            max-width: 1200px;
+            padding: 40px;
+            position: relative;
+            z-index: 1;
+            animation: fadeIn 1s ease-out;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .title {
+            font-size: 3.5rem;
+            font-weight: 700;
+            background: linear-gradient(to right, var(--text-main), var(--text-muted));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 15px;
+            letter-spacing: -1px;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            font-weight: 300;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+        }
+
+        .metric-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 24px;
+            padding: 40px 30px;
+            text-align: center;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        .metric-card:hover::before {
+            opacity: 1;
+        }
+
+        .metric-icon {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            display: inline-block;
+            background: linear-gradient(135deg, var(--accent-1), var(--accent-3));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .metric-value {
+            font-size: 4rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .metric-label {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .footer {
+            margin-top: 60px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            background-color: var(--accent-3);
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 10px var(--accent-3);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(0, 255, 204, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(0, 255, 204, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 255, 204, 0); }
+        }
+
+        /* Loading Skeleton */
+        .skeleton {
+            background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+            color: transparent !important;
+            border-radius: 8px;
+            display: inline-block;
+            min-width: 100px;
+        }
+
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard-container">
+        <div class="header">
+            <div class="subtitle">Platform Intelligence</div>
+            <h1 class="title">Operations Overview</h1>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-icon">🔍</div>
+                <div class="metric-value skeleton" id="val-total-jobs">000</div>
+                <div class="metric-label">Jobs Processed</div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-icon">🧠</div>
+                <div class="metric-value skeleton" id="val-ai-analyses">000</div>
+                <div class="metric-label">AI Analyses Completed</div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-icon">⚡</div>
+                <div class="metric-value skeleton" id="val-jobs-24h">000</div>
+                <div class="metric-label">Processed (Last 24h)</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-icon">🌐</div>
+                <div class="metric-value skeleton" id="val-sources">0</div>
+                <div class="metric-label">Active Data Sources</div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <span class="status-dot"></span>
+            <span id="system-status">System Operational • Syncing Data</span>
+        </div>
+    </div>
+
+    <script>
+        // Number counting animation
+        function animateValue(obj, start, end, duration) {
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                // Easing out function
+                const easeOut = 1 - Math.pow(1 - progress, 3);
+                const currentVal = Math.floor(easeOut * (end - start) + start);
+                obj.innerHTML = currentVal.toLocaleString('en-US');
+                if (progress < 1) {
+                    window.requestAnimationFrame(step);
+                } else {
+                    obj.innerHTML = end.toLocaleString('en-US');
+                }
+            };
+            window.requestAnimationFrame(step);
+        }
+
+        async function fetchStats() {
+            try {
+                const response = await fetch('/api/public/stats');
+                if (!response.ok) throw new Error('Network response was not ok');
+                const data = await response.json();
+
+                // Remove skeleton and animate
+                const mappings = [
+                    { id: 'val-total-jobs', val: data.total_jobs_processed },
+                    { id: 'val-ai-analyses', val: data.ai_analyses_performed },
+                    { id: 'val-jobs-24h', val: data.jobs_last_24h },
+                    { id: 'val-sources', val: data.active_sources }
+                ];
+
+                mappings.forEach(m => {
+                    const el = document.getElementById(m.id);
+                    el.classList.remove('skeleton');
+                    animateValue(el, 0, m.val || 0, 2000);
+                });
+
+                if (data.system_status) {
+                    document.getElementById('system-status').innerText = data.system_status;
+                }
+
+            } catch (error) {
+                console.error('Failed to fetch stats:', error);
+                document.getElementById('system-status').innerText = 'System degraded • Displaying cached data';
+                document.getElementById('system-status').style.color = '#ff6b6b';
+                document.querySelector('.status-dot').style.backgroundColor = '#ff6b6b';
+                document.querySelector('.status-dot').style.boxShadow = '0 0 10px #ff6b6b';
+                
+                // Fallback display if error (remove skeletons so it doesn't look broken forever)
+                document.querySelectorAll('.skeleton').forEach(el => {
+                    el.classList.remove('skeleton');
+                    el.innerText = 'N/A';
+                });
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', fetchStats);
+    </script>
+</body>
+</html>

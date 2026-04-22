@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import time
+from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
@@ -96,6 +97,64 @@ async def dashboard_page():
     from pathlib import Path
     html_path = Path(__file__).parent.parent / "static" / "dashboard.html"
     return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+
+@router.get("/llms.txt")
+async def get_llms_txt():
+    from fastapi.responses import PlainTextResponse
+    from pathlib import Path
+    llms_path = Path(__file__).parent.parent / "static" / "llms.txt"
+    if llms_path.exists():
+        return PlainTextResponse(content=llms_path.read_text(encoding="utf-8"))
+    return PlainTextResponse(content="Error: llms.txt not found", status_code=404)
+
+
+@router.get("/infographic", response_class=HTMLResponse)
+async def public_infographic_page():
+    from pathlib import Path
+    html_path = Path(__file__).parent.parent / "static" / "infographic.html"
+    return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+
+
+_PUBLIC_STATS_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_PUBLIC_STATS_TTL = 300.0  # 5 minutes cache
+
+@router.get("/api/public/stats")
+async def get_public_stats():
+    now = time.monotonic()
+    cached = _PUBLIC_STATS_CACHE.get("stats")
+    if cached is not None:
+        expires_at, payload = cached
+        if expires_at > now:
+            return payload
+
+    async with async_session() as session:
+        # Total Jobs
+        total_jobs = (await session.execute(select(func.count(Job.id)))).scalar() or 0
+        
+        # Total Analyses
+        total_analyses = (await session.execute(select(func.count(JobScore.id)))).scalar() or 0
+        
+        # Jobs in last 24h
+        window_start = datetime.now() - timedelta(hours=24)
+        jobs_24h = (await session.execute(
+            select(func.count(Job.id)).where(Job.scraped_at >= window_start)
+        )).scalar() or 0
+        
+        # Active Sources
+        sources_count = (await session.execute(
+            select(func.count(func.distinct(Job.source)))
+        )).scalar() or 0
+
+        payload = {
+            "total_jobs_processed": total_jobs,
+            "ai_analyses_performed": total_analyses,
+            "jobs_last_24h": jobs_24h,
+            "active_sources": sources_count,
+            "system_status": "System Operational • Syncing Data"
+        }
+        
+        _PUBLIC_STATS_CACHE["stats"] = (now + _PUBLIC_STATS_TTL, payload)
+        return payload
 
 
 # ─── Jobs ─────────────────────────────────────────────────────

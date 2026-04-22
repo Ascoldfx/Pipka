@@ -95,7 +95,7 @@ class ArbeitsagenturSource:
                         title=title,
                         company_name=company or None,
                         location=loc_display,
-                        country="DE",
+                        country="de",
                         description=item.get("beruf", ""),
                         salary_min=None,
                         salary_max=None,

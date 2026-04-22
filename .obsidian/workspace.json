@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "graphify-out/pipka-wiki/2. API & Services/models.md",
+                "file": "graphify-out/pipka-wiki/5. Deployment & DevOps/runbook.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "models"
+              "title": "runbook"
             }
           }
         ]
@@ -94,7 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "graphify-out/pipka-wiki/2. API & Services/models.md",
+                "file": "graphify-out/pipka-wiki/index.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Обратные ссылки для models"
+              "title": "Обратные ссылки для index"
             }
           },
           {
@@ -113,12 +113,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "graphify-out/pipka-wiki/2. API & Services/models.md",
+                "file": "graphify-out/pipka-wiki/index.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Исходящие ссылки из models"
+              "title": "Исходящие ссылки из index"
             }
           },
           {
@@ -156,13 +156,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "graphify-out/pipka-wiki/2. API & Services/models.md",
+                "file": "graphify-out/pipka-wiki/index.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Структура models"
+              "title": "Структура index"
             }
           }
         ]
@@ -185,8 +185,17 @@
   },
   "active": "0cfd52b5b3878050",
   "lastOpenFiles": [
+    "graphify-out/pipka-wiki/3. Scrapers & Bot/sources.md",
+    "graphify-out/pipka-wiki/4. Changelogs/Changelog_Security.md",
+    "graphify-out/pipka-wiki/4. Changelogs/Changelog_Exclusions.md",
+    "graphify-out/pipka-wiki/2. API & Services/models.md",
+    "graphify-out/pipka-wiki/2. API & Services/routes.md",
+    "graphify-out/pipka-wiki/1. Architecture/db.md",
+    "graphify-out/pipka-wiki/1. Architecture/config.md",
+    "graphify-out/pipka-wiki/3. Scrapers & Bot/bot.md",
     "CLAUDE.md",
     "DEPLOY.md",
-    "README.md"
+    "README.md",
+    "graphify-out/pipka-wiki/index.md"
   ]
 }

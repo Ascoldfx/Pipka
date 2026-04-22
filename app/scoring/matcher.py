@@ -167,14 +167,30 @@ async def _score_batch(
 
     prompt = SCORING_PROMPT.format(profile_text=profile_text, jobs_text=jobs_text)
 
+    import asyncio
+    
+    ai = _get_client()
+    max_retries = 3
+    text = None
+    for attempt in range(max_retries):
+        try:
+            response = await ai.messages.create(
+                model=settings.claude_model,
+                max_tokens=settings.claude_scoring_max_tokens,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = response.content[0].text
+            break
+        except Exception as e:
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt
+                logger.warning("Claude scoring attempt %d failed: %s. Retrying in %ds...", attempt + 1, e, wait_time)
+                await asyncio.sleep(wait_time)
+            else:
+                logger.error("Claude scoring failed after %d attempts: %s", max_retries, e)
+                return []
+                
     try:
-        ai = _get_client()
-        response = await ai.messages.create(
-            model=settings.claude_model,
-            max_tokens=settings.claude_scoring_max_tokens,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = response.content[0].text
         # Strip markdown fences if present
         if "```" in text:
             text = text.split("```json")[-1] if "```json" in text else text.split("```")[-2] if text.count("```") >= 2 else text
@@ -188,7 +204,7 @@ async def _score_batch(
                 text = text[:last_brace + 1] + "]"
         results = json.loads(text)
     except Exception as e:
-        logger.error("Claude scoring failed: %s", e)
+        logger.error("Claude parsing JSON failed: %s. Output was: %s", e, text)
         return []
 
     scores: list[JobScore] = []

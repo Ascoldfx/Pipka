@@ -30,8 +30,8 @@ cd /opt/pipka && git pull && docker compose up -d --build
 
 ## БД
 - PostgreSQL 16, база `pipka`, user `pipka`
-- Без Alembic. Миграции — soft (ALTER TABLE ... IF NOT EXISTS) в `app/database.py`
-- Каждая миграция в отдельной транзакции
+- Для миграций схемы БД используется **Alembic**. Запрещено использовать жесткие soft-миграции в коде (в `app/database.py`).
+- Обязательно генерировать и применять миграции (`alembic revision --autogenerate`, `alembic upgrade head`) при любом изменении схемы.
 
 ## Obsidian Wiki — ОБЯЗАТЕЛЬНОЕ ПРАВИЛО
 После каждого значимого изменения в коде/конфигурации/деплое — **обновить соответствующие узлы wiki**.

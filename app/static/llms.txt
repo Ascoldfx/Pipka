@@ -1,0 +1,27 @@
+# Pipka: AI Job Matcher Dashboard
+
+Pipka is a private, AI-driven job aggregation and scoring platform. It helps users discover strictly filtered, top-tier executive roles (Director/VP/C-Level) primarily in Supply Chain, Procurement, Operations, and Logistics across Europe.
+
+## Architecture 
+- **Backend Framework:** FastAPI (Python 3.12+)
+- **Database:** PostgreSQL (asyncpg, SQLAlchemy 2.0+), migrations via Alembic
+- **Task Scheduler:** APScheduler (CRON scanning and background AI scoring)
+- **AI Integration:** Anthropic Claude (claude-sonnet-4-20250514) for highly detailed and strict job compatibility scoring based on specific user profiles, requirements, and exclusions. 
+- **Frontend SPA:** Native HTML5, Vanilla JavaScript, and CSS (mounted via /static/).
+- **Bot Integration:** Telegram Bot (python-telegram-bot) for notifications and interaction
+
+## Data Sources
+Pipka silently aggregates roles from various providers:
+- Adzuna
+- JobSpy (LinkedIn, Indeed, Glassdoor, ZipRecruiter)
+- Arbeitnow
+- Remotive
+- Arbeitsagentur
+- Xing
+
+## Interaction Flow
+1. Crawlers index raw jobs.
+2. `pre_filter`: Fast heuristic evaluation. Rejects definitively incompatible jobs.
+3. `score_jobs` (Claude AI): For jobs in the "high" or "medium" bucket, Claude produces a 0-100 score, JSON breakdown, and natural language verdict.
+4. Telegram Push: Any job scoring over a top threshold (e.g., 80) is instantly pushed to the user's Telegram.
+5. User actions (save, applied, reject) update models for tracking. 

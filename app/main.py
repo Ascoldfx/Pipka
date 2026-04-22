@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 import time
 
 from fastapi import FastAPI, Request, Response
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -74,6 +75,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Pipka API", version="0.1.0", lifespan=lifespan)
+
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 app.add_middleware(
     SessionMiddleware,
