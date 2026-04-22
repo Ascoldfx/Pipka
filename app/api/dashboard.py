@@ -128,29 +128,43 @@ async def get_public_stats():
             return payload
 
     async with async_session() as session:
-        # Total Jobs
+        # Total Jobs collected
         total_jobs = (await session.execute(select(func.count(Job.id)))).scalar() or 0
-        
-        # Total Analyses
+
+        # Total AI analyses performed
         total_analyses = (await session.execute(select(func.count(JobScore.id)))).scalar() or 0
-        
-        # Jobs in last 24h
-        window_start = datetime.now() - timedelta(hours=24)
-        jobs_24h = (await session.execute(
-            select(func.count(Job.id)).where(Job.scraped_at >= window_start)
+
+        # Pre-filter rejected (score=0 and no AI analysis = killed by rules engine)
+        prefilter_rejected = (await session.execute(
+            select(func.count(JobScore.id)).where(
+                JobScore.score == 0,
+                JobScore.ai_analysis.is_(None),
+            )
         )).scalar() or 0
-        
+
+        # Top matches (score >= 70)
+        top_matches = (await session.execute(
+            select(func.count(JobScore.id)).where(JobScore.score >= 70)
+        )).scalar() or 0
+
         # Active Sources
         sources_count = (await session.execute(
             select(func.count(func.distinct(Job.source)))
         )).scalar() or 0
 
+        # Active users
+        from app.models.user import User
+        active_users = (await session.execute(
+            select(func.count(User.id)).where(User.is_active == True)
+        )).scalar() or 0
+
         payload = {
-            "total_jobs_processed": total_jobs,
+            "total_jobs_collected": total_jobs,
             "ai_analyses_performed": total_analyses,
-            "jobs_last_24h": jobs_24h,
+            "prefilter_rejected": prefilter_rejected,
+            "top_matches": top_matches,
             "active_sources": sources_count,
-            "system_status": "System Operational • Syncing Data"
+            "active_users": active_users,
         }
         
         _PUBLIC_STATS_CACHE["stats"] = (now + _PUBLIC_STATS_TTL, payload)
