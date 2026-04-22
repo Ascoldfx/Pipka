@@ -17,11 +17,12 @@ logger = logging.getLogger(__name__)
 
 SCORING_PROMPT = """\
 You are a VERY strict Executive Recruiter AI. Score each job against the candidate profile REALISTICALLY.
-The candidate is looking EXCLUSIVELY for Director / Head of / VP / C-level positions in SUPPLY CHAIN, PROCUREMENT, OPERATIONS, or LOGISTICS at INTERNATIONAL companies with ENGLISH as working language. Salary expectation: 100,000+ EUR.
+Use BOTH the candidate's resume background AND the target role preferences to assess fit.
+The candidate is looking EXCLUSIVELY for Director / Head of / VP / C-level positions in SUPPLY CHAIN, PROCUREMENT, OPERATIONS, or LOGISTICS at INTERNATIONAL companies with ENGLISH as working language.
 
 ## Scoring Rules (CRITICAL — follow strictly, most jobs should score 30-60):
-- 90-100: RARE. Perfect match — Director+ level, Supply Chain/Procurement/Operations title, well-known international company, English-speaking, 100k+ salary CONFIRMED
-- 75-89: Strong match — Director+ level, clearly related domain (supply chain/procurement/operations/logistics), English OK
+- 90-100: RARE. Perfect match — Director+ level, Supply Chain/Procurement/Operations title, well-known international company, English-speaking, candidate's background is a strong fit
+- 75-89: Strong match — Director+ level, clearly related domain (supply chain/procurement/operations/logistics), English OK, background relevant
 - 50-74: Partial match — related but gaps (Senior Manager level, slightly different function, language concerns, unknown company)
 - 30-49: Weak — different function (IT, HR, Finance, Marketing, Sales, Consulting), or German-only, or plain Manager
 - 0-29: No match — completely wrong field, junior, or irrelevant
@@ -33,7 +34,6 @@ The candidate is looking EXCLUSIVELY for Director / Head of / VP / C-level posit
 - Job requires fluent German (C1+/native/"verhandlungssicher"/"fließend"/"sehr gute Deutschkenntnisse") → max 30 (candidate has B1!)
 - Description entirely in German with no English mentioned → max 35
 - Job requires TECHNICAL/IT/ENGINEERING skills → max 35
-- Salary shown below 80,000 EUR → max 35
 - Local German SME (Mittelstand) with no international presence → max 45
 - Junior/Trainee/Student → max 15
 - Consulting/Advisory role → max 35
@@ -41,14 +41,15 @@ The candidate is looking EXCLUSIVELY for Director / Head of / VP / C-level posit
 ## Key bonuses (only apply if base score is already decent):
 - International/English-speaking company → +10
 - "English" as working language → +5
-- FMCG, manufacturing, food & beverage industry → +10 (direct experience match)
+- Industry matches candidate's background (FMCG, manufacturing, food & beverage, retail) → +10
 - Remote/hybrid option → +5
+- Company/industry aligns with candidate's specific experience → +5
 
 ## IMPORTANT:
-- Salary below 80,000 EUR → max 35
-- Salary 80,000-99,000 → subtract 10
-- No salary shown → do NOT penalize, mention "зарплата не указана"
-- Be SKEPTICAL — most jobs score 40-65. Only truly matching Director+ SC/Procurement roles at international English-speaking companies deserve 75+
+- Salary not shown → do NOT penalize, note "зарплата не указана"
+- If salary IS shown and seems below expectation → mention in verdict but do NOT hard-cap the score (salary data is unreliable)
+- Use the candidate's resume to assess fit: relevant industry, past titles, years of experience
+- Be SKEPTICAL — most jobs score 40-65. Only truly matching Director+ international SC/Procurement roles deserve 75+
 
 ## Candidate Profile
 {profile_text}
@@ -61,7 +62,7 @@ For each job, return a JSON object with:
 - "job_index": the index number
 - "score": 0-100 (be strict — most jobs should score 30-60, only truly matching Director+ international roles get 70+)
 - "breakdown": {{"relevance": 0-100, "seniority": 0-100, "language_fit": 0-100, "location": 0-100}}
-- "verdict": 1-2 sentence assessment in Russian. Mention: seniority level, is the company international, language requirements, salary if shown.
+- "verdict": 1-2 sentence assessment in Russian. Mention: seniority level, company type, language requirements, relevance to candidate's background.
 - "red_flags": list of concerns (in Russian)
 
 Return a JSON array. Only valid JSON, no markdown fences."""
@@ -80,30 +81,55 @@ def _get_client() -> AsyncAnthropic:
     return client
 
 
+RESUME_MAX_CHARS = 2500  # keep prompt size sane; covers ~400 words of background
+
+
 def build_profile_text(profile: UserProfile) -> str:
-    parts = []
+    parts: list[str] = []
+
+    # --- Resume / background (most important context for AI matching) ---
     if profile.resume_text:
-        parts.append(profile.resume_text)
+        resume = profile.resume_text.strip()
+        if len(resume) > RESUME_MAX_CHARS:
+            resume = resume[:RESUME_MAX_CHARS] + "\n[resume truncated]"
+        parts.append(f"### Candidate Resume / Background\n{resume}")
+
+    # --- Preferences ---
+    prefs: list[str] = []
     if profile.target_titles:
-        parts.append(f"Target roles: {', '.join(profile.target_titles)}")
+        prefs.append(f"Target roles: {', '.join(profile.target_titles)}")
     if profile.experience_years:
-        parts.append(f"Experience: {profile.experience_years}+ years")
+        prefs.append(f"Experience: {profile.experience_years}+ years")
     if profile.languages:
         lang_str = ", ".join(f"{k.upper()}: {v}" for k, v in profile.languages.items())
-        parts.append(f"Languages: {lang_str}")
+        prefs.append(f"Languages: {lang_str}")
     if profile.work_mode:
-        parts.append(f"Work mode: {profile.work_mode}")
+        prefs.append(f"Work mode: {profile.work_mode}")
     if profile.preferred_countries:
-        parts.append(f"Countries: {', '.join(profile.preferred_countries)}")
+        prefs.append(f"Countries: {', '.join(profile.preferred_countries)}")
     if profile.industries:
-        parts.append(f"Industries: {', '.join(profile.industries)}")
+        prefs.append(f"Industries: {', '.join(profile.industries)}")
     if profile.min_salary:
-        parts.append(f"Min salary: {profile.min_salary} EUR")
+        prefs.append(f"Target salary: {profile.min_salary}+ EUR (note: many listings omit salary — do not penalise if absent)")
+    if prefs:
+        parts.append("### Preferences\n" + "\n".join(prefs))
+
+    # --- Hard exclusions ---
     if profile.excluded_keywords:
-        parts.append(f"CRITICAL EXCLUSIONS: You MUST penalize heavily (Score < 20) any job requiring languages/skills/keywords explicitly excluded here: {', '.join(profile.excluded_keywords)}")
+        parts.append(
+            "### CRITICAL EXCLUSIONS\n"
+            "Score < 20 for any job requiring these: "
+            + ", ".join(profile.excluded_keywords)
+        )
     if getattr(profile, "english_only", False):
-        parts.append("LANGUAGE REQUIREMENT: Candidate wants ENGLISH-ONLY jobs. Jobs posted entirely in German/French/Dutch/other non-English language → max 30. Jobs that mention English as working language or are international → strong bonus.")
-    return "\n".join(parts) or "No profile set"
+        parts.append(
+            "### Language requirement\n"
+            "Candidate wants ENGLISH-ONLY jobs. "
+            "Jobs entirely in German/French/Dutch → max 30. "
+            "International/English-language companies → strong bonus."
+        )
+
+    return "\n\n".join(parts) or "No profile set"
 
 
 async def score_jobs(

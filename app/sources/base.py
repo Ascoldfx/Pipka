@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
@@ -31,6 +32,9 @@ class RawJob:
 
 
 def _normalize(text: str) -> str:
+    # Strip accents: é→e, ü→u, ä→a etc.
+    text = unicodedata.normalize("NFD", text)
+    text = "".join(c for c in text if unicodedata.category(c) != "Mn")
     text = text.lower().strip()
     # Remove common suffixes from company names
     for suffix in ("gmbh", " ag", " ltd", " inc", " se", " co.", "& co", " mbh",
@@ -51,6 +55,112 @@ def _normalize(text: str) -> str:
     # Remove location specifics (postal codes)
     text = re.sub(r"\d{5}", "", text)
     return text.strip()
+
+
+def _company_tokens(company: str) -> frozenset[str]:
+    """Extract significant tokens from a company name for fuzzy comparison."""
+    text = _normalize(company)
+    text = re.sub(r'[^\w\s]', '', text)   # strip remaining punctuation artifacts
+    return frozenset(w for w in text.split() if len(w) >= 4)
+
+
+def _are_same_company(a: str | None, b: str | None) -> bool:
+    """True if two company names refer to the same organisation.
+
+    Main algorithm: token-subset check.
+      "Heraeus" (tokens: {heraeus})
+      "Heraeus Quarzglas GmbH & Co. KG HRdirekt" (tokens: {heraeus, quarzglas, hrdirekt})
+      → {heraeus} ⊆ {heraeus, quarzglas, hrdirekt} → same company ✓
+
+    Fallback for short names (BMW, VW, SAP etc. where all tokens < 4 chars):
+      word-list prefix comparison.
+    """
+    if not a and not b:
+        return True
+    if not a or not b:
+        return False
+    ta = _company_tokens(a)
+    tb = _company_tokens(b)
+    if ta and tb:
+        return ta <= tb or tb <= ta
+    # Fallback — at least one name has only short tokens (BMW, SAP, VW …)
+    wa = [w for w in re.sub(r"[^\w]", " ", _normalize(a)).split() if w]
+    wb = [w for w in re.sub(r"[^\w]", " ", _normalize(b)).split() if w]
+    if not wa or not wb:
+        return False
+    n = min(len(wa), len(wb))
+    return wa[:n] == wb[:n]
+
+
+def _location_root(location: str) -> str:
+    """Return the first significant word of a location for loose comparison.
+
+    "Kleinostheim, BY, DE (DE)"  → "kleinostheim"
+    "Frankfurt am Main"          → "frankfurt"
+    "Munich, Bavaria"            → "munich"
+    "Germany"                    → "germany"
+    """
+    text = unicodedata.normalize("NFD", location)
+    text = "".join(c for c in text if unicodedata.category(c) != "Mn")
+    text = text.lower()
+    # Drop postal codes, country codes in parens like "(DE)"
+    text = re.sub(r"\([a-z]{2,3}\)", "", text)
+    text = re.sub(r"\b[a-z]{2}\b", "", text)   # short country/state codes
+    text = re.sub(r"\d+", "", text)             # postal codes
+    text = re.sub(r"[^\w\s]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    # Return the first word that is >= 4 chars (city name)
+    words = [w for w in text.split() if len(w) >= 4]
+    return words[0] if words else text[:8]
+
+
+def _locations_conflict(a: str | None, b: str | None) -> bool:
+    """True if locations conflict — meaning jobs should NOT be merged.
+
+    Rules (conservative — prefer keeping jobs separate on any doubt):
+      • Both unknown          → False  (no info either way, allow merge)
+      • One known, one not    → True   (asymmetry = uncertainty = keep both)
+      • Both known, same city → False  (clearly same place, allow merge)
+      • Both known, diff city → True   (different places, keep both)
+    """
+    a_has = bool(a and a.strip())
+    b_has = bool(b and b.strip())
+
+    # Both missing — no information to conflict on
+    if not a_has and not b_has:
+        return False
+
+    # Asymmetry: one has location, other doesn't — too uncertain to merge
+    if a_has != b_has:
+        return True
+
+    # Both present — compare city roots
+    ra = _location_root(a)  # type: ignore[arg-type]
+    rb = _location_root(b)  # type: ignore[arg-type]
+    if not ra or not rb:
+        return False
+    return ra != rb
+
+
+def is_fuzzy_duplicate(a: "RawJob", b: "RawJob") -> bool:
+    """True if two raw jobs are likely the same posting (different source/company spelling).
+
+    All three conditions must hold:
+      1. Normalised title matches exactly.
+      2. Company names are compatible (one is a refinement of the other).
+      3. Locations do NOT clearly conflict (different cities = different roles).
+
+    The location guard prevents merging e.g.:
+      "Head of Procurement" @ Siemens Energy, Frankfurt
+      "Head of Procurement" @ Siemens Healthineers, Erlangen
+    """
+    if _normalize(a.title) != _normalize(b.title):
+        return False
+    if not _are_same_company(a.company_name, b.company_name):
+        return False
+    if _locations_conflict(a.location, b.location):
+        return False
+    return True
 
 
 @dataclass

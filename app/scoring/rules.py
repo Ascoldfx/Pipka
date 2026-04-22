@@ -110,10 +110,26 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     if not domain_match:
         return False, "low"
 
-    # Salary floor check (strict: 100k+)
-    if profile and profile.min_salary and job.salary_min:
-        if job.salary_min < profile.min_salary * 0.7:  # 70k floor for 100k target
-            return False, "low"
+    # Salary floor check removed — salary is rarely available in job listings.
+    # AI scorer handles salary assessment when data is present.
+
+    # Work mode filter
+    if profile and profile.work_mode and profile.work_mode != "any":
+        if profile.work_mode == "remote":
+            # Reject explicitly onsite jobs
+            if job.is_remote is False:
+                return False, "low"
+            # If is_remote is unknown, require "remote" keyword in text
+            if job.is_remote is None and "remote" not in text:
+                return False, "low"
+        elif profile.work_mode == "onsite":
+            # Reject explicitly remote jobs
+            if job.is_remote is True:
+                return False, "low"
+        elif profile.work_mode == "hybrid":
+            # Reject explicitly remote-only (no hybrid mention) jobs
+            if job.is_remote is True and "hybrid" not in text:
+                return False, "low"
 
     # Country check
     if profile and profile.preferred_countries and job.country:
@@ -126,14 +142,14 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     # "Senior Manager" is borderline — allow but lower bucket
     is_senior_manager = "senior manager" in title_lower or "lead" in title_lower
 
-    # Plain "Manager" without Director/Head/VP → reject
+    # Plain "Manager" without Director/Head/VP → tier2 queue (scored after tier1 is clear)
     is_plain_manager = (
         "manager" in title_lower
         and not is_director
         and not is_senior_manager
     )
     if is_plain_manager:
-        return False, "low"
+        return False, "manager_tier2"
 
     # English-friendly signal
     english_friendly = any(signal in text for signal in ENGLISH_FRIENDLY_SIGNALS)

@@ -44,6 +44,7 @@ class UserProfile(Base):
     base_location: Mapped[str | None] = mapped_column(String(255))  # "Leipzig"
     excluded_keywords: Mapped[list | None] = mapped_column(JSON)  # ["junior", "sales", "b2"]
     english_only: Mapped[bool] = mapped_column(Boolean, default=False)  # prioritise English-language jobs only
+    target_companies: Mapped[list | None] = mapped_column(JSON)  # ["Nestlé", "Bayer", "Unilever"]
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     user: Mapped["User"] = relationship(back_populates="profile")

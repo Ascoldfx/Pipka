@@ -11,11 +11,11 @@ logger = logging.getLogger(__name__)
 SITE_MAP = {
     # Google Jobs is excluded: blocked on VPS IPs by Google (returns 0 results silently)
     # Glassdoor: best-effort (Cloudflare CAPTCHAs may block, handled gracefully)
-    "de": ["indeed", "linkedin", "glassdoor"],
-    "ch": ["indeed", "linkedin", "glassdoor"],
-    "at": ["indeed", "linkedin", "glassdoor"],
-    "nl": ["indeed", "linkedin", "glassdoor"],
-    "be": ["indeed", "linkedin", "glassdoor"],
+    "de": ["indeed", "linkedin"],
+    "ch": ["indeed", "linkedin"],
+    "at": ["indeed", "linkedin"],
+    "nl": ["indeed", "linkedin"],
+    "be": ["indeed", "linkedin"],
     "si": ["indeed", "linkedin"],
     "sk": ["indeed", "linkedin"],
     "ro": ["indeed", "linkedin"],
@@ -48,6 +48,8 @@ COUNTRY_NAME = {
 }
 
 
+JOBSPY_MAX_QUERIES = 8  # cap to avoid timeout; top-ranked queries are most valuable
+
 class JobSpySource:
     @property
     def source_name(self) -> str:
@@ -57,12 +59,23 @@ class JobSpySource:
         results: list[RawJob] = []
         seen: set[str] = set()
 
+        # Cap queries — LinkedIn/Indeed scraping is slow; too many sequential calls → timeout
+        queries = params.queries[:JOBSPY_MAX_QUERIES]
+
         for country in params.countries:
             sites = SITE_MAP.get(country, ["indeed", "linkedin", "google"])
-            for query in params.queries:
-                location = ", ".join(params.locations) if params.locations else None
-                jobs = await self._scrape(query, sites, location, country, min(params.results_per_query, 25))
-                for job in jobs:
+            location = ", ".join(params.locations) if params.locations else None
+            limit = min(params.results_per_query, 25)
+
+            # Run all queries for this country concurrently (each in its own thread)
+            tasks = [self._scrape(q, sites, location, country, limit) for q in queries]
+            batch = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for item in batch:
+                if isinstance(item, Exception):
+                    logger.warning("JobSpy scrape failed: %s", item)
+                    continue
+                for job in item:
                     if job.external_id not in seen:
                         seen.add(job.external_id)
                         results.append(job)
@@ -124,7 +137,10 @@ class JobSpySource:
                         title=str(row.get("title", "")),
                         company_name=str(row.get("company", "")) or None,
                         location=str(row.get("location", "")) or None,
-                        country=country.upper(),
+                        # LinkedIn ignores country_indeed param and returns global results.
+                        # Set country=None for LinkedIn so the text-based location filter runs.
+                        # Indeed/Glassdoor respect the country filter, so keep it for them.
+                        country=None if site == "linkedin" else country.upper(),
                         description=str(row.get("description", "")) or None,
                         salary_min=float(salary_min) if salary_min else None,
                         salary_max=float(salary_max) if salary_max else None,

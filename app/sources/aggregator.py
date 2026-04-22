@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.job import Job
-from app.sources.base import JobSource, RawJob, SearchParams
+from app.sources.base import JobSource, RawJob, SearchParams, is_fuzzy_duplicate
 
 logger = logging.getLogger(__name__)
 
@@ -114,8 +114,22 @@ class JobAggregator:
         self.sources = sources
         self.last_stats: dict = {}
 
+    SOURCE_TIMEOUT = 120   # default timeout per source
+    # JobSpy scrapes LinkedIn + Indeed sequentially; needs more time for many queries
+    SOURCE_TIMEOUT_OVERRIDES: dict[str, int] = {"jobspy": 240}
+
+    async def _search_source(self, source: JobSource, params: SearchParams):
+        """Run one source with a hard timeout so a hung source can't block the scan."""
+        timeout = self.SOURCE_TIMEOUT_OVERRIDES.get(source.source_name, self.SOURCE_TIMEOUT)
+        try:
+            return await asyncio.wait_for(source.search(params), timeout=timeout)
+        except asyncio.TimeoutError:
+            raise asyncio.TimeoutError(
+                f"{source.source_name} timed out after {timeout}s"
+            )
+
     async def search(self, params: SearchParams, session: AsyncSession) -> list[Job]:
-        tasks = [source.search(params) for source in self.sources]
+        tasks = [self._search_source(source, params) for source in self.sources]
         all_results = await asyncio.gather(*tasks, return_exceptions=True)
 
         raw_jobs: list[RawJob] = []
@@ -133,18 +147,21 @@ class JobAggregator:
                     }
                 )
                 continue
-            source_stats.append(
-                {
-                    "source": source_name,
-                    "status": "ok",
-                    "raw_count": len(result),
-                }
-            )
+            stat: dict = {
+                "source": source_name,
+                "status": "ok",
+                "raw_count": len(result),
+            }
+            # Include API request count if the source tracked it (e.g. Jooble budget)
+            src_obj = self.sources[i]
+            if hasattr(src_obj, "_last_request_count"):
+                stat["api_requests"] = src_obj._last_request_count
+            source_stats.append(stat)
             raw_jobs.extend(result)
 
         logger.info("Aggregated %d raw jobs from %d sources", len(raw_jobs), len(self.sources))
 
-        # Deduplicate
+        # Pass 1 — exact dedup by SHA-256(title+company)
         seen_hashes: set[str] = set()
         unique: list[RawJob] = []
         for job in raw_jobs:
@@ -152,7 +169,37 @@ class JobAggregator:
                 seen_hashes.add(job.dedup_hash)
                 unique.append(job)
 
-        logger.info("After dedup: %d unique jobs", len(unique))
+        logger.info("After exact dedup: %d unique jobs", len(unique))
+
+        # Pass 2 — fuzzy dedup: same normalised title + company-name subset match
+        # Handles "Heraeus" vs "Heraeus Quarzglas GmbH & Co. KG HRdirekt" and
+        # the same job posted on Indeed + LinkedIn + Arbeitsagentur simultaneously.
+        # O(n²) but n < 500 per scan in practice — negligible.
+        fuzzy_deduped: list[RawJob] = []
+        for job in unique:
+            merged = False
+            for i, seen in enumerate(fuzzy_deduped):
+                if is_fuzzy_duplicate(job, seen):
+                    # Accumulate all sources seen for this job
+                    all_sources: list[str] = seen.raw_data.get("merged_sources", [seen.source])
+                    if job.source not in all_sources:
+                        all_sources.append(job.source)
+
+                    if len(job.description or "") > len(seen.description or ""):
+                        # Switch to richer candidate, carry over the merged sources list
+                        job.raw_data["merged_sources"] = all_sources
+                        fuzzy_deduped[i] = job
+                    else:
+                        seen.raw_data["merged_sources"] = all_sources
+                    merged = True
+                    break
+            if not merged:
+                fuzzy_deduped.append(job)
+
+        removed = len(unique) - len(fuzzy_deduped)
+        if removed:
+            logger.info("After fuzzy dedup: %d jobs (removed %d near-duplicates)", len(fuzzy_deduped), removed)
+        unique = fuzzy_deduped
 
         # Filter with stats
         cutoff = datetime.now() - timedelta(days=params.max_age_days)
@@ -182,6 +229,7 @@ class JobAggregator:
         self.last_stats = {
             "raw_count": len(raw_jobs),
             "unique_count": len(unique),
+            "fuzzy_removed": removed,
             "filtered_count": len(filtered),
             "rejected_negative": rejected_negative,
             "rejected_old": rejected_old,
@@ -249,6 +297,10 @@ US_KEYWORDS = [
     "greater new york", "greater los angeles", "greater boston",
     "greater seattle", "greater denver", "san francisco bay",
     "silicon valley", "wall street", "bay area",
+    "greater philadelphia", "greater atlanta", "greater dallas", "greater washington",
+    "greater miami", "greater phoenix", "greater minneapolis", "greater st. louis",
+    "greater detroit", "greater pittsburgh", "greater cleveland", "greater baltimore",
+    "greater salt lake", "greater memphis", "greater richmond", "greater louisville",
     # Russian — LinkedIn returns locations in Russian
     "соединенные штаты", "соединённые штаты", "сша",
     "агломерация", # "Агломерация Нью-Йорка", "Агломерация Чикаго" etc.

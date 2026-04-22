@@ -12,11 +12,20 @@ class Settings(BaseSettings):
     # Claude AI
     anthropic_api_key: str
 
+    # Google Gemini (optional — free tier backfill scorer)
+    # Set GEMINI_API_KEY in .env to enable; leave empty to use Claude for backfill too
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash-lite"  # 30 RPM / 1500 RPD free tier
+    gemini_batch_delay: float = 4.0  # seconds between batches (30 RPM → 1 req/2s, use 4s to be safe)
+
     # Database
     database_url: str = "sqlite+aiosqlite:///./pipka.db"
 
     # Arbeitsagentur
     arbeitsagentur_api_key: str = "jobboerse-jobsuche"
+
+    # Jooble meta-aggregator (covers Stepstone, Monster, regional boards)
+    jooble_api_key: str = ""
 
     # Scoring
     max_jobs_per_scoring_batch: int = 8
@@ -50,6 +59,13 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = "INFO"
+
+    # Backblaze B2 backups (optional — local backup always runs when DB is PostgreSQL)
+    # Set all three to enable cloud upload; leave empty to use local-only backups
+    b2_key_id: str = ""
+    b2_app_key: str = ""
+    b2_bucket: str = ""
+    b2_endpoint: str = "https://s3.us-west-004.backblazeb2.com"
 
     # `extra="ignore"` lets us share .env with docker-compose interpolation vars
     # (e.g. POSTGRES_PASSWORD) without breaking Settings validation.

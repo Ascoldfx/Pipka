@@ -25,7 +25,7 @@ from app.models.user import User, UserProfile
 from app.scoring.matcher import analyze_single_job
 from app.services.ops_service import build_ops_overview
 from app.services.scheduler_service import is_scan_running
-from app.services.tracker_service import mark_applied, mark_rejected, save_job
+from app.services.tracker_service import check_auto_exclude_company, mark_applied, mark_rejected, save_job
 
 logger = logging.getLogger(__name__)
 
@@ -287,6 +287,7 @@ async def get_jobs(
                 "location": job.location or "N/A",
                 "country": job.country or "?",
                 "source": job.source,
+                "merged_sources": (job.raw_data or {}).get("merged_sources"),
                 "url": job.url,
                 "salary_min": job.salary_min,
                 "salary_max": job.salary_max,
@@ -296,6 +297,7 @@ async def get_jobs(
                 "score": row[1],
                 "analysis": row[2],
                 "status": row[3],
+                "data_quality": "full" if len(job.description or "") >= 300 else "partial",
             })
 
         pages = (total + per_page - 1) // per_page
@@ -366,14 +368,16 @@ async def job_action(job_id: int, request: Request, action: str = Query(...)):
             user = await _get_user(request, session)
             if not user:
                 raise HTTPException(status_code=401, detail="Login required")
+            auto_excluded: str | None = None
             if action == "save":
                 await save_job(user.id, job_id, session)
             elif action == "applied":
                 await mark_applied(user.id, job_id, session)
             elif action == "reject":
                 await mark_rejected(user.id, job_id, session)
+                auto_excluded = await check_auto_exclude_company(user.id, job_id, session)
             _invalidate_stats_cache(user.id)
-            return {"ok": True, "action": action}
+            return {"ok": True, "action": action, "auto_excluded": auto_excluded}
         except HTTPException:
             raise
         except Exception:
@@ -463,6 +467,39 @@ async def get_ops_overview(request: Request, window_hours: int = Query(24, ge=6,
         )
 
 
+@router.get("/api/ops/dedup")
+async def get_dedup_jobs(request: Request, limit: int = Query(200, ge=10, le=500)):
+    """Return jobs that were fuzzy-merged from multiple sources."""
+    if _get_role(request, None) != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    async with async_session() as session:
+        # Jobs where merged_sources array has more than 1 element
+        from sqlalchemy import cast, text
+        result = await session.execute(
+            select(Job)
+            .where(
+                Job.raw_data.op("->")("merged_sources").isnot(None),
+                func.json_array_length(Job.raw_data.op("->")("merged_sources")) > 1,
+            )
+            .order_by(Job.scraped_at.desc())
+            .limit(limit)
+        )
+        jobs = result.scalars().all()
+        return [
+            {
+                "id": j.id,
+                "title": j.title,
+                "company": j.company_name or "",
+                "location": j.location or "",
+                "url": j.url,
+                "sources": (j.raw_data or {}).get("merged_sources", [j.source]),
+                "posted_at": j.posted_at.isoformat() if j.posted_at else None,
+            }
+            for j in jobs
+        ]
+
+
 # ─── Profile / Settings ──────────────────────────────────────
 
 @router.get("/api/profile")
@@ -486,6 +523,7 @@ async def get_profile(request: Request):
             "preferred_countries": p.preferred_countries or [],
             "excluded_keywords": p.excluded_keywords or [],
             "english_only": getattr(p, "english_only", False) or False,
+            "target_companies": getattr(p, "target_companies", None) or [],
         }}
 
 
@@ -505,6 +543,7 @@ async def update_profile(
     preferred_countries: str = Form(None),
     excluded_keywords: str = Form(None),
     english_only: str = Form(None),
+    target_companies: str = Form(None),
 ):
     if resume_text is not None and len(resume_text) > MAX_RESUME_CHARS:
         raise HTTPException(status_code=400, detail=f"Resume too long (>{MAX_RESUME_CHARS} chars)")
@@ -554,6 +593,8 @@ async def update_profile(
                 p.excluded_keywords = [k.strip() for k in excluded_keywords.split(",") if k.strip()]
             if english_only is not None:
                 p.english_only = english_only in ("1", "true", "True", "yes", "on")
+            if target_companies is not None:
+                p.target_companies = [c.strip() for c in target_companies.split(",") if c.strip()]
 
             await session.commit()
             _invalidate_stats_cache(user.id)

@@ -18,11 +18,12 @@ from app.models.job import Job, JobScore
 from app.models.user import User
 from app.scoring.matcher import score_jobs
 from app.scoring.rules import pre_filter
+from app.services.backup_service import run_backup
 from app.services.ops_service import record_ops_event
 from app.services.tracker_service import get_hidden_dedup_hashes, get_hidden_job_ids
 from app.sources.aggregator import JobAggregator
 from app.sources.base import SearchParams
-from app.sources import AdzunaSource, JobSpySource, ArbeitnowSource, RemotiveSource, ArbeitsagenturSource, XingSource
+from app.sources import AdzunaSource, JobSpySource, ArbeitnowSource, RemotiveSource, ArbeitsagenturSource, XingSource, WatchlistSource, BerlinStartupJobsSource, WTTJSource, JoobleSource
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
@@ -83,12 +84,30 @@ def start_scheduler(bot_app):
         id="daily_cleanup",
         replace_existing=True,
     )
-    # Backfill scorer: every 6 hours — score existing unscored jobs for each user
+    # Daily DB backup at 02:30 UTC — pg_dump → gzip → local + optional B2
+    scheduler.add_job(
+        _daily_backup,
+        "cron",
+        hour=2,
+        minute=30,
+        id="daily_backup",
+        replace_existing=True,
+    )
+    # Backfill scorer: every 2 hours — score existing unscored jobs for each user
     scheduler.add_job(
         _backfill_score,
         "interval",
-        hours=6,
+        hours=2,
         id="backfill_score",
+        replace_existing=True,
+    )
+    # Watchlist scan: every 6 hours — search for jobs at target companies per user
+    scheduler.add_job(
+        _watchlist_scan,
+        "interval",
+        hours=6,
+        args=[bot_app],
+        id="watchlist_scan",
         replace_existing=True,
     )
     scheduler.start()
@@ -98,13 +117,8 @@ def start_scheduler(bot_app):
 async def _background_scan(bot_app, trigger: str = "scheduled"):
     """Scan all sources, score only NEW jobs, push top results to Telegram."""
     if _scan_lock.locked():
-        logger.warning("Skipping %s scan because another scan is already running", trigger)
-        await record_ops_event(
-            "scan",
-            "warning",
-            source=trigger,
-            message="Skipped overlapping scan",
-        )
+        # Normal — manual scan still running when scheduled one fires; just skip silently
+        logger.info("Skipping %s scan — previous scan still in progress", trigger)
         return
 
     async with _scan_lock:
@@ -112,7 +126,8 @@ async def _background_scan(bot_app, trigger: str = "scheduled"):
         started_at = datetime.now()
         started_perf = time.perf_counter()
 
-        aggregator = JobAggregator([AdzunaSource(), JobSpySource(), ArbeitnowSource(), RemotiveSource(), ArbeitsagenturSource(), XingSource()])
+        aggregator = JobAggregator([AdzunaSource(), JobSpySource(), ArbeitnowSource(), RemotiveSource(), ArbeitsagenturSource(), XingSource(), BerlinStartupJobsSource(), WTTJSource(), JoobleSource()])
+
 
         try:
             async with async_session() as session:
@@ -289,13 +304,32 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
     }
 
 
+def _backfill_score_fn():
+    """Return the appropriate scoring function for backfill.
+
+    Uses Gemini Flash (free tier) when GEMINI_API_KEY is set in .env,
+    otherwise falls back to Claude (paid).
+    """
+    if settings.gemini_api_key:
+        from app.scoring.gemini_matcher import score_jobs_gemini  # noqa: PLC0415
+        logger.debug("Backfill scorer: using Gemini Flash (%s)", settings.gemini_model)
+        return score_jobs_gemini
+    logger.debug("Backfill scorer: using Claude (%s)", settings.claude_model)
+    return score_jobs
+
+
 async def _backfill_score():
     """Score existing DB jobs that haven't been scored yet for each user.
 
-    Runs every 6 hours. Picks up jobs that were added during scans but skipped
-    due to the per-run 80-job cap, or jobs loaded before a user created their profile.
+    Runs every 2 hours. Two-pass approach:
+      1. Pre-filter rejects → immediately write JobScore(score=0) — no Claude call needed.
+         This drains the "unscored" queue for irrelevant jobs without burning API credits.
+      2. Pre-filter passes  → send up to 500 per run to the AI scorer
+         (Gemini Flash if GEMINI_API_KEY is set, Claude otherwise).
     """
-    logger.info("Backfill scorer started")
+    _score_fn = _backfill_score_fn()
+    backend = "Gemini" if settings.gemini_api_key else "Claude"
+    logger.info("Backfill scorer started (backend=%s)", backend)
 
     async with async_session() as session:
         users_result = await session.execute(
@@ -307,14 +341,12 @@ async def _backfill_score():
             if not user.profile:
                 continue
             try:
-                # All jobs in DB (newest first, limit to recent window)
                 cutoff = datetime.now() - timedelta(days=settings.job_max_age_days)
                 all_jobs_result = await session.execute(
                     select(Job).where(Job.scraped_at >= cutoff)
                 )
                 all_jobs = all_jobs_result.scalars().all()
 
-                # Already scored for this user
                 scored_result = await session.execute(
                     select(JobScore.job_id).where(JobScore.user_id == user.id)
                 )
@@ -323,7 +355,10 @@ async def _backfill_score():
                 hidden_ids = await get_hidden_job_ids(user.id, session)
                 hidden_hashes = await get_hidden_dedup_hashes(user.id, session)
 
-                unscored = []
+                need_ai_t1: list[Job] = []   # director/head/VP + domain
+                need_ai_t2: list[Job] = []   # plain manager + domain (lower priority)
+                skip_batch: list[JobScore] = []
+
                 for job in all_jobs:
                     if job.id in already_scored_ids:
                         continue
@@ -331,20 +366,123 @@ async def _backfill_score():
                         continue
                     passed, bucket = pre_filter(job, user.profile)
                     if passed and bucket in ("high", "medium"):
-                        unscored.append(job)
+                        need_ai_t1.append(job)
+                    elif not passed and bucket == "manager_tier2":
+                        need_ai_t2.append(job)
+                    else:
+                        # Hard reject — mark score=0 so it never re-enters the queue
+                        skip_batch.append(JobScore(
+                            job_id=job.id,
+                            user_id=user.id,
+                            score=0,
+                            ai_analysis=None,
+                        ))
 
-                if not unscored:
-                    continue
+                # Bulk-insert hard rejects (no API calls) — cap at 2000 per run
+                if skip_batch:
+                    for rec in skip_batch[:2000]:
+                        session.add(rec)
+                    await session.commit()
+                    logger.info(
+                        "Backfill: marked %d jobs as rejected (pre-filter) for user %s",
+                        min(len(skip_batch), 2000), user.telegram_id,
+                    )
 
-                # Score up to 120 per run (3 batches of 8 × 5 batches)
-                to_score = unscored[:120]
-                logger.info("Backfill: scoring %d unscored jobs for user %s", len(to_score), user.telegram_id)
-                await score_jobs(to_score, user, session)
+                # Tier 1 first: director / head of / VP
+                if need_ai_t1:
+                    to_score = need_ai_t1[:500]
+                    logger.info(
+                        "Backfill tier1 [%s]: AI-scoring %d director-level jobs for user %s",
+                        backend, len(to_score), user.telegram_id,
+                    )
+                    await _score_fn(to_score, user, session)
+                    continue  # come back next run for tier2
+
+                # Tier 2: manager-level, only when tier1 is fully cleared
+                if need_ai_t2:
+                    to_score = need_ai_t2[:500]
+                    logger.info(
+                        "Backfill tier2 [%s]: AI-scoring %d manager-level jobs for user %s",
+                        backend, len(to_score), user.telegram_id,
+                    )
+                    await _score_fn(to_score, user, session)
+                    continue  # recheck only after tier2 is also empty
+
+                # Both queues empty → safety recheck of pre-filter rejects
+                # Sends score=0/ai_analysis=NULL jobs to Gemini for a second opinion.
+                # Catches anything the rule-based filter may have wrongly rejected.
+                if settings.gemini_api_key:
+                    from app.scoring.gemini_matcher import recheck_zero_scores  # noqa: PLC0415
+                    checked, upgraded = await recheck_zero_scores(user, session, limit=500)
+                    if checked:
+                        logger.info(
+                            "Backfill recheck: %d pre-filter rejects checked, %d upgraded for user %s",
+                            checked, upgraded, user.telegram_id,
+                        )
 
             except Exception as e:
                 logger.error("Backfill scorer failed for user %s: %s", user.telegram_id, e)
 
     logger.info("Backfill scorer completed")
+
+
+async def _watchlist_scan(bot_app):
+    """For each user with target_companies, fetch jobs from those companies and notify."""
+    logger.info("Watchlist scan started")
+
+    from app.sources.aggregator import JobAggregator
+
+    async with async_session() as session:
+        users_result = await session.execute(
+            select(User).options(selectinload(User.profile)).where(User.is_active == True)
+        )
+        users = users_result.scalars().all()
+
+        for user in users:
+            if not user.profile:
+                continue
+            companies = getattr(user.profile, "target_companies", None) or []
+            if not companies:
+                continue
+            if not user.telegram_id:
+                continue
+
+            try:
+                countries = user.profile.preferred_countries or ["de"]
+                params = SearchParams(
+                    queries=companies,      # WatchlistSource treats queries as company names
+                    countries=countries,
+                    locations=[],
+                )
+                # Aggregator handles dedup, filtering, and DB upsert
+                aggregator = JobAggregator([WatchlistSource()])
+                stored_jobs = await aggregator.search(params, session)
+
+                if not stored_jobs:
+                    logger.info("Watchlist: no jobs found for user %s (%d companies)", user.telegram_id, len(companies))
+                    continue
+
+                logger.info("Watchlist: %d jobs found for user %s", len(stored_jobs), user.telegram_id)
+                await _score_and_notify(bot_app, user, stored_jobs, session)
+
+            except Exception as e:
+                logger.error("Watchlist scan failed for user %s: %s", user.telegram_id, e)
+
+    logger.info("Watchlist scan completed")
+
+
+async def _daily_backup():
+    """Daily DB backup at 02:30 UTC. Saves gzipped pg_dump to /app/data/backups/ (keeps last 7)."""
+    from pathlib import Path  # noqa: PLC0415
+
+    try:
+        path = await run_backup()
+        name = Path(path).name if path else "skipped"
+        await record_ops_event("backup", "success", message=name)
+        logger.info("Daily backup OK: %s", name)
+    except Exception as e:
+        logger.error("Daily backup failed: %s", e)
+        await record_ops_event("backup", "error", message=str(e)[:250])
 
 
 async def _cleanup_old_jobs():
