@@ -274,6 +274,18 @@ async def analyze_single_job(job: Job, profile: UserProfile) -> str:
         "Дай детальный анализ: совпадение, плюсы, минусы, рекомендации. "
         "Если вакансия на немецком, переведи суть на русский. Ответ на русском."
     )
+    
+    if settings.gemini_api_key:
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=settings.gemini_api_key)
+            model = genai.GenerativeModel(settings.gemini_model)
+            response = await model.generate_content_async(prompt)
+            return response.text
+        except Exception as e:
+            logger.error(f"Gemini analysis error: {e}")
+            return f"Ошибка анализа Gemini: {str(e)[:100]}"
+            
     try:
         ai = _get_client()
         response = await ai.messages.create(

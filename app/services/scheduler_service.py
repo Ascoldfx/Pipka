@@ -16,6 +16,7 @@ from app.database import async_session
 from app.models.application import Application
 from app.models.job import Job, JobScore
 from app.models.user import User
+from app.scoring.gemini_matcher import score_jobs_gemini
 from app.scoring.matcher import score_jobs
 from app.scoring.rules import pre_filter
 from app.services.backup_service import run_backup
@@ -254,7 +255,12 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
 
     # Score only new jobs (max 80 per run to control costs)
     to_score = new_jobs[:80]
-    scores = await score_jobs(to_score, user, session)
+    
+    if settings.gemini_api_key:
+        logger.info("Using Gemini for real-time scoring (TEMPORARY)")
+        scores = await score_jobs_gemini(to_score, user, session)
+    else:
+        scores = await score_jobs(to_score, user, session)
 
     # Find top results to push
     top_results = []
