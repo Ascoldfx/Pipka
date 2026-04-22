@@ -1856,31 +1856,38 @@ async function loadDedupPanel() {
 }
 
 async function viewAdminUserProfile(userId) {
-  openModal('Loading profile...', '🔍 Fetching data');
+  $('modal').classList.add('open');
+  $('modal-title').textContent = '🔍 Loading profile...';
+  $('modal-body').textContent = 'Fetching data...';
   try {
     const d = await (await fetch(`/api/admin/user/${userId}/profile`)).json();
     if(d.detail) throw new Error(d.detail);
     
     const p = d.profile || {};
-    const resumeLines = (p.resume_text || '').split('\n').slice(0, 15).join('\n') + (p.resume_text && p.resume_text.length > 500 ? '\n...' : '');
+    const resumePreview = (p.resume_text || 'No resume text').substring(0, 1500);
 
-    const body = `
+    $('modal-title').textContent = `User Profile: ${d.name || 'Unknown'}`;
+    $('modal-body').innerHTML = `
       <div style="font-size:13px">
         <div style="margin-bottom:15px; padding:12px; background:var(--hover); border-radius:10px">
           <strong>${esc(d.name)}</strong> (${esc(d.email)})<br>
-          <span class="pill">${d.role}</span> · <span class="pill ${d.is_active?'success':'error'}">${d.is_active?'Active':'Inactive'}</span>
+          <span class="pill">${esc(d.role)}</span> · <span class="pill ${d.is_active?'success':'error'}">${d.is_active?'Active':'Inactive'}</span>
         </div>
         
         <h4 style="margin:12px 0 6px; font-size:11px; text-transform:uppercase; color:var(--muted)">Resume Preview</h4>
-        <pre style="background:var(--badge); padding:10px; border-radius:8px; font-size:11px; max-height:200px; overflow:auto; margin-bottom:12px">${esc(resumeLines || 'No resume text')}</pre>
+        <pre style="background:var(--badge); padding:10px; border-radius:8px; font-size:11px; max-height:200px; overflow:auto; margin-bottom:12px; white-space:pre-wrap">${esc(resumePreview)}${p.resume_text && p.resume_text.length > 1500 ? '\n...' : ''}</pre>
         
-        <h4 style="margin:12px 0 6px; font-size:11px; text-transform:uppercase; color:var(--muted)">Settings</h4>
+        <h4 style="margin:12px 0 6px; font-size:11px; text-transform:uppercase; color:var(--muted)">Search Settings</h4>
         <div class="mini-list">
           <span>🎯 Titles: ${esc((p.target_titles||[]).join(', ') || '—')}</span>
           <span>📍 Countries: ${esc((p.preferred_countries||[]).join(', ').toUpperCase() || '—')}</span>
           <span>💰 Salary: ${p.min_salary ? fmtNumber(p.min_salary) + ' EUR' : '—'}</span>
           <span>🏢 Mode: ${esc(p.work_mode || 'any')}</span>
-          <span>🗣️ Lang: ${esc(Object.keys(p.languages||{}).join(', ') || '—')}</span>
+          <span>🗣️ Lang: ${esc(Object.entries(p.languages||{}).map(([k,v])=>k+': '+v).join(', ') || '—')}</span>
+          <span>🚫 Excluded: ${esc((p.excluded_keywords||[]).join(', ') || '—')}</span>
+          <span>🏭 Industries: ${esc((p.industries||[]).join(', ') || '—')}</span>
+          <span>⭐ Companies: ${esc((p.target_companies||[]).join(', ') || '—')}</span>
+          <span>🇬🇧 English Only: ${p.english_only ? 'Yes' : 'No'}</span>
         </div>
         
         <div style="margin-top:15px; border-top:1px solid var(--border); padding-top:12px">
@@ -1888,11 +1895,9 @@ async function viewAdminUserProfile(userId) {
         </div>
       </div>
     `;
-    openModal(body, `User Profile: ${esc(d.name)}`);
-    // Re-trigger esc conversion for the body since we used template literals
-    $('modal-body').innerHTML = body;
   } catch(e) {
-    openModal(`<p style="color:var(--red)">Error: ${esc(e.message)}</p>`, 'Error');
+    $('modal-title').textContent = 'Error';
+    $('modal-body').innerHTML = '<p style="color:var(--red)">Error: ' + esc(e.message) + '</p>';
   }
 }
 
