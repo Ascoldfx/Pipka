@@ -215,7 +215,10 @@
         <h2>Ops Cockpit</h2>
         <p>Короткий пульт по здоровью пайплайна: сбор вакансий, скоринг, очередь, ошибки API и последние сканы.</p>
       </div>
-      <div class="ops-actions">
+      <div class="ops-actions" style="display: flex; gap: 10px; align-items: center;">
+        <a href="/infographic" target="_blank" class="btn" style="background: linear-gradient(135deg, var(--blue), var(--green)); color: #fff; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+          <span style="font-size: 1.2em;">📈</span> SMM Инфографика
+        </a>
         <div class="segmented">
           <button type="button" data-ops-window="24" class="active" onclick="setOpsWindow(24)">24h</button>
           <button type="button" data-ops-window="72" onclick="setOpsWindow(72)">72h</button>
