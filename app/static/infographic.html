@@ -298,7 +298,7 @@
         <div class="hero-card">
             <div class="hero-number" id="v-user">1</div>
             <div class="hero-text">
-                <h3>Active User</h3>
+                <h3 id="user-label">Active User</h3>
                 <p>Every job collected, scored, and filtered — tailored to a single person's profile.</p>
             </div>
         </div>
@@ -351,9 +351,12 @@ async function load() {
             animateValue(el, val || 0, 2200);
         });
 
-        // User count (always "1" — but pull from API for accuracy)
+        // User count
         const userEl = document.getElementById('v-user');
-        userEl.textContent = d.active_users || 1;
+        const userCount = d.active_users || 1;
+        userEl.textContent = userCount;
+        document.getElementById('user-label').textContent =
+            userCount === 1 ? 'Active User' : 'Active Users';
 
     } catch (e) {
         console.error('Stats fetch failed:', e);
