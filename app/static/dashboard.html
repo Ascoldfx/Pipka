@@ -3,79 +3,639 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="AI Job Matcher Dashboard">
 <title>pipka.net</title>
-<link rel="stylesheet" href="/static/css/styles.css">
+<style>
+  :root { --bg:#fff; --fg:#111; --muted:#777; --border:#e0e0e0; --hover:#f7f7f7; --green:#2d8a4e; --yellow:#b8860b; --red:#c0392b; --blue:#1565c0; --badge:#f0f0f0; }
+  :root[data-theme="dark"] { --bg:#0f0f0f; --fg:#e8e8e8; --muted:#888; --border:#2a2a2a; --hover:#1a1a1a; --green:#3dba68; --yellow:#d4a017; --red:#e05252; --blue:#4a9de8; --badge:#1e1e1e; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; background:var(--bg); color:var(--fg); line-height:1.5; font-size:13px; }
+
+  /* Theme transition — only on layout elements, not buttons/interactions */
+  body, header, .stats, .filters, table, td, th, .modal, .settings, input, select, textarea, .tab, .tab-content, .source-tag, .score { transition: background-color .2s, border-color .2s, color .15s; }
+
+  /* Header */
+  header { border-bottom:2px solid var(--fg); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; }
+  header h1 { font-size:20px; font-weight:700; letter-spacing:-0.5px; }
+  header h1 span { font-weight:300; color:var(--muted); }
+
+  /* Dark mode toggle */
+  #theme-toggle { background:none; border:1px solid var(--border); border-radius:6px; padding:4px 8px; cursor:pointer; font-size:15px; color:var(--fg); line-height:1; display:flex; align-items:center; gap:4px; }
+  #theme-toggle:hover { border-color:var(--fg); }
+
+  /* Interface language selector (in Profile tab) */
+  .ui-lang-grid { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+  .ui-lang-btn { display:inline-flex; align-items:center; gap:9px; padding:10px 18px; border:1.5px solid var(--border); border-radius:999px; background:var(--bg); color:var(--fg); cursor:pointer; font-family:inherit; font-size:13px; font-weight:500; transition:all .18s; user-select:none; }
+  .ui-lang-btn .ul-flag { font-size:20px; line-height:1; }
+  .ui-lang-btn .ul-name { font-weight:600; }
+  .ui-lang-btn .ul-sub { font-size:11px; color:var(--muted); font-weight:400; }
+  .ui-lang-btn:hover { border-color:var(--muted); background:var(--hover); }
+  .ui-lang-btn.active { border-color:var(--fg); background:var(--fg); color:var(--bg); }
+  .ui-lang-btn.active .ul-sub { color:rgba(255,255,255,.65); }
+
+  /* Scan button */
+  #scan-btn { font-family:inherit; border:1.5px solid var(--green); border-radius:999px; background:var(--bg); color:var(--green); cursor:pointer; padding:5px 16px 4px; display:flex; flex-direction:column; align-items:center; line-height:1.25; font-size:12px; font-weight:600; min-width:108px; transition:all .18s; }
+  #scan-btn:hover:not(:disabled) { background:var(--green); color:#fff; }
+  #scan-btn:disabled { opacity:.65; cursor:not-allowed; }
+  #scan-btn.running { border-color:var(--muted); color:var(--muted); }
+  #scan-btn .scan-sub { font-size:9px; font-weight:400; color:inherit; opacity:.75; white-space:nowrap; }
+
+  /* Tabs — single unified nav row with embedded counts */
+  .tabs { display:flex; border-bottom:1px solid var(--border); padding:0 24px; align-items:stretch; }
+  .tabs-left { display:flex; width:50%; }
+  .tab { flex:1; padding:10px 12px; cursor:pointer; text-align:center; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .tab:hover { color:var(--fg); }
+  .tab.active { color:var(--fg); border-bottom-color:var(--fg); }
+  .tab .t-num { font-size:22px; font-weight:700; color:var(--muted); display:block; line-height:1.2; transition:color .15s; }
+  .tab.active .t-num { color:var(--fg); }
+  .tab:hover .t-num { color:var(--fg); }
+  .tab .t-lbl { font-size:11px; font-weight:500; display:block; white-space:nowrap; }
+  .tab-plain { font-size:13px; font-weight:500; flex-direction:row; flex:0 0 auto; align-self:center; padding:10px 16px; }
+
+  /* Tab content */
+  .tab-content { display:none; }
+  .tab-content.active { display:block; }
+
+  /* Filters */
+  .filters { display:flex; gap:10px; padding:10px 24px; border-bottom:1px solid var(--border); flex-wrap:wrap; align-items:center; }
+  .filters input, .filters select { font-family:inherit; font-size:12px; padding:5px 8px; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--fg); outline:none; }
+  .filters input:focus, .filters select:focus { border-color:var(--fg); }
+  .filters input[type="text"] { width:200px; }
+  .filters label { font-size:11px; color:var(--muted); }
+
+  /* Multi-select country */
+  .ms-wrap { position:relative; display:inline-block; }
+  .ms-btn { font-family:inherit; font-size:12px; padding:5px 8px; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--fg); cursor:pointer; outline:none; min-width:130px; text-align:left; white-space:nowrap; display:flex; align-items:center; justify-content:space-between; gap:6px; }
+  .ms-btn:hover, .ms-btn:focus { border-color:var(--fg); }
+  .ms-btn .ms-arrow { font-size:9px; color:var(--muted); flex-shrink:0; }
+  .ms-drop { display:none; position:absolute; top:calc(100% + 2px); left:0; z-index:300; background:var(--bg); border:1px solid var(--fg); border-radius:4px; padding:4px 0; min-width:200px; max-height:280px; overflow-y:auto; box-shadow:0 4px 16px rgba(0,0,0,.12); }
+  .ms-drop.open { display:block; }
+  .ms-actions { display:flex; gap:4px; padding:4px 8px 6px; border-bottom:1px solid var(--border); }
+  .ms-actions button { font-family:inherit; font-size:10px; padding:2px 8px; border:1px solid var(--border); border-radius:3px; background:var(--bg); color:var(--muted); cursor:pointer; }
+  .ms-actions button:hover { color:var(--fg); border-color:var(--fg); }
+  .ms-item { display:flex; align-items:center; gap:7px; padding:5px 10px; cursor:pointer; user-select:none; font-size:12px; }
+  .ms-item:hover { background:var(--hover); }
+  .ms-item input[type=checkbox] { cursor:pointer; width:13px; height:13px; flex-shrink:0; }
+  .ms-item .ms-cnt { font-size:10px; color:var(--muted); margin-left:auto; }
+
+  /* Table */
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; padding:8px 12px; border-bottom:2px solid var(--fg); font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); cursor:pointer; user-select:none; white-space:nowrap; }
+  th:hover { color:var(--fg); }
+  th.sorted { color:var(--fg); }
+  th .arrow { font-size:9px; margin-left:3px; }
+  td { padding:8px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tr:hover { background:var(--hover); }
+
+  .score { display:inline-block; font-weight:700; font-size:14px; min-width:28px; text-align:center; border-radius:4px; }
+  .score.high { color:var(--green); } .score.mid { color:var(--yellow); } .score.low { color:var(--red); } .score.none { color:var(--muted); }
+  /* Data quality dot next to the score */
+  .score-wrap { display:inline-flex; align-items:center; gap:4px; }
+  .dq-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; cursor:default; }
+  .dq-dot.full    { background:var(--green); }
+  .dq-dot.partial { background:var(--yellow); }
+
+  .job-title { font-weight:600; color:var(--fg); text-decoration:none; }
+  .job-title:hover { text-decoration:underline; }
+  .job-meta { color:var(--muted); font-size:11px; }
+  .source-tag { font-size:9px; padding:1px 5px; border:1px solid var(--border); border-radius:3px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); white-space:nowrap; }
+  .source-tag.watchlist { background:#fff3cd; border-color:#ffc107; color:#856404; font-weight:600; }
+  .source-tag.merged { border-color:var(--blue); color:var(--blue); }
+  .source-merged-tip { font-size:8px; color:var(--muted); display:block; margin-top:2px; letter-spacing:.3px; }
+
+
+  .actions-wrap { display:inline-flex; gap:4px; white-space:nowrap; }
+  .actions-wrap button { font-family:inherit; font-size:13px; width:28px; height:28px; padding:0; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--fg); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+  .actions-wrap button:hover { background:var(--fg); color:var(--bg); }
+  .actions-wrap button.active { background:var(--fg); color:var(--bg); }
+
+  .pagination { display:flex; justify-content:space-between; align-items:center; padding:10px 24px; border-top:1px solid var(--border); font-size:12px; color:var(--muted); }
+  .pagination button { font-family:inherit; font-size:12px; padding:5px 14px; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--fg); cursor:pointer; }
+  .pagination button:hover { background:var(--fg); color:var(--bg); }
+  .pagination button:disabled { opacity:.3; cursor:default; background:var(--bg); color:var(--fg); }
+
+  /* Modal */
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:100; justify-content:center; align-items:center; }
+  .modal-overlay.open { display:flex; }
+  .modal { background:var(--bg); border:2px solid var(--fg); border-radius:8px; max-width:600px; width:90%; max-height:80vh; overflow-y:auto; padding:24px; }
+  .modal h2 { font-size:15px; margin-bottom:10px; }
+  .modal pre { white-space:pre-wrap; font-family:inherit; font-size:13px; line-height:1.6; }
+  .modal .close { float:right; font-size:18px; cursor:pointer; border:none; background:none; color:var(--fg); }
+
+  .loading { text-align:center; padding:30px; color:var(--muted); }
+
+  /* Settings page */
+  .settings { padding:24px; max-width:800px; }
+  .settings h2 { font-size:16px; margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:8px; }
+  .settings h3 { font-size:13px; font-weight:600; margin:16px 0 6px; }
+  .field { margin-bottom:12px; }
+  .field label { display:block; font-size:11px; color:var(--muted); margin-bottom:3px; text-transform:uppercase; letter-spacing:.5px; }
+  .field input, .field select, .field textarea { font-family:inherit; font-size:13px; padding:8px 10px; border:1px solid var(--border); border-radius:4px; width:100%; background:var(--bg); color:var(--fg); outline:none; }
+  .toggle-label { display:flex !important; align-items:flex-start; gap:8px; cursor:pointer; text-transform:none !important; letter-spacing:0 !important; font-size:13px !important; color:var(--fg) !important; }
+  .toggle-label input[type=checkbox] { margin-top:2px; flex-shrink:0; width:16px; height:16px; accent-color:var(--accent); }
+  .toggle-text { line-height:1.5; }
+  .field input:focus, .field textarea:focus, .field select:focus { border-color:var(--fg); }
+  .field textarea { min-height:120px; resize:vertical; }
+  .field-row { display:flex; gap:12px; }
+  .field-row .field { flex:1; }
+  .btn { font-family:inherit; font-size:13px; padding:8px 20px; border:2px solid var(--fg); border-radius:4px; background:var(--fg); color:var(--bg); cursor:pointer; font-weight:600; }
+  .btn:hover { background:var(--bg); color:var(--fg); }
+  .btn-outline { background:var(--bg); color:var(--fg); }
+  .btn-outline:hover { background:var(--fg); color:var(--bg); }
+  .resume-upload-btn { display:inline-flex; align-items:center; gap:7px; padding:7px 16px; border:1.5px solid var(--green); border-radius:999px; background:transparent; color:var(--green); cursor:pointer; font-family:inherit; font-size:12px; font-weight:600; transition:all .18s; white-space:nowrap; }
+  .resume-upload-btn:hover { background:var(--green); color:#fff; }
+  .resume-upload-btn .ru-icon { font-size:14px; }
+  .resume-upload-btn.loaded { border-color:var(--muted); color:var(--muted); }
+  .resume-upload-btn.loaded:hover { background:var(--hover); color:var(--fg); border-color:var(--fg); }
+  .msg { padding:8px 12px; border-radius:4px; margin:8px 0; font-size:12px; }
+  .msg.ok { background:#e8f5e9; color:var(--green); }
+  /* Settings page */
+  .settings { padding:24px; max-width:100%; }
+  .settings h2 { font-size:16px; margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:8px; }
+  .settings h3 { font-size:13px; font-weight:600; margin:16px 0 6px; }
+  .field { margin-bottom:12px; }
+  .field label { display:block; font-size:11px; color:var(--muted); margin-bottom:3px; text-transform:uppercase; letter-spacing:.5px; }
+  .field input, .field select, .field textarea { font-family:inherit; font-size:13px; padding:8px 10px; border:1px solid var(--border); border-radius:4px; width:100%; background:var(--bg); color:var(--fg); outline:none; }
+  .field input:focus, .field textarea:focus, .field select:focus { border-color:var(--fg); }
+  .field textarea { min-height:120px; resize:vertical; }
+  .field-row { display:flex; gap:12px; }
+  .field-row .field { flex:1; }
+  .btn { font-family:inherit; font-size:13px; padding:8px 20px; border:2px solid var(--fg); border-radius:4px; background:var(--fg); color:var(--bg); cursor:pointer; font-weight:600; }
+  .btn:hover { background:var(--bg); color:var(--fg); }
+  .btn-outline { background:var(--bg); color:var(--fg); }
+  .btn-outline:hover { background:var(--fg); color:var(--bg); }
+  .msg { padding:8px 12px; border-radius:4px; margin:8px 0; font-size:12px; }
+  .msg.ok { background:#e8f5e9; color:var(--green); }
+  .msg.err { background:#fce4ec; color:var(--red); }
+  
+  /* Country Grid */
+  .country-grid { display:flex; flex-wrap:wrap; gap:8px; margin-top:5px; }
+  .country-item { padding:8px 12px; border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:12px; font-weight:500; background:var(--bg); color:var(--fg); user-select:none; transition: all 0.1s; }
+  .country-item:hover { border-color:var(--muted); }
+
+  /* Applied/Rejected cards */
+  .card-list { padding:12px 24px; }
+  .job-card { display:flex; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--border); border-radius:6px; margin-bottom:8px; }
+  .job-card:hover { background:var(--hover); }
+  .job-card .score { flex-shrink:0; }
+  .job-card .info { flex:1; min-width:0; }
+  .job-card .info .title { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .job-card .info .title a { color:var(--fg); text-decoration:none; }
+  .job-card .info .title a:hover { text-decoration:underline; }
+  .job-card .info .meta { font-size:11px; color:var(--muted); }
+  .job-card .actions-wrap { flex-shrink:0; }
+  .empty-state { text-align:center; padding:40px; color:var(--muted); }
+
+  /* Ops */
+  .ops-shell { padding:24px; background:
+      radial-gradient(circle at top left, rgba(21,101,192,0.08), transparent 28%),
+      radial-gradient(circle at top right, rgba(45,138,78,0.08), transparent 24%),
+      linear-gradient(180deg, #fafcfe 0%, #ffffff 48%);
+    min-height:calc(100vh - 170px);
+  }
+  .ops-toolbar { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:18px; flex-wrap:wrap; }
+  .ops-title h2 { font-size:24px; letter-spacing:-0.6px; margin-bottom:4px; }
+  .ops-title p { color:var(--muted); max-width:620px; }
+  .ops-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .segmented { display:inline-flex; padding:4px; border:1px solid var(--border); border-radius:999px; background:#fff; box-shadow:0 8px 24px rgba(17,17,17,0.04); }
+  .segmented button { border:none; background:transparent; padding:7px 12px; border-radius:999px; cursor:pointer; font-family:inherit; font-size:12px; color:var(--muted); }
+  .segmented button.active { background:var(--fg); color:#fff; }
+  .ops-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; margin-bottom:14px; }
+  .ops-card, .ops-panel { background:rgba(255,255,255,0.92); border:1px solid rgba(17,17,17,0.08); border-radius:18px; box-shadow:0 16px 40px rgba(17,17,17,0.06); backdrop-filter:blur(10px); }
+  .ops-card { padding:16px; }
+  .ops-card.clickable { cursor:pointer; transition:transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease; }
+  .ops-card.clickable:hover { transform:translateY(-2px); box-shadow:0 18px 42px rgba(17,17,17,0.09); border-color:rgba(17,17,17,0.16); }
+  .ops-card .kicker { font-size:10px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin-bottom:10px; }
+  .ops-card .value { font-size:32px; font-weight:700; letter-spacing:-1px; }
+  .ops-card .sub { color:var(--muted); margin-top:6px; font-size:12px; }
+  .ops-card .delta { display:inline-flex; margin-top:10px; padding:4px 8px; border-radius:999px; font-size:11px; background:#f3f6fb; color:var(--blue); }
+  .ops-alerts { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; margin-bottom:14px; }
+  .ops-alert { padding:16px; border-radius:16px; border:1px solid #edf1f5; background:#fff; box-shadow:0 10px 26px rgba(17,17,17,0.04); }
+  .ops-alert strong { display:block; margin-bottom:6px; font-size:13px; }
+  .ops-alert p { color:var(--muted); font-size:12px; line-height:1.45; }
+  .ops-alert button { margin-top:12px; border:none; background:var(--fg); color:#fff; border-radius:999px; padding:7px 12px; font-family:inherit; font-size:11px; cursor:pointer; }
+  .ops-alert.queue { background:linear-gradient(180deg, #fff9eb 0%, #fff 100%); border-color:#f3dfab; }
+  .ops-alert.errors { background:linear-gradient(180deg, #fdeeee 0%, #fff 100%); border-color:#f2c4c4; }
+  .ops-alert.success { background:linear-gradient(180deg, #eefaf2 0%, #fff 100%); border-color:#c7e8d0; }
+  .ops-panels { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:14px; margin-bottom:14px; }
+  .ops-panel { padding:18px; }
+  .panel-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:16px; }
+  .panel-head h3 { font-size:15px; letter-spacing:-0.2px; }
+  .panel-head span { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; }
+  .ops-empty { color:var(--muted); font-size:12px; padding:14px 0; }
+  .pipeline-list, .source-list, .scan-list { display:flex; flex-direction:column; gap:12px; }
+  .event-list { display:flex; flex-direction:column; gap:12px; max-height:300px; overflow-y:auto; padding-right:5px; }
+  .event-list::-webkit-scrollbar { width:4px; }
+  .event-list::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+  .pipeline-row { display:grid; grid-template-columns:110px 1fr auto; gap:12px; align-items:center; }
+  .pipeline-row .label { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; }
+  .pipeline-row .bar, .source-bar { position:relative; overflow:hidden; height:10px; border-radius:999px; background:#eef2f7; }
+  .pipeline-row .fill, .source-bar .fill { position:absolute; inset:0 auto 0 0; border-radius:999px; background:linear-gradient(90deg, #1565c0, #2d8a4e); }
+  .pipeline-row .count { font-weight:600; font-variant-numeric:tabular-nums; }
+  .source-item { display:grid; grid-template-columns:120px 1fr auto; gap:12px; align-items:center; }
+  .source-item .name { font-weight:600; text-transform:capitalize; }
+  .source-item .meta { font-size:11px; color:var(--muted); }
+  .scan-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:14px; }
+  .scan-stat { padding:12px; border-radius:14px; background:#f7f9fc; border:1px solid #edf1f5; }
+  .scan-stat .label { display:block; font-size:10px; text-transform:uppercase; letter-spacing:0.8px; color:var(--muted); margin-bottom:6px; }
+  .scan-stat .value { font-size:18px; font-weight:700; }
+  .pill { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; font-size:11px; text-transform:uppercase; letter-spacing:0.8px; background:#eef2f7; color:var(--muted); }
+  .pill.success { background:#e8f5e9; color:var(--green); }
+  .pill.error { background:#fdecea; color:var(--red); }
+  .pill.warning, .pill.warn { background:#fff7e6; color:var(--yellow); }
+  .pill.running { background:#e3f2fd; color:var(--blue); }
+  .event-item { display:grid; grid-template-columns:auto 1fr auto; gap:12px; align-items:flex-start; padding:12px 0; border-top:1px solid #eef2f7; }
+  .event-item:first-child { border-top:none; padding-top:0; }
+  .event-item .summary { min-width:0; }
+  .event-item .summary strong { display:block; margin-bottom:4px; }
+  .event-item .summary p { color:var(--muted); font-size:12px; line-height:1.4; }
+  .event-item .time { font-size:11px; color:var(--muted); white-space:nowrap; }
+  .mini-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .mini-list span { padding:5px 8px; border-radius:999px; background:#f6f8fb; font-size:11px; color:var(--muted); }
+  .user-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .user-table th { text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); padding:6px 8px; border-bottom:1px solid var(--border); }
+  .user-table td { padding:8px 8px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .user-table tr:last-child td { border-bottom:none; }
+  .user-table tr:hover td { background:var(--hover); }
+  .u-bar-wrap { display:flex; align-items:center; gap:6px; }
+  .u-bar { flex:1; height:6px; border-radius:999px; background:var(--border); overflow:hidden; }
+  .u-bar .u-fill { height:100%; border-radius:999px; background:linear-gradient(90deg,var(--blue),var(--green)); }
+  :root[data-theme="dark"] .mini-list span { background:#1e1e1e; }
+
+  /* ── Dark mode overrides for Ops (hardcoded whites) ── */
+  :root[data-theme="dark"] .ops-shell {
+    background: radial-gradient(circle at top left, rgba(74,157,232,0.07), transparent 28%),
+                radial-gradient(circle at top right, rgba(61,186,104,0.07), transparent 24%),
+                linear-gradient(180deg, #111 0%, #0f0f0f 48%);
+  }
+  :root[data-theme="dark"] .ops-card,
+  :root[data-theme="dark"] .ops-panel { background:rgba(26,26,26,0.95); border-color:rgba(255,255,255,0.07); box-shadow:0 16px 40px rgba(0,0,0,0.3); }
+  :root[data-theme="dark"] .ops-card.clickable:hover { border-color:rgba(255,255,255,0.15); box-shadow:0 18px 42px rgba(0,0,0,0.4); }
+  :root[data-theme="dark"] .segmented { background:#1a1a1a; border-color:var(--border); box-shadow:none; }
+  :root[data-theme="dark"] .ops-card .delta { background:#1e2a38; }
+  :root[data-theme="dark"] .ops-alert { background:#1a1a1a; border-color:#2a2a2a; }
+  :root[data-theme="dark"] .ops-alert.queue { background:linear-gradient(180deg,#2a2008 0%,#1a1a1a 100%); border-color:#4a3a10; }
+  :root[data-theme="dark"] .ops-alert.errors { background:linear-gradient(180deg,#2a0e0e 0%,#1a1a1a 100%); border-color:#4a1a1a; }
+  :root[data-theme="dark"] .ops-alert.success { background:linear-gradient(180deg,#0d2a14 0%,#1a1a1a 100%); border-color:#1a4a22; }
+  :root[data-theme="dark"] .pipeline-row .bar,
+  :root[data-theme="dark"] .source-bar { background:#252525; }
+  :root[data-theme="dark"] .scan-stat { background:#1a1a1a; border-color:#2a2a2a; }
+  :root[data-theme="dark"] .pill { background:#252525; }
+  :root[data-theme="dark"] .pill.success { background:#0d2a14; }
+  :root[data-theme="dark"] .pill.error { background:#2a0e0e; }
+  :root[data-theme="dark"] .pill.warning,
+  :root[data-theme="dark"] .pill.warn { background:#2a1e00; }
+  :root[data-theme="dark"] .pill.running { background:#0d1e2a; }
+  :root[data-theme="dark"] .event-item { border-top-color:#2a2a2a; }
+  :root[data-theme="dark"] .mini-list span { background:#1e1e1e; }
+
+  /* ── Language picker ── */
+  .lang-picker { display:flex; flex-wrap:wrap; gap:8px; padding:4px 0; min-height:40px; }
+  .lp-pill { position:relative; display:inline-flex; align-items:center; gap:6px; padding:7px 14px 7px 12px; border:1.5px solid var(--border); border-radius:999px; background:var(--bg); cursor:pointer; font-size:13px; font-weight:500; transition:border-color .18s,background .18s; user-select:none; }
+  .lp-pill:hover { border-color:var(--muted); }
+  .lp-pill.has-level { border-color:var(--fg); background:var(--hover); }
+  .lp-pill .lp-lvl { font-size:11px; color:var(--muted); font-weight:400; }
+  .lp-pill.has-level .lp-lvl { color:var(--fg); font-weight:600; }
+  .lp-pill .lp-arrow { font-size:9px; color:var(--muted); }
+  .lp-rm { display:none; position:absolute; right:-5px; top:-5px; width:16px; height:16px; border-radius:999px; background:var(--fg); color:var(--bg); font-size:9px; line-height:1; align-items:center; justify-content:center; cursor:pointer; z-index:2; }
+  .lp-pill:hover .lp-rm { display:flex; }
+  .lp-rm:hover { background:var(--red) !important; }
+  .lp-drop { display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:250; background:var(--bg); border:1.5px solid var(--fg); border-radius:14px; padding:5px; min-width:190px; box-shadow:0 8px 28px rgba(0,0,0,.13); }
+  .lp-drop.open { display:block; animation:dropIn .14s ease; }
+  .lp-di { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border-radius:10px; cursor:pointer; font-size:13px; gap:8px; transition:background .1s; }
+  .lp-di:hover { background:var(--hover); }
+  .lp-di.active { font-weight:700; }
+  .lp-di .lp-di-sub { font-size:10px; color:var(--muted); margin-left:auto; margin-right:6px; }
+  .lp-di .lp-di-chk { font-size:11px; color:var(--green); opacity:0; flex-shrink:0; }
+  .lp-di.active .lp-di-chk { opacity:1; }
+  .lp-add-pill { display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border:1.5px dashed var(--border); border-radius:999px; background:transparent; color:var(--muted); cursor:pointer; font-size:13px; font-family:inherit; transition:all .18s; position:relative; overflow:hidden; }
+  .lp-add-pill:hover { border-color:var(--fg); color:var(--fg); background:var(--hover); }
+  .lp-add-pill select { position:absolute; inset:0; opacity:0; cursor:pointer; font-size:1px; width:100%; }
+
+  /* ── Work mode pill ── */
+  .wm-wrap { position:relative; display:inline-block; margin-top:6px; }
+  .wm-pill { display:inline-flex; align-items:center; gap:8px; padding:10px 20px; border:1.5px solid var(--fg); border-radius:999px; background:var(--fg); color:var(--bg); cursor:pointer; font-family:inherit; font-size:13px; font-weight:600; transition:opacity .18s; }
+  .wm-pill:hover { opacity:.82; }
+  .wm-pill .wm-arrow { font-size:10px; opacity:.65; }
+  .wm-drop { display:none; position:absolute; top:calc(100% + 8px); left:0; z-index:250; background:var(--bg); border:1.5px solid var(--fg); border-radius:16px; padding:6px; min-width:200px; box-shadow:0 8px 28px rgba(0,0,0,.13); }
+  .wm-drop.open { display:block; animation:dropIn .14s ease; }
+  .wm-di { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; cursor:pointer; font-size:13px; color:var(--fg); transition:background .1s; }
+  .wm-di:hover { background:var(--hover); }
+  .wm-di.active { font-weight:700; }
+  .wm-di .wm-di-icon { font-size:16px; flex-shrink:0; }
+  .wm-di .wm-di-chk { margin-left:auto; font-size:11px; color:var(--green); opacity:0; }
+  .wm-di.active .wm-di-chk { opacity:1; }
+
+  /* ── Dropdown animation ── */
+  @keyframes dropIn { from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)} }
+
+  /* ── Experience pills ── */
+  .exp-pills { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+  .exp-pill { padding:7px 16px; border:1.5px solid var(--border); border-radius:999px; background:var(--bg); color:var(--muted); cursor:pointer; font-size:13px; font-weight:500; transition:all .18s; user-select:none; white-space:nowrap; }
+  .exp-pill:hover { border-color:var(--muted); color:var(--fg); }
+  .exp-pill.active { border-color:var(--fg); background:var(--fg); color:var(--bg); font-weight:600; }
+
+  /* ── Industry pills ── */
+  .ind-grid { display:flex; flex-wrap:wrap; gap:7px; margin-top:6px; }
+  .ind-pill { padding:6px 14px; border:1.5px solid var(--border); border-radius:999px; background:var(--bg); color:var(--muted); cursor:pointer; font-size:12px; font-weight:500; transition:all .18s; user-select:none; }
+  .ind-pill:hover { border-color:var(--muted); color:var(--fg); }
+  .ind-pill.active { border-color:var(--fg); background:var(--fg); color:var(--bg); font-weight:600; }
+
+  /* ── Settings 2-col grid ── */
+  .settings-2col { display:grid; grid-template-columns:1fr 1fr; gap:12px 28px; }
+  .settings-2col .span2 { grid-column:1/-1; }
+
+  /* ── Exclusion keyword chips ── */
+  .chip-wrap { display:flex; flex-wrap:wrap; gap:6px; min-height:32px; padding:6px 8px; border:1px solid var(--border); border-radius:4px; background:var(--bg); margin-bottom:6px; }
+  .chip-wrap:empty { padding:0; border:none; min-height:0; margin:0; }
+  .kw-chip { display:inline-flex; align-items:center; gap:5px; padding:3px 10px 3px 12px; background:var(--bg); border:1.5px solid var(--border); border-radius:999px; font-size:12px; color:var(--fg); white-space:nowrap; }
+  .kw-chip .chip-x { cursor:pointer; color:var(--muted); font-size:14px; line-height:1; padding-left:2px; }
+  .kw-chip .chip-x:hover { color:var(--red,#e05); }
+  .chip-input-field { font-family:inherit; font-size:13px; padding:7px 10px; border:1px solid var(--border); border-radius:4px; width:100%; background:var(--bg); color:var(--fg); outline:none; }
+
+  /* ── Unified Settings controls ── */
+  .settings .btn { border-radius:999px; padding:10px 28px; }
+  .settings .field input, .settings .field select { border-radius:10px; transition:border-color .18s,box-shadow .18s; }
+  .settings .field textarea { border-radius:12px; transition:border-color .18s,box-shadow .18s; }
+  .settings .field input:focus, .settings .field textarea:focus, .settings .field select:focus { box-shadow:0 0 0 3px rgba(128,128,128,.12); }
+  .settings h3 { font-size:11px; font-weight:700; letter-spacing:.9px; text-transform:uppercase; color:var(--muted); margin:22px 0 8px; }
+  .country-item { border-radius:999px; transition:all .18s; }
+  .country-item.active { background:var(--fg); border-color:var(--fg); color:var(--bg); font-weight:600; box-shadow:none; }
+
+  @media (max-width:768px) {
+    .filters { padding:8px 12px; }
+    .tabs { padding:0 12px; }
+    .tab { padding:8px 10px; min-width:unset; }
+    td,th { padding:6px 5px; }
+    header { padding:10px 12px; }
+    .settings { padding:16px; }
+    .field-row { flex-direction:column; gap:0; }
+    .ops-shell { padding:16px; }
+    .pipeline-row, .source-item, .event-item { grid-template-columns:1fr; }
+  }
+
+  /* ── Global rounding — everything oval/pill ── */
+  #theme-toggle { border-radius:999px !important; }
+  .source-tag { border-radius:999px !important; }
+  .score { border-radius:999px !important; }
+  .actions-wrap button { border-radius:999px !important; }
+  .btn { border-radius:999px !important; padding:8px 24px; }
+  .pagination button { border-radius:999px !important; }
+  .ms-btn { border-radius:999px !important; }
+  .ms-actions button { border-radius:999px !important; }
+  .ms-drop { border-radius:16px !important; }
+  .filters input, .filters select { border-radius:10px !important; }
+  .field input, .field select { border-radius:10px !important; }
+  .field textarea { border-radius:14px !important; }
+  .msg { border-radius:10px !important; }
+  .job-card { border-radius:18px !important; }
+  .modal { border-radius:24px !important; }
+
+  /* Dedup panel */
+  .dedup-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .dedup-table th { text-align:left; padding:8px 10px; font-size:10px; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); border-bottom:1px solid var(--border); }
+  .dedup-table td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  .dedup-table tr:last-child td { border-bottom:none; }
+  .dedup-table td a { color:var(--fg); text-decoration:none; }
+  .dedup-table td a:hover { text-decoration:underline; }
+  .dedup-sources { display:flex; gap:4px; flex-wrap:wrap; }
+  .dedup-src { font-size:10px; padding:2px 7px; border-radius:999px; background:var(--hover); color:var(--muted); }
+  .dedup-src:first-child { background:rgba(37,99,235,.1); color:var(--blue); }
+  #ops-dedup-badge { cursor:pointer; text-decoration:underline dotted; }
+</style>
 </head>
 <body>
+
+<script>
+/* ── i18n ── */
+const TRANSLATIONS = {
+  en: {
+    'nav.jobs':'All Jobs','nav.inbox':'Inbox','nav.applied':'Applied','nav.rejected':'Rejected','nav.settings':'Profile',
+    'stats.jobs':'Jobs','stats.scored':'Scored','stats.top':'Top','stats.applied':'Applied','stats.rejected':'Rejected',
+    'filter.search':'Search title or company...','filter.score':'Score','filter.country':'Country',
+    'filter.allCountries':'All Countries','filter.source':'Source','filter.all':'All','filter.status':'Status',
+    'filter.new':'New','filter.saved':'Saved','filter.applied':'Applied','filter.rejected':'Rejected',
+    'filter.region':'Region','filter.regionAny':'Any region','filter.regionSaxony':'Saxony','filter.regionDe':'Germany only',
+    'filter.regionDach':'DACH','filter.regionEurope':'Europe','filter.regionCee':'CEE',
+    'th.score':'Score','th.job':'Job','th.company':'Company','th.location':'Location','th.source':'Source','th.actions':'Actions',
+    'btn.prev':'← Prev','btn.next':'Next →','btn.save':'Save Settings','btn.reset':'Reset',
+    'btn.scan':'Scan Now','btn.refresh':'Refresh','btn.upload':'Click to upload resume (PDF or TXT)',
+    'settings.title':'Profile & Search Settings','settings.resume':'Resume',
+    'settings.resumeLabel':'Resume text / keywords','settings.resumePlaceholder':'Paste your resume text or key skills...',
+    'settings.targetPos':'Target Positions','settings.targetLabel':'Target job titles (comma-separated)',
+    'settings.targetPlaceholder':'Director Supply Chain, Head of Procurement, VP Operations...',
+    'settings.watchlist':'Target Companies Watchlist','settings.companiesLabel':'Companies to monitor closely (comma-separated)',
+    'settings.companiesPlaceholder':'Nestlé, Unilever, Bayer, Roche, Mars, Mondelez, PepsiCo, Danone...',
+    'settings.watchlistHint':'Jobs from these companies will be highlighted and tracked separately.',
+    'settings.exclusions':'Exclusions & Negative Keywords','settings.excludedLabel':'Do not show jobs requiring (comma-separated)',
+    'settings.excludedPlaceholder':'Junior, Developer, German C1, Sales, Part-time...',
+    'settings.englishOnly':'English Only — prioritise jobs with English as working language; skip positions posted entirely in German / French / Dutch',
+    'settings.prefs':'Preferences','settings.salary':'Min salary (EUR/year)','settings.experience':'Experience (years)',
+    'settings.languages':'Languages','settings.workMode':'Work mode',
+    'settings.workAny':'Any','settings.workRemote':'Remote','settings.workHybrid':'Hybrid','settings.workOnsite':'On-site',
+    'settings.countries':'Active Target Countries','settings.industries':'Industries',
+    'msg.loading':'Loading...','msg.noJobs':'No jobs found.','msg.loginRequired':'Login required',
+    'btn.guest':'Guest','btn.login':'Sign in with Google',
+    'lang.label':'Language',
+  },
+  ru: {
+    'nav.jobs':'Все вакансии','nav.inbox':'Входящие','nav.applied':'Отклики','nav.rejected':'Отклонённые','nav.settings':'Профиль',
+    'stats.jobs':'Вакансий','stats.scored':'Оценённых','stats.top':'Топ','stats.applied':'Откликов','stats.rejected':'Отклонённых',
+    'filter.search':'Поиск по названию или компании...','filter.score':'Оценка','filter.country':'Страна',
+    'filter.allCountries':'Все страны','filter.source':'Источник','filter.all':'Все','filter.status':'Статус',
+    'filter.new':'Новые','filter.saved':'Сохранённые','filter.applied':'Отклики','filter.rejected':'Отклонённые',
+    'filter.region':'Регион','filter.regionAny':'Любой','filter.regionSaxony':'Саксония','filter.regionDe':'Только Германия',
+    'filter.regionDach':'DACH','filter.regionEurope':'Европа','filter.regionCee':'CEE',
+    'th.score':'Оценка','th.job':'Вакансия','th.company':'Компания','th.location':'Место','th.source':'Источник','th.actions':'Действия',
+    'btn.prev':'← Назад','btn.next':'Вперёд →','btn.save':'Сохранить','btn.reset':'Сбросить',
+    'btn.scan':'Сканировать','btn.refresh':'Обновить','btn.upload':'Нажмите для загрузки резюме (PDF или TXT)',
+    'settings.title':'Профиль и настройки поиска','settings.resume':'Резюме',
+    'settings.resumeLabel':'Текст резюме / ключевые слова','settings.resumePlaceholder':'Вставьте текст резюме или ключевые навыки...',
+    'settings.targetPos':'Целевые должности','settings.targetLabel':'Желаемые должности (через запятую)',
+    'settings.targetPlaceholder':'Director Supply Chain, Head of Procurement, VP Operations...',
+    'settings.watchlist':'Список отслеживаемых компаний','settings.companiesLabel':'Компании для мониторинга (через запятую)',
+    'settings.companiesPlaceholder':'Nestlé, Unilever, Bayer, Roche, Mars, Mondelez, PepsiCo, Danone...',
+    'settings.watchlistHint':'Вакансии от этих компаний будут выделены и отслеживаться отдельно.',
+    'settings.exclusions':'Исключения и стоп-слова','settings.excludedLabel':'Не показывать вакансии с требованиями (через запятую)',
+    'settings.excludedPlaceholder':'Junior, Developer, German C1, Sales, Part-time...',
+    'settings.englishOnly':'Только английский — приоритет вакансиям с английским рабочим языком; пропускать позиции полностью на немецком / французском / голландском',
+    'settings.prefs':'Предпочтения','settings.salary':'Мин. зарплата (EUR/год)','settings.experience':'Опыт работы (лет)',
+    'settings.languages':'Языки','settings.workMode':'Режим работы',
+    'settings.workAny':'Любой','settings.workRemote':'Удалённо','settings.workHybrid':'Гибрид','settings.workOnsite':'В офисе',
+    'settings.countries':'Целевые страны поиска','settings.industries':'Отрасли',
+    'msg.loading':'Загрузка...','msg.noJobs':'Вакансии не найдены.','msg.loginRequired':'Требуется вход',
+    'btn.guest':'Гость','btn.login':'Войти через Google',
+    'lang.label':'Язык',
+  },
+  de: {
+    'nav.jobs':'Alle Stellen','nav.inbox':'Eingang','nav.applied':'Bewerbungen','nav.rejected':'Abgelehnt','nav.settings':'Profil',
+    'stats.jobs':'Stellen','stats.scored':'Bewertet','stats.top':'Top','stats.applied':'Bewerbungen','stats.rejected':'Abgelehnt',
+    'filter.search':'Titel oder Firma suchen...','filter.score':'Bewertung','filter.country':'Land',
+    'filter.allCountries':'Alle Länder','filter.source':'Quelle','filter.all':'Alle','filter.status':'Status',
+    'filter.new':'Neu','filter.saved':'Gespeichert','filter.applied':'Beworben','filter.rejected':'Abgelehnt',
+    'filter.region':'Region','filter.regionAny':'Beliebig','filter.regionSaxony':'Sachsen','filter.regionDe':'Nur Deutschland',
+    'filter.regionDach':'DACH','filter.regionEurope':'Europa','filter.regionCee':'Osteuropa',
+    'th.score':'Bewertung','th.job':'Stelle','th.company':'Unternehmen','th.location':'Ort','th.source':'Quelle','th.actions':'Aktionen',
+    'btn.prev':'← Zurück','btn.next':'Weiter →','btn.save':'Einstellungen speichern','btn.reset':'Zurücksetzen',
+    'btn.scan':'Jetzt scannen','btn.refresh':'Aktualisieren','btn.upload':'Lebenslauf hochladen (PDF oder TXT)',
+    'settings.title':'Profil & Sucheinstellungen','settings.resume':'Lebenslauf',
+    'settings.resumeLabel':'Lebenslauftext / Schlüsselwörter','settings.resumePlaceholder':'Lebenslauftext oder wichtige Fähigkeiten einfügen...',
+    'settings.targetPos':'Zielpositionen','settings.targetLabel':'Jobbezeichnungen (kommagetrennt)',
+    'settings.targetPlaceholder':'Director Supply Chain, Head of Procurement, VP Operations...',
+    'settings.watchlist':'Zielunternehmen-Watchlist','settings.companiesLabel':'Zu überwachende Unternehmen (kommagetrennt)',
+    'settings.companiesPlaceholder':'Nestlé, Unilever, Bayer, Roche, Mars, Mondelez, PepsiCo, Danone...',
+    'settings.watchlistHint':'Stellen dieser Unternehmen werden hervorgehoben und separat verfolgt.',
+    'settings.exclusions':'Ausschlüsse & Negativwörter','settings.excludedLabel':'Jobs mit diesen Anforderungen ausblenden (kommagetrennt)',
+    'settings.excludedPlaceholder':'Junior, Developer, German C1, Sales, Teilzeit...',
+    'settings.englishOnly':'Nur Englisch — Priorität für englischsprachige Stellen; deutschsprachige / französische / niederländische Inserate überspringen',
+    'settings.prefs':'Einstellungen','settings.salary':'Mindestgehalt (EUR/Jahr)','settings.experience':'Erfahrung (Jahre)',
+    'settings.languages':'Sprachen','settings.workMode':'Arbeitsmodell',
+    'settings.workAny':'Beliebig','settings.workRemote':'Remote','settings.workHybrid':'Hybrid','settings.workOnsite':'Vor Ort',
+    'settings.countries':'Aktive Zielländer','settings.industries':'Branchen',
+    'msg.loading':'Wird geladen...','msg.noJobs':'Keine Stellen gefunden.','msg.loginRequired':'Anmeldung erforderlich',
+    'btn.guest':'Gast','btn.login':'Mit Google anmelden',
+    'lang.label':'Sprache',
+  },
+  es: {
+    'nav.jobs':'Todos los trabajos','nav.inbox':'Bandeja','nav.applied':'Aplicados','nav.rejected':'Rechazados','nav.settings':'Perfil',
+    'stats.jobs':'Trabajos','stats.scored':'Puntuados','stats.top':'Top','stats.applied':'Aplicados','stats.rejected':'Rechazados',
+    'filter.search':'Buscar título o empresa...','filter.score':'Puntuación','filter.country':'País',
+    'filter.allCountries':'Todos los países','filter.source':'Fuente','filter.all':'Todos','filter.status':'Estado',
+    'filter.new':'Nuevo','filter.saved':'Guardados','filter.applied':'Aplicados','filter.rejected':'Rechazados',
+    'filter.region':'Región','filter.regionAny':'Cualquiera','filter.regionSaxony':'Sajonia','filter.regionDe':'Solo Alemania',
+    'filter.regionDach':'DACH','filter.regionEurope':'Europa','filter.regionCee':'Europa del Este',
+    'th.score':'Punt.','th.job':'Trabajo','th.company':'Empresa','th.location':'Ubicación','th.source':'Fuente','th.actions':'Acciones',
+    'btn.prev':'← Anterior','btn.next':'Siguiente →','btn.save':'Guardar configuración','btn.reset':'Restablecer',
+    'btn.scan':'Escanear','btn.refresh':'Actualizar','btn.upload':'Subir currículum (PDF o TXT)',
+    'settings.title':'Perfil y configuración de búsqueda','settings.resume':'Currículum',
+    'settings.resumeLabel':'Texto del currículum / palabras clave','settings.resumePlaceholder':'Pega tu currículum o habilidades clave...',
+    'settings.targetPos':'Puestos objetivo','settings.targetLabel':'Títulos de trabajo deseados (separados por coma)',
+    'settings.targetPlaceholder':'Director Supply Chain, Head of Procurement, VP Operations...',
+    'settings.watchlist':'Lista de empresas objetivo','settings.companiesLabel':'Empresas a monitorear (separadas por coma)',
+    'settings.companiesPlaceholder':'Nestlé, Unilever, Bayer, Roche, Mars, Mondelez, PepsiCo, Danone...',
+    'settings.watchlistHint':'Los trabajos de estas empresas serán destacados y rastreados por separado.',
+    'settings.exclusions':'Exclusiones y palabras negativas','settings.excludedLabel':'No mostrar trabajos que requieren (separados por coma)',
+    'settings.excludedPlaceholder':'Junior, Developer, German C1, Sales, Media jornada...',
+    'settings.englishOnly':'Solo inglés — priorizar trabajos con inglés como idioma de trabajo; omitir posiciones publicadas en alemán / francés / neerlandés',
+    'settings.prefs':'Preferencias','settings.salary':'Salario mínimo (EUR/año)','settings.experience':'Experiencia (años)',
+    'settings.languages':'Idiomas','settings.workMode':'Modo de trabajo',
+    'settings.workAny':'Cualquiera','settings.workRemote':'Remoto','settings.workHybrid':'Híbrido','settings.workOnsite':'Presencial',
+    'settings.countries':'Países objetivo activos','settings.industries':'Industrias',
+    'msg.loading':'Cargando...','msg.noJobs':'No se encontraron trabajos.','msg.loginRequired':'Inicio de sesión requerido',
+    'btn.guest':'Invitado','btn.login':'Iniciar sesión con Google',
+    'lang.label':'Idioma',
+  },
+};
+
+const _SUPPORTED_LANGS = ['en','ru','de','es'];
+function _detectLang() {
+  const saved = localStorage.getItem('pipka_lang');
+  if (saved && _SUPPORTED_LANGS.includes(saved)) return saved;
+  const browser = (navigator.language || '').toLowerCase().slice(0,2);
+  return _SUPPORTED_LANGS.includes(browser) ? browser : 'en';
+}
+let _lang = _detectLang();
+function T(key) { return (TRANSLATIONS[_lang] || TRANSLATIONS.en)[key] || (TRANSLATIONS.en[key] || key); }
+function setLang(lang) {
+  _lang = lang;
+  localStorage.setItem('pipka_lang', lang);
+  applyLang();
+  loadJobs();
+  if(typeof S !== 'undefined' && S.activeTab === 'settings') loadProfile();
+}
+function applyLang() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const attr = el.getAttribute('data-i18n-attr');
+    if (attr) el.setAttribute(attr, T(key));
+    else el.textContent = T(key);
+  });
+  document.querySelectorAll('.ui-lang-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === _lang);
+  });
+  const fcl = document.getElementById('f-country-label');
+  if (fcl && fcl.textContent === 'All Countries' || (fcl && fcl.getAttribute('data-default') === '1')) {
+    fcl.textContent = T('filter.allCountries');
+  }
+}
+</script>
 
 <header>
   <h1>pipka<span>.net</span></h1>
   <div style="display:flex;align-items:center;gap:10px">
-    <div id="user-info" style="display:flex;align-items:center;gap:8px;">
-      <img id="user-avatar" src="" style="width:28px;height:28px;border-radius:50%;display:none;" />
-      <span id="user-name" style="font-size:12px;font-weight:500;display:none;"></span>
-    </div>
-    <span id="role-badge" style="font-size:11px; padding:3px 8px; border-radius:4px; font-weight:600; cursor:pointer;" onclick="toggleLogin()">Guest</span>
-    <button class="btn-outline" id="scan-btn" onclick="triggerScan()" style="font-size:11px;padding:4px 12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);cursor:pointer;display:none;">Scan Now</button>
-    <span id="scan-info" style="font-size:10px;color:var(--muted)"></span>
+    <button id="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
+    <button id="scan-btn" onclick="triggerScan()" style="display:none">
+      <span id="scan-btn-label">▶ Scan</span>
+      <span class="scan-sub" id="scan-btn-sub"></span>
+    </button>
+    <button id="user-btn" onclick="toggleLogin()" style="display:flex;align-items:center;gap:7px;background:none;border:1.5px solid var(--border);border-radius:999px;padding:4px 10px 4px 5px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;color:var(--fg);transition:border-color .18s;" title="Account">
+      <img id="user-avatar" src="" style="width:22px;height:22px;border-radius:50%;display:none;flex-shrink:0;" />
+      <span id="user-avatar-icon" style="width:22px;height:22px;border-radius:50%;background:var(--hover);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">👤</span>
+      <span id="role-badge">Guest</span>
+    </button>
   </div>
 </header>
 
-<div class="stats" id="stats">
-  <div class="s" onclick="switchTab('jobs')"><span class="num" id="stat-total">—</span>Jobs</div>
-  <div class="s auth-only" onclick="switchTab('jobs')" style="display:none"><span class="num" id="stat-scored">—</span>Scored</div>
-  <div class="s auth-only" onclick="switchTab('jobs')" style="display:none"><span class="num" id="stat-top">—</span>Top</div>
-  <div class="s auth-only" onclick="switchTab('applied')" style="display:none"><span class="num" id="stat-applied">—</span>Applied</div>
-  <div class="s auth-only" onclick="switchTab('rejected')" style="display:none"><span class="num" id="stat-rejected">—</span>Rejected</div>
-</div>
-
-<div class="tabs">
-  <div class="tab active" data-tab="jobs" onclick="switchTab('jobs')">All Jobs</div>
-  <div class="tab auth-only" data-tab="inbox" onclick="switchTab('inbox')" style="display:none">Inbox <span class="count" id="tab-inbox-count">0</span></div>
-  <div class="tab auth-only" data-tab="applied" onclick="switchTab('applied')" style="display:none">Applied <span class="count" id="tab-applied-count">0</span></div>
-  <div class="tab auth-only" data-tab="rejected" onclick="switchTab('rejected')" style="display:none">Rejected <span class="count" id="tab-rejected-count">0</span></div>
-  <div class="tab auth-only" data-tab="settings" onclick="switchTab('settings')" style="display:none">Settings</div>
-  <div class="tab auth-only" data-tab="ops" id="tab-ops" onclick="switchTab('ops')" style="display:none">Ops</div>
+<div class="tabs" id="stats">
+  <div class="tabs-left">
+    <div class="tab active" data-tab="jobs" onclick="switchTab('jobs')">
+      <span class="t-num" id="stat-total">—</span>
+      <span class="t-lbl" data-i18n="nav.jobs">All Jobs</span>
+    </div>
+    <div class="tab auth-only" data-tab="inbox" onclick="switchTab('inbox')" style="display:none">
+      <span class="t-num" id="tab-inbox-count">—</span>
+      <span class="t-lbl" data-i18n="nav.inbox">Inbox</span>
+    </div>
+    <div class="tab auth-only" data-tab="applied" onclick="switchTab('applied')" style="display:none">
+      <span class="t-num" id="tab-applied-count">—</span>
+      <span class="t-lbl" data-i18n="nav.applied">Applied</span>
+    </div>
+    <div class="tab auth-only" data-tab="rejected" onclick="switchTab('rejected')" style="display:none">
+      <span class="t-num" id="tab-rejected-count">—</span>
+      <span class="t-lbl" data-i18n="nav.rejected">Rejected</span>
+    </div>
+  </div>
+  <div style="flex:1"></div>
+  <div class="tab tab-plain auth-only" data-tab="settings" onclick="switchTab('settings')" style="display:none"><span data-i18n="nav.settings">Settings</span></div>
+  <div class="tab tab-plain auth-only" data-tab="ops" id="tab-ops" onclick="switchTab('ops')" style="display:none">Ops</div>
 </div>
 
 <!-- TAB: ALL JOBS -->
 <div class="tab-content active" id="tc-jobs">
   <div class="filters">
-    <input type="text" id="f-search" placeholder="Search title or company...">
-    <label>Score</label>
+    <input type="text" id="f-search" data-i18n="filter.search" data-i18n-attr="placeholder" placeholder="Search title or company...">
+    <span id="search-count" style="font-size:12px;color:var(--muted);white-space:nowrap;display:none"></span>
+    <label data-i18n="filter.score">Score</label>
     <select id="f-score">
-      <option value="0">All</option>
+      <option value="0" data-i18n="filter.all">All</option>
       <option value="40">40+</option>
       <option value="60">60+</option>
       <option value="70" selected>70+</option>
       <option value="80">80+</option>
       <option value="90">90+</option>
     </select>
-    <label>Country</label>
+    <label data-i18n="filter.country">Country</label>
     <div class="ms-wrap" id="country-wrap">
       <button class="ms-btn" id="f-country-btn" type="button" onclick="toggleCountryDrop(event)">
-        <span id="f-country-label">All Countries</span><span class="ms-arrow">▾</span>
+        <span id="f-country-label" data-default="1" data-i18n="filter.allCountries">All Countries</span><span class="ms-arrow">▾</span>
       </button>
       <div class="ms-drop" id="f-country-drop">
         <div class="ms-actions">
-          <button type="button" onclick="msAll(event)">All</button>
+          <button type="button" onclick="msAll(event)" data-i18n="filter.all">All</button>
           <button type="button" onclick="msNone(event)">None</button>
         </div>
         <div id="ms-list"><!-- populated by loadCountries() --></div>
       </div>
     </div>
-    <label>Source</label>
+    <label data-i18n="filter.source">Source</label>
     <select id="f-source">
-      <option value="">All</option>
+      <option value="" data-i18n="filter.all">All</option>
       <option value="adzuna">Adzuna</option>
       <option value="indeed">Indeed</option>
       <option value="linkedin">LinkedIn</option>
       <option value="glassdoor">Glassdoor</option>
       <option value="xing">Xing</option>
       <option value="arbeitsagentur">Arbeitsagentur</option>
-      <option value="arbeitnow">Arbeitnow</option>
-      <option value="remotive">Remotive</option>
     </select>
   </div>
   <div class="table-wrap">
@@ -89,87 +649,118 @@
         <col style="width:110px">
       </colgroup>
       <thead><tr>
-        <th data-sort="score" class="sorted">Score <span class="arrow">&#9660;</span></th>
-        <th data-sort="title">Job</th>
-        <th data-sort="company">Company</th>
-        <th>Location</th>
-        <th>Source</th>
-        <th>Actions</th>
+        <th data-sort="score" class="sorted"><span data-i18n="th.score">Score</span> <span class="arrow">&#9660;</span></th>
+        <th data-sort="title"><span data-i18n="th.job">Job</span></th>
+        <th data-sort="company"><span data-i18n="th.company">Company</span></th>
+        <th><span data-i18n="th.location">Location</span></th>
+        <th><span data-i18n="th.source">Source</span></th>
+        <th><span data-i18n="th.actions">Actions</span></th>
       </tr></thead>
-      <tbody id="jobs-body"><tr><td colspan="6" class="loading">Loading...</td></tr></tbody>
+      <tbody id="jobs-body"><tr><td colspan="6" class="loading" data-i18n="msg.loading">Loading...</td></tr></tbody>
     </table>
   </div>
   <div class="pagination">
-    <button id="prev-btn" disabled>&larr; Prev</button>
+    <button id="prev-btn" disabled data-i18n="btn.prev">← Prev</button>
     <span id="page-info">—</span>
-    <button id="next-btn" disabled>Next &rarr;</button>
+    <button id="next-btn" disabled data-i18n="btn.next">Next →</button>
   </div>
 </div>
 
 <!-- TAB: SETTINGS -->
 <div class="tab-content" id="tc-settings">
   <div class="settings">
-    <h2>Profile & Search Settings</h2>
+    <h2 data-i18n="settings.title">Profile & Search Settings</h2>
 
     <div id="settings-msg"></div>
 
-    <h3>Resume</h3>
-    <div class="upload-zone" id="upload-zone" onclick="document.getElementById('resume-file').click()">
-      <input type="file" id="resume-file" accept=".pdf,.txt,.doc,.docx">
-      Click to upload resume (PDF or TXT)
+    <h3 data-i18n="settings.resume">Resume</h3>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+      <button class="resume-upload-btn" id="upload-zone" onclick="document.getElementById('resume-file').click()">
+        <span class="ru-icon">📎</span>
+        <span id="resume-upload-label" data-i18n="btn.upload">Upload Resume</span>
+      </button>
+      <input type="file" id="resume-file" accept=".pdf,.txt,.doc,.docx" style="display:none">
+      <span id="resume-upload-status" style="font-size:11px;color:var(--muted);"></span>
     </div>
     <div class="field">
-      <label>Resume text / keywords</label>
-      <textarea id="s-resume" placeholder="Paste your resume text or key skills..."></textarea>
+      <label data-i18n="settings.resumeLabel">Resume text / keywords</label>
+      <textarea id="s-resume" data-i18n="settings.resumePlaceholder" data-i18n-attr="placeholder" placeholder="Paste your resume text or key skills..."></textarea>
     </div>
 
-    <h3>Target Positions</h3>
+    <h3 data-i18n="settings.targetPos">Target Positions</h3>
     <div class="field" style="margin-bottom:24px;">
-      <label>Target job titles (comma-separated)</label>
-      <textarea id="s-titles" rows="3" placeholder="Director Supply Chain, Head of Procurement, VP Operations..."></textarea>
+      <label data-i18n="settings.targetLabel">Target job titles (comma-separated)</label>
+      <textarea id="s-titles" rows="3" data-i18n="settings.targetPlaceholder" data-i18n-attr="placeholder" placeholder="Director Supply Chain, Head of Procurement, VP Operations..."></textarea>
     </div>
 
-    <h3>Exclusions & Negative Keywords</h3>
+    <h3 data-i18n="settings.watchlist">Target Companies Watchlist</h3>
+    <div class="field" style="margin-bottom:24px;">
+      <label data-i18n="settings.companiesLabel">Companies to monitor closely (comma-separated)</label>
+      <textarea id="s-companies" rows="3" data-i18n="settings.companiesPlaceholder" data-i18n-attr="placeholder" placeholder="Nestlé, Unilever, Bayer, Roche, Mars, Mondelez, PepsiCo, Danone..."></textarea>
+      <small style="color:var(--text-muted)" data-i18n="settings.watchlistHint">Jobs from these companies will be highlighted and tracked separately.</small>
+    </div>
+
+    <h3 data-i18n="settings.exclusions">Exclusions & Negative Keywords</h3>
     <div class="field" style="margin-bottom:12px;">
-      <label>Do not show jobs requiring (comma-separated)</label>
-      <textarea id="s-excluded" rows="2" placeholder="Junior, Developer, German C1, Sales, Part-time..."></textarea>
+      <label data-i18n="settings.excludedLabel">Do not show jobs with these keywords — applied automatically</label>
+      <div id="excluded-chips" class="chip-wrap"></div>
+      <input type="text" id="s-excluded-input" class="chip-input-field" placeholder="Add keyword, press Enter or comma...">
     </div>
     <div class="field" style="margin-bottom:24px;">
       <label class="toggle-label">
         <input type="checkbox" id="s-english-only">
-        <span class="toggle-text"><strong>English Only</strong> — prioritise jobs with English as working language; skip positions posted entirely in German / French / Dutch</span>
+        <span class="toggle-text" data-i18n="settings.englishOnly"><strong>English Only</strong> — prioritise jobs with English as working language; skip positions posted entirely in German / French / Dutch</span>
       </label>
     </div>
 
-    <h3>Preferences</h3>
-    <div class="field-row">
+    <h3 data-i18n="settings.prefs">Preferences</h3>
+    <div class="settings-2col">
+
+      <!-- Col 1: Salary -->
       <div class="field">
-        <label>Min salary (EUR/year)</label>
+        <label data-i18n="settings.salary">Min salary (EUR/year)</label>
         <input type="number" id="s-salary" placeholder="100000">
       </div>
+
+      <!-- Col 2: Work mode -->
       <div class="field">
-        <label>Experience (years)</label>
-        <input type="number" id="s-experience" placeholder="15">
+        <label data-i18n="settings.workMode">Work mode</label>
+        <div class="wm-wrap" id="wm-wrap">
+          <button class="wm-pill" id="wm-pill-btn" onclick="toggleWMDrop(event)">
+            <span id="wm-pill-icon">🌐</span>
+            <span id="wm-pill-label" data-i18n="settings.workAny">Any</span>
+            <span class="wm-arrow">▾</span>
+          </button>
+          <div class="wm-drop" id="wm-drop">
+            <div class="wm-di active" data-mode="any" onclick="setWorkMode('any');closeWMDrop()"><span class="wm-di-icon">🌐</span><span data-i18n="settings.workAny">Any</span><span class="wm-di-chk">✓</span></div>
+            <div class="wm-di" data-mode="onsite" onclick="setWorkMode('onsite');closeWMDrop()"><span class="wm-di-icon">🏢</span><span data-i18n="settings.workOnsite">Office</span><span class="wm-di-chk">✓</span></div>
+            <div class="wm-di" data-mode="hybrid" onclick="setWorkMode('hybrid');closeWMDrop()"><span class="wm-di-icon">🔀</span><span data-i18n="settings.workHybrid">Hybrid</span><span class="wm-di-chk">✓</span></div>
+            <div class="wm-di" data-mode="remote" onclick="setWorkMode('remote');closeWMDrop()"><span class="wm-di-icon">🏠</span><span data-i18n="settings.workRemote">Remote</span><span class="wm-di-chk">✓</span></div>
+          </div>
+        </div>
       </div>
-    </div>
-    <div class="field-row">
+
+      <!-- Col 1: Experience -->
       <div class="field">
-        <label>Languages (e.g. en:C2, de:B1)</label>
-        <input type="text" id="s-languages" placeholder="en:C2, de:B1">
+        <label data-i18n="settings.experience">Experience</label>
+        <div class="exp-pills" id="s-exp-pills">
+          <span class="exp-pill" data-val="2"  onclick="setExp(2)">0–2 yrs</span>
+          <span class="exp-pill" data-val="5"  onclick="setExp(5)">2–5 yrs</span>
+          <span class="exp-pill" data-val="8"  onclick="setExp(8)">5–8 yrs</span>
+          <span class="exp-pill" data-val="10" onclick="setExp(10)">8–10 yrs</span>
+          <span class="exp-pill" data-val="15" onclick="setExp(15)">10+ yrs</span>
+        </div>
       </div>
+
+      <!-- Col 2: Languages -->
       <div class="field">
-        <label>Work mode</label>
-        <select id="s-workmode">
-          <option value="any">Any</option>
-          <option value="remote">Remote</option>
-          <option value="hybrid">Hybrid</option>
-          <option value="onsite">On-site</option>
-        </select>
+        <label data-i18n="settings.languages">Languages</label>
+        <div class="lang-picker" id="lang-picker"></div>
       </div>
-    </div>
-    <div class="field-row">
-      <div class="field" style="flex:2">
-        <label>Active Target Countries</label>
+
+      <!-- Full width: Countries -->
+      <div class="field span2">
+        <label data-i18n="settings.countries">Active Target Countries</label>
         <div class="country-grid" id="s-countries-grid">
           <div class="country-item" data-code="de">🇩🇪 Germany</div>
           <div class="country-item" data-code="at">🇦🇹 Austria</div>
@@ -194,15 +785,54 @@
           <div class="country-item" data-code="fi">🇫🇮 Finland</div>
         </div>
       </div>
-    </div>
-    <div class="field">
-      <label>Industries (comma-separated)</label>
-      <input type="text" id="s-industries" placeholder="FMCG, Manufacturing, Automotive, Pharma...">
+
+      <!-- Full width: Industries -->
+      <div class="field span2">
+        <label data-i18n="settings.industries">Industries</label>
+        <div class="ind-grid" id="s-ind-grid">
+          <span class="ind-pill" data-ind="FMCG / Consumer Goods"     onclick="toggleInd(this)">FMCG / Consumer Goods</span>
+          <span class="ind-pill" data-ind="Manufacturing"             onclick="toggleInd(this)">Manufacturing</span>
+          <span class="ind-pill" data-ind="Automotive"                onclick="toggleInd(this)">Automotive</span>
+          <span class="ind-pill" data-ind="Pharma & Life Sciences"    onclick="toggleInd(this)">Pharma & Life Sciences</span>
+          <span class="ind-pill" data-ind="Chemicals"                 onclick="toggleInd(this)">Chemicals</span>
+          <span class="ind-pill" data-ind="Logistics & Transport"     onclick="toggleInd(this)">Logistics & Transport</span>
+          <span class="ind-pill" data-ind="Retail & E-commerce"       onclick="toggleInd(this)">Retail & E-commerce</span>
+          <span class="ind-pill" data-ind="Technology & Electronics"  onclick="toggleInd(this)">Technology & Electronics</span>
+          <span class="ind-pill" data-ind="Energy & Utilities"        onclick="toggleInd(this)">Energy & Utilities</span>
+          <span class="ind-pill" data-ind="Construction & Engineering" onclick="toggleInd(this)">Construction & Engineering</span>
+          <span class="ind-pill" data-ind="Food & Beverage"           onclick="toggleInd(this)">Food & Beverage</span>
+          <span class="ind-pill" data-ind="Healthcare"                onclick="toggleInd(this)">Healthcare</span>
+          <span class="ind-pill" data-ind="Aerospace & Defense"       onclick="toggleInd(this)">Aerospace & Defense</span>
+          <span class="ind-pill" data-ind="Financial Services"        onclick="toggleInd(this)">Financial Services</span>
+          <span class="ind-pill" data-ind="Other"                     onclick="toggleInd(this)">Other</span>
+        </div>
+      </div>
+
     </div>
 
-    <div style="margin-top:16px; display:flex; gap:10px;">
-      <button class="btn" onclick="saveProfile()">Save Settings</button>
-      <button class="btn btn-outline" onclick="loadProfile()">Reset</button>
+    <h3>Interface Language</h3>
+    <div class="ui-lang-grid">
+      <button class="ui-lang-btn" data-lang="en" onclick="setLang('en')">
+        <span class="ul-flag">🇬🇧</span>
+        <span class="ul-name">English</span>
+      </button>
+      <button class="ui-lang-btn" data-lang="ru" onclick="setLang('ru')">
+        <span class="ul-flag">🇷🇺</span>
+        <span class="ul-name">Русский</span>
+      </button>
+      <button class="ui-lang-btn" data-lang="de" onclick="setLang('de')">
+        <span class="ul-flag">🇩🇪</span>
+        <span class="ul-name">Deutsch</span>
+      </button>
+      <button class="ui-lang-btn" data-lang="es" onclick="setLang('es')">
+        <span class="ul-flag">🇪🇸</span>
+        <span class="ul-name">Español</span>
+      </button>
+    </div>
+
+    <div style="margin-top:24px; display:flex; gap:10px;">
+      <button class="btn" onclick="saveProfile()" data-i18n="btn.save">Save Settings</button>
+      <button class="btn btn-outline" onclick="loadProfile()" data-i18n="btn.reset">Reset</button>
     </div>
   </div>
 </div>
@@ -212,43 +842,43 @@
   <div class="ops-shell">
     <div class="ops-toolbar">
       <div class="ops-title">
-        <h2>Ops Cockpit</h2>
+        <h2>Пульт управления</h2>
         <p>Короткий пульт по здоровью пайплайна: сбор вакансий, скоринг, очередь, ошибки API и последние сканы.</p>
       </div>
-      <div class="ops-actions" style="display: flex; gap: 10px; align-items: center;">
+      <div class="ops-actions">
         <a href="/infographic" target="_blank" class="btn" style="background: linear-gradient(135deg, var(--blue), var(--green)); color: #fff; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
-          <span style="font-size: 1.2em;">📈</span> SMM Инфографика
+          <span style="font-size: 1.2em;">📈</span> SMM Infographic
         </a>
         <div class="segmented">
           <button type="button" data-ops-window="24" class="active" onclick="setOpsWindow(24)">24h</button>
           <button type="button" data-ops-window="72" onclick="setOpsWindow(72)">72h</button>
           <button type="button" data-ops-window="168" onclick="setOpsWindow(168)">7d</button>
         </div>
-        <button class="btn btn-outline" type="button" onclick="loadOpsOverview(true)">Refresh</button>
+        <button class="btn btn-outline" type="button" onclick="loadOpsOverview(true)">Обновить</button>
       </div>
     </div>
 
     <div class="ops-grid" id="ops-kpis">
-      <div class="ops-card"><div class="kicker">Loading</div><div class="value">...</div><div class="sub">Preparing ops overview</div></div>
+      <div class="ops-card"><div class="kicker">Загрузка</div><div class="value">...</div><div class="sub">Подготовка метрик</div></div>
     </div>
 
     <div class="ops-alerts" id="ops-alerts">
-      <div class="ops-alert"><strong>Loading alerts</strong><p>Checking queue pressure, API health and scan freshness.</p></div>
+      <div class="ops-alert"><strong>Загрузка алертов</strong><p>Проверяем давление очереди, здоровье API и свежесть последнего скана.</p></div>
     </div>
 
     <div class="ops-panels">
       <section class="ops-panel">
         <div class="panel-head">
-          <h3>Pipeline</h3>
-          <span id="ops-window-label">Last 24h</span>
+          <h3>Пайплайн</h3>
+          <span id="ops-window-label">Последние 24ч</span>
         </div>
         <div class="pipeline-list" id="ops-pipeline"></div>
       </section>
 
       <section class="ops-panel">
         <div class="panel-head">
-          <h3>Scan Health</h3>
-          <span id="ops-scan-pill" class="pill">Waiting</span>
+          <h3>Здоровье скана</h3>
+          <span id="ops-scan-pill" class="pill">Ожидание</span>
         </div>
         <div id="ops-scan"></div>
       </section>
@@ -257,18 +887,38 @@
     <div class="ops-panels">
       <section class="ops-panel">
         <div class="panel-head">
-          <h3>Sources</h3>
-          <span>Fresh vs total mix</span>
+          <h3>Источники</h3>
+          <span>Свежие vs всего</span>
         </div>
         <div class="source-list" id="ops-sources"></div>
       </section>
 
       <section class="ops-panel">
         <div class="panel-head">
-          <h3>Recent Events</h3>
-          <span>Latest scan and API signals</span>
+          <h3>Последние события</h3>
+          <span>Сканы и сигналы API</span>
         </div>
         <div class="event-list" id="ops-events"></div>
+      </section>
+    </div>
+
+    <div class="ops-panels" style="grid-template-columns:1fr">
+      <section class="ops-panel">
+        <div class="panel-head">
+          <h3>Пользователи</h3>
+          <span id="ops-users-summary">—</span>
+        </div>
+        <div id="ops-users"><div class="ops-empty">Загрузка пользователей...</div></div>
+      </section>
+    </div>
+
+    <div class="ops-panels" id="ops-dedup-wrap" style="grid-template-columns:1fr">
+      <section class="ops-panel">
+        <div class="panel-head">
+          <h3>Дедупликация</h3>
+          <span id="ops-dedup-summary">Объединённые вакансии</span>
+        </div>
+        <div id="ops-dedup"><div class="ops-empty">Загрузка...</div></div>
       </section>
     </div>
   </div>
@@ -283,6 +933,993 @@
   </div>
 </div>
 
-<script src="/static/js/app.js"></script>
+<script>
+/* ── State ── */
+const S = { page:1, perPage:50, sort:'score', order:'desc', totalPages:1, tabStatus:'', role:'guest', authenticated:false, activeTab:'jobs', opsWindow:24 };
+const $ = id => document.getElementById(id);
+
+/* ── Language Picker ── */
+const LANG_NAMES = {en:'🇬🇧 English',de:'🇩🇪 Deutsch',fr:'🇫🇷 Français',es:'🇪🇸 Español',it:'🇮🇹 Italiano',pt:'🇵🇹 Português',nl:'🇳🇱 Nederlands',pl:'🇵🇱 Polski',ru:'🇷🇺 Русский',sv:'🇸🇪 Svenska',cs:'🇨🇿 Čeština',hu:'🇭🇺 Magyar',ro:'🇷🇴 Română',da:'🇩🇰 Dansk',fi:'🇫🇮 Suomi'};
+/* Proficiency: universal descriptors (not raw CEFR codes) */
+const LANG_LEVELS = [
+  {key:'basic',         label:'Basic',         sub:'A1–A2'},
+  {key:'conversational',label:'Conversational', sub:'B1–B2'},
+  {key:'fluent',        label:'Fluent',         sub:'C1–C2'},
+  {key:'native',        label:'Native',         sub:''},
+];
+/* Migrate old CEFR string values saved before this redesign */
+const LEVEL_MIGRATE = {'A1-A2':'basic','B1-B2':'conversational','C1-C2':'fluent','Native':'native'};
+let _langs = {};
+let _workMode = 'any';
+let _expLevel = null; // stored as int: 2/5/8/10/15
+
+const EXP_MAP = [
+  {val:2,  label:'0–2 yrs'},
+  {val:5,  label:'2–5 yrs'},
+  {val:8,  label:'5–8 yrs'},
+  {val:10, label:'8–10 yrs'},
+  {val:15, label:'10+ yrs'},
+];
+
+function setExp(val){
+  _expLevel=val;
+  document.querySelectorAll('#s-exp-pills .exp-pill').forEach(p=>p.classList.toggle('active',+p.dataset.val===val));
+}
+
+function _expFromYears(n){
+  if(!n) return null;
+  if(n<=2) return 2;
+  if(n<=5) return 5;
+  if(n<=8) return 8;
+  if(n<=10) return 10;
+  return 15;
+}
+
+const INDUSTRIES = [
+  'FMCG / Consumer Goods','Manufacturing','Automotive','Pharma & Life Sciences',
+  'Chemicals','Logistics & Transport','Retail & E-commerce','Technology & Electronics',
+  'Energy & Utilities','Construction & Engineering','Food & Beverage','Healthcare',
+  'Aerospace & Defense','Financial Services','Other'
+];
+let _industries = new Set();
+
+function toggleInd(el){
+  const name=el.dataset.ind;
+  if(_industries.has(name)){ _industries.delete(name); el.classList.remove('active'); }
+  else { _industries.add(name); el.classList.add('active'); }
+}
+
+function _loadIndustries(arr){
+  _industries=new Set(arr||[]);
+  document.querySelectorAll('#s-ind-grid .ind-pill').forEach(p=>{
+    p.classList.toggle('active', _industries.has(p.dataset.ind));
+  });
+}
+
+function _normLevel(v){ return LEVEL_MIGRATE[v]||(['basic','conversational','fluent','native'].includes(v)?v:'fluent'); }
+
+function renderLangPicker(){
+  const p=$('lang-picker'); if(!p) return;
+  p.innerHTML='';
+  for(const [code,raw] of Object.entries(_langs)){
+    const lvlKey=_normLevel(raw);
+    const lvlObj=LANG_LEVELS.find(l=>l.key===lvlKey)||LANG_LEVELS[2];
+    const pill=document.createElement('div');
+    pill.className='lp-pill has-level';
+    pill.dataset.code=code;
+    const dropId='lpdrop-'+code;
+    pill.innerHTML=`${LANG_NAMES[code]||code}<span class="lp-lvl">· ${lvlObj.label}</span><span class="lp-arrow">▾</span>`+
+      `<div class="lp-drop" id="${dropId}">`+
+      LANG_LEVELS.map(l=>`<div class="lp-di${lvlKey===l.key?' active':''}" onclick="_setLangLevel('${code}','${l.key}');event.stopPropagation()">`+
+        `<span>${l.label}</span><span class="lp-di-sub">${l.sub}</span><span class="lp-di-chk">✓</span></div>`).join('')+
+      `</div>`+
+      `<span class="lp-rm" onclick="_removeLang('${code}');event.stopPropagation()">✕</span>`;
+    pill.addEventListener('click',()=>_toggleLangDrop(code));
+    p.appendChild(pill);
+  }
+  /* Add language pill */
+  const addWrap=document.createElement('div'); addWrap.style.position='relative';
+  const used=Object.keys(_langs);
+  addWrap.innerHTML=`<button class="lp-add-pill">＋ Add language`+
+    `<select id="lang-add-select"><option value=""></option>`+
+    Object.entries(LANG_NAMES).filter(([c])=>!used.includes(c)).map(([c,n])=>`<option value="${c}">${n}</option>`).join('')+
+    `</select></button>`;
+  p.appendChild(addWrap);
+  const sel=p.querySelector('#lang-add-select');
+  if(sel) sel.addEventListener('change',function(){
+    if(!this.value) return;
+    if(!_langs[this.value]) _langs[this.value]='fluent';
+    this.value=''; renderLangPicker();
+  });
+}
+
+function _toggleLangDrop(code){
+  document.querySelectorAll('.lp-drop.open').forEach(d=>{if(d.id!=='lpdrop-'+code)d.classList.remove('open');});
+  const d=$('lpdrop-'+code); if(d) d.classList.toggle('open');
+}
+function _setLangLevel(code,lvl){_langs[code]=lvl;renderLangPicker();}
+function _removeLang(code){delete _langs[code];renderLangPicker();}
+
+/* ── Work Mode Pill ── */
+const WM_OPT={
+  any:    {icon:'🌐',i18n:'settings.workAny'},
+  onsite: {icon:'🏢',i18n:'settings.workOnsite'},
+  hybrid: {icon:'🔀',i18n:'settings.workHybrid'},
+  remote: {icon:'🏠',i18n:'settings.workRemote'},
+};
+function setWorkMode(mode){
+  _workMode=mode;
+  const opt=WM_OPT[mode]||WM_OPT.any;
+  const icon=$('wm-pill-icon'), lbl=$('wm-pill-label');
+  if(icon) icon.textContent=opt.icon;
+  if(lbl){ lbl.dataset.i18n=opt.i18n; lbl.textContent=T(opt.i18n); }
+  document.querySelectorAll('#wm-drop .wm-di').forEach(el=>el.classList.toggle('active',el.dataset.mode===mode));
+}
+function toggleWMDrop(e){ e&&e.stopPropagation(); const d=$('wm-drop'); if(d) d.classList.toggle('open'); }
+function closeWMDrop(){ const d=$('wm-drop'); if(d) d.classList.remove('open'); }
+
+/* ── Dark Mode ── */
+(function() {
+  const saved = localStorage.getItem('theme');
+  if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    document.getElementById('theme-toggle') && (document.getElementById('theme-toggle').textContent = '☀️');
+  }
+})();
+
+function toggleTheme() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.documentElement.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  localStorage.setItem('theme', isDark ? 'light' : 'dark');
+  $('theme-toggle').textContent = isDark ? '🌙' : '☀️';
+}
+
+/* ── Tabs ── */
+function switchTab(name, save=true) {
+  S.activeTab = name;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab===name));
+  if(save && S.authenticated) try{ localStorage.setItem('pipka_tab', name); }catch(e){}
+
+  if (name === 'settings') {
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id==='tc-settings'));
+    loadProfile();
+  } else if (name === 'ops') {
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id==='tc-ops'));
+    loadOpsOverview();
+  } else {
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id==='tc-jobs'));
+    S.tabStatus = name === 'jobs' ? '' : (name === 'inbox' ? 'new' : name);
+    S.page = 1;
+    loadJobs();
+  }
+}
+
+function openJobsView({ tab='jobs', minScore=null, source=null, search='' } = {}) {
+  if(minScore !== null && $('f-score')) $('f-score').value = String(minScore);
+  if(source !== null && $('f-source')) $('f-source').value = source;
+  if($('f-search')) $('f-search').value = search;
+  switchTab(tab);
+}
+
+/* ── Filters ── */
+let searchTimeout;
+$('f-search').addEventListener('input', () => { clearTimeout(searchTimeout); searchTimeout=setTimeout(()=>{S.page=1;loadJobs()},400); });
+['f-score','f-source'].forEach(id => $(id).addEventListener('change', ()=>{S.page=1;loadJobs()}));
+
+/* ── Multi-select country ── */
+const COUNTRY_NAMES = {
+  de:'Germany', at:'Austria', ch:'Switzerland', nl:'Netherlands', be:'Belgium',
+  pl:'Poland', cz:'Czech Rep', es:'Spain', it:'Italy', fr:'France',
+  gb:'UK', uk:'UK', ie:'Ireland', dk:'Denmark', se:'Sweden', no:'Norway',
+  fi:'Finland', ro:'Romania', hu:'Hungary', sk:'Slovakia', si:'Slovenia',
+  us:'USA', ca:'Canada', pt:'Portugal', lu:'Luxembourg', ee:'Estonia',
+  lv:'Latvia', lt:'Lithuania', hr:'Croatia', rs:'Serbia', bg:'Bulgaria',
+};
+let _selCountries = new Set();
+
+function toggleCountryDrop(e) {
+  e.stopPropagation();
+  $('f-country-drop').classList.toggle('open');
+}
+document.addEventListener('click', (e) => {
+  if (!$('country-wrap').contains(e.target)) $('f-country-drop').classList.remove('open');
+  if(!e.target.closest('#wm-wrap')) closeWMDrop();
+  if(!e.target.closest('.lp-pill')) document.querySelectorAll('.lp-drop.open').forEach(d=>d.classList.remove('open'));
+});
+
+async function loadCountries() {
+  try {
+    const data = await (await fetch('/api/countries',{cache:'no-store'})).json();
+    $('ms-list').innerHTML = data.map(c => {
+      const name = COUNTRY_NAMES[c.code] || c.code.toUpperCase();
+      return `<label class="ms-item"><input type="checkbox" value="${c.code}" onchange="onCountryToggle()"><span>${name}</span><span class="ms-cnt">${c.count}</span></label>`;
+    }).join('');
+  } catch(e) { console.error('loadCountries:', e); }
+}
+
+function onCountryToggle() {
+  _selCountries = new Set([...document.querySelectorAll('#ms-list input:checked')].map(i=>i.value));
+  _updateCountryBtn();
+  S.page=1; loadJobs();
+}
+
+function _updateCountryBtn() {
+  const n = _selCountries.size;
+  const lbl = $('f-country-label');
+  lbl.textContent = n===0 ? T('filter.allCountries')
+    : n===1 ? (COUNTRY_NAMES[[..._selCountries][0]] || [..._selCountries][0].toUpperCase())
+    : `${n} countries`;
+  if(n===0) lbl.setAttribute('data-default','1'); else lbl.removeAttribute('data-default');
+}
+
+function msAll(e) {
+  e.stopPropagation();
+  document.querySelectorAll('#ms-list input').forEach(i=>i.checked=true);
+  onCountryToggle();
+}
+function msNone(e) {
+  e.stopPropagation();
+  document.querySelectorAll('#ms-list input').forEach(i=>i.checked=false);
+  onCountryToggle();
+}
+$('prev-btn').addEventListener('click', () => { if(S.page>1){S.page--;loadJobs()} });
+$('next-btn').addEventListener('click', () => { if(S.page<S.totalPages){S.page++;loadJobs()} });
+
+/* Sort headers */
+document.querySelectorAll('th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const col=th.dataset.sort;
+    if(S.sort===col) S.order=S.order==='desc'?'asc':'desc'; else {S.sort=col;S.order='desc';}
+    S.page=1; updateSortHeaders(); loadJobs();
+  });
+});
+function updateSortHeaders(){
+  document.querySelectorAll('th[data-sort]').forEach(th=>{
+    const col=th.dataset.sort, arrow=th.querySelector('.arrow');
+    th.classList.toggle('sorted',col===S.sort);
+    if(arrow) arrow.innerHTML=col===S.sort?(S.order==='desc'?'&#9660;':'&#9650;'):'';
+  });
+}
+
+/* ── Stats ── */
+const setStat=(id,v)=>{const el=$(id);if(el)el.textContent=v;};
+// Pretty-print source names for the filter dropdown
+const SOURCE_LABELS = {
+  adzuna:'Adzuna', indeed:'Indeed', linkedin:'LinkedIn', glassdoor:'Glassdoor',
+  xing:'Xing', arbeitsagentur:'Arbeitsagentur', arbeitnow:'Arbeitnow',
+  remotive:'Remotive', berlinstartupjobs:'BerlinStartupJobs', wttj:'WTTJ (Otta)',
+  jooble:'Jooble', watchlist:'⭐ Watchlist',
+};
+
+async function loadStats(){
+  try{
+    const d=await(await fetch('/api/stats',{cache:'no-store'})).json();
+    setStat('stat-total',    d.total_jobs||0);
+    setStat('tab-inbox-count',  d.inbox||0);
+    setStat('tab-applied-count',d.applied||0);
+    setStat('tab-rejected-count',d.rejected||0);
+    // Populate source filter dynamically from live data
+    const sel = $('f-source');
+    if(sel && d.sources){
+      const current = sel.value;
+      // Sort: watchlist last, rest alphabetically by label
+      const entries = Object.entries(d.sources)
+        .sort(([a],[b]) => a === 'watchlist' ? 1 : b === 'watchlist' ? -1 : a.localeCompare(b));
+      sel.innerHTML = `<option value="" data-i18n="filter.all">${T('filter.all')}</option>` +
+        entries.map(([src, cnt]) =>
+          `<option value="${esc(src)}">${SOURCE_LABELS[src] || esc(src)} (${cnt})</option>`
+        ).join('');
+      // Restore previous selection if still valid
+      if(current) sel.value = current;
+    }
+  }catch(e){console.error(e)}
+}
+
+/* ── Jobs table ── */
+async function loadJobs(){
+  const p=new URLSearchParams({page:S.page,per_page:S.perPage,sort:S.sort,order:S.order,min_score:$('f-score').value});
+  const search = $('f-search').value.trim();
+  if(search) p.set('search', search);
+  if($('f-source').value) p.set('source',$('f-source').value);
+  if(_selCountries.size>0) p.set('countries',[..._selCountries].join(','));
+  if(S.tabStatus) p.set('status',S.tabStatus);
+  const tbody=$('jobs-body');
+  tbody.innerHTML=`<tr><td colspan="6" class="loading">${T('msg.loading')}</td></tr>`;
+  try{
+    const data=await(await fetch('/api/jobs?'+p,{cache:'no-store'})).json();
+    S.totalPages=data.pages;
+    $('page-info').textContent=`Page ${data.page} of ${data.pages} (${data.total} jobs)`;
+    $('prev-btn').disabled=data.page<=1; $('next-btn').disabled=data.page>=data.pages;
+    // Search counter badge
+    const sc=$('search-count');
+    if(sc){ const q=$('f-search').value.trim(); sc.textContent=`${fmtNumber(data.total)} вак.`; sc.style.display=q?'inline':'none'; }
+    if(!data.jobs.length){tbody.innerHTML=`<tr><td colspan="6" class="loading">${T('msg.noJobs')}</td></tr>`;return;}
+    let rows='';
+    for(let i=0;i<data.jobs.length;i++){
+      try{ rows+=jobRow(data.jobs[i]); }
+      catch(err){ console.error('jobRow crash at index',i,'job:',data.jobs[i],'error:',err); rows+=`<tr><td colspan="6" style="color:red">Row ${i} error: ${err.message} (job id=${data.jobs[i]?.id})</td></tr>`; }
+    }
+    tbody.innerHTML=rows;
+  }catch(e){tbody.innerHTML=`<tr><td colspan="6" class="loading">Error: ${e.message}</td></tr>`;console.error('loadJobs error:',e)}
+}
+
+function sourceCell(j) {
+  if (j.source === 'watchlist') {
+    return `<span class="source-tag watchlist">⭐ watchlist</span>`;
+  }
+  const ms = j.merged_sources;
+  if (ms && ms.length > 1) {
+    // Show primary source + compact "+N" badge, tooltip lists all
+    const others = ms.filter(s => s !== j.source);
+    const tip = ms.join(' · ').toUpperCase();
+    return `<span class="source-tag merged" title="${tip}">${esc(j.source)} +${others.length}</span>`;
+  }
+  return `<span class="source-tag">${esc(j.source)}</span>`;
+}
+
+function jobRow(j){
+  const sc=j.score>=70?'high':j.score>=40?'mid':j.score!=null?'low':'none';
+  const date=j.posted_at?new Date(j.posted_at).toLocaleDateString('de-DE'):'';
+  const dq=j.data_quality||'partial';
+  const dqTitle=dq==='full'?'Полное описание доступно':'Описание отсутствует или неполное — оценка приблизительная';
+  return `<tr>
+    <td><span class="score-wrap"><span class="score ${sc}">${j.score!=null?j.score:'—'}</span><span class="dq-dot ${dq}" title="${dqTitle}"></span></span></td>
+    <td><a class="job-title" href="${safeUrl(j.url)}" target="_blank" rel="noopener noreferrer">${esc(j.title)}</a>${date?`<div class="job-meta">${date}</div>`:''}</td>
+    <td class="job-meta">${esc(j.company)}</td>
+    <td class="job-meta">${esc(j.location)} (${esc(j.country)})</td>
+    <td>${sourceCell(j)}</td>
+    <td><div class="actions-wrap">
+      ${S.authenticated ? `
+      <button onclick="doAction(${j.id},'applied',this)" title="Applied"${j.status==='applied'?' class="active"':''}>&#10004;</button>
+      <button onclick="doAction(${j.id},'reject',this)" title="Reject"${j.status==='rejected'?' class="active"':''}>&#10006;</button>
+      <button onclick="showAnalysis(${j.id},'${esc(j.title).replace(/'/g,"\\'")}')">&#129302;</button>
+      ` : `<span style="font-size:10px; color:var(--muted)">Sign in to act</span>`}
+    </div></td></tr>`;
+}
+
+/* ── Excluded-keyword chips ── */
+let _excludedKws = [];
+function _renderExcludedChips(){
+  const wrap = $('excluded-chips');
+  if(!wrap) return;
+  wrap.innerHTML = _excludedKws.map((kw,i) =>
+    `<span class="kw-chip">${esc(kw)}<span class="chip-x" onclick="_removeExcludedKw(${i})">×</span></span>`
+  ).join('');
+}
+function _removeExcludedKw(i){ _excludedKws.splice(i,1); _renderExcludedChips(); }
+function _addExcludedKw(raw){
+  raw.split(',').map(s=>s.trim()).filter(Boolean).forEach(kw => {
+    if(kw && !_excludedKws.map(k=>k.toLowerCase()).includes(kw.toLowerCase()))
+      _excludedKws.push(kw);
+  });
+  _renderExcludedChips();
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const inp = $('s-excluded-input');
+  if(inp){
+    inp.addEventListener('keydown', e => {
+      if(e.key === 'Enter' || e.key === ','){
+        e.preventDefault();
+        _addExcludedKw(inp.value); inp.value='';
+      }
+    });
+    inp.addEventListener('blur', () => { if(inp.value.trim()){ _addExcludedKw(inp.value); inp.value=''; } });
+  }
+});
+
+/* ── Settings / Profile ── */
+async function loadProfile(){
+  try{
+    const d=await(await fetch('/api/profile',{cache:'no-store'})).json();
+    if(!d.profile) return;
+    const p=d.profile;
+    $('s-resume').value=p.resume_text||'';
+    $('s-titles').value=(p.target_titles||[]).join(', ');
+    _excludedKws = p.excluded_keywords||[]; _renderExcludedChips();
+    if($('s-english-only')) $('s-english-only').checked=!!p.english_only;
+    if($('s-companies')) $('s-companies').value=(p.target_companies||[]).join(', ');
+    $('s-salary').value=p.min_salary||'';
+    setExp(_expFromYears(p.experience_years));
+    _langs=p.languages||{}; renderLangPicker();
+    setWorkMode(p.work_mode||'any');
+    const pc = p.preferred_countries||[];
+    document.querySelectorAll('#s-countries-grid .country-item').forEach(el => {
+      el.classList.toggle('active', pc.includes(el.dataset.code));
+    });
+    _loadIndustries(p.industries||[]);
+  }catch(e){console.error(e)}
+}
+
+async function saveProfile(){
+  const fd=new FormData();
+  fd.append('resume_text',$('s-resume').value);
+  fd.append('target_titles',$('s-titles').value);
+  fd.append('excluded_keywords', _excludedKws.join(', '));
+  fd.append('english_only', $('s-english-only') && $('s-english-only').checked ? '1' : '0');
+  if($('s-companies')) fd.append('target_companies',$('s-companies').value);
+  fd.append('min_salary',$('s-salary').value||0);
+  fd.append('experience_years',_expLevel||0);
+  fd.append('languages',JSON.stringify(_langs));
+  fd.append('work_mode',_workMode);
+  const activeCountries = Array.from(document.querySelectorAll('#s-countries-grid .country-item.active')).map(el => el.dataset.code);
+  fd.append('preferred_countries', activeCountries.join(','));
+  fd.append('industries',[..._industries].join(','));
+  try{
+    const r=await fetch('/api/profile',{method:'POST',body:fd});
+    const d=await r.json();
+    $('settings-msg').innerHTML=d.ok?'<div class="msg ok">Settings saved!</div>':'<div class="msg err">Error saving</div>';
+    setTimeout(()=>$('settings-msg').innerHTML='',3000);
+  }catch(e){$('settings-msg').innerHTML='<div class="msg err">Network error</div>';}
+}
+
+/* Resume upload */
+function _setUploadStatus(text, ok) {
+  const st = $('resume-upload-status');
+  const btn = $('upload-zone');
+  if (st) st.textContent = text;
+  if (btn) btn.classList.toggle('loaded', !!ok);
+}
+$('resume-file').addEventListener('change', async(e)=>{
+  const file=e.target.files[0]; if(!file) return;
+  _setUploadStatus('Uploading ' + file.name + '…', false);
+  const fd=new FormData(); fd.append('file',file);
+  try{
+    const r=await fetch('/api/profile/resume',{method:'POST',body:fd});
+    const d=await r.json();
+    if(d.ok){
+      _setUploadStatus('✓ ' + file.name + ' · ' + d.length.toLocaleString() + ' chars', true);
+      $('s-resume').value=d.preview+(d.length>500?'…':'');
+      loadProfile();
+    } else {
+      _setUploadStatus('⚠ ' + (d.error||'unknown error'), false);
+    }
+  }catch(e){ _setUploadStatus('Upload failed', false); }
+});
+
+/* ── Toast notification ── */
+function showToast(msg, duration=4000){
+  let t = document.getElementById('pipka-toast');
+  if(!t){
+    t = document.createElement('div');
+    t.id='pipka-toast';
+    t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--accent,#4f8ef7);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3);transition:opacity .3s';
+    document.body.appendChild(t);
+  }
+  t.textContent=msg;
+  t.style.opacity='1';
+  clearTimeout(t._timer);
+  t._timer=setTimeout(()=>{ t.style.opacity='0'; },duration);
+}
+
+/* ── Actions & Modal ── */
+async function doAction(jobId,action,btn){
+  btn.disabled=true;
+  try{
+    const resp = await fetch(`/api/jobs/${jobId}/action?action=${action}`,{method:'POST'});
+    if(resp.status===401){
+      // Session expired — reload page to re-authenticate
+      alert('Session expired. Page will reload to re-authenticate.');
+      window.location.reload();
+      return;
+    }
+    if(!resp.ok){
+      const body = await resp.json().catch(()=>({}));
+      console.error('Action failed',resp.status,body);
+      btn.disabled=false;
+      return;
+    }
+    const data = await resp.json().catch(()=>({}));
+    if(data.auto_excluded){
+      showToast(`🚫 Компания «${data.auto_excluded}» добавлена в исключения (5 отклонений)`);
+    }
+    loadJobs(); loadStats();
+  }catch(e){console.error('doAction error:',e)}
+  btn.disabled=false;
+}
+
+async function showAnalysis(jobId,title){
+  $('modal').classList.add('open');
+  $('modal-title').textContent='AI Analysis: '+title;
+  $('modal-body').textContent='Loading...';
+  try{
+    const d=await(await fetch(`/api/jobs/${jobId}/analyze`,{cache:'no-store'})).json();
+    $('modal-body').textContent=d.analysis||d.error||'No analysis';
+  }catch(e){$('modal-body').textContent='Error: '+e.message;}
+}
+function closeModal(){$('modal').classList.remove('open')}
+$('modal').addEventListener('click',e=>{if(e.target===$('modal'))closeModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+
+
+function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function safeUrl(u){if(!u)return'#';try{const p=new URL(u);if(p.protocol==='https:'||p.protocol==='http:')return u;}catch(e){}return'#';}
+function jsq(s){return String(s ?? '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+
+/* Interactivity */
+document.querySelectorAll('.country-item').forEach(el => {
+  el.addEventListener('click', () => el.classList.toggle('active'));
+});
+
+/* Scan */
+let _nextScanAt = null;
+let _scanCountdownTimer = null;
+
+function _scanCountdown(){
+  const sub=$('scan-btn-sub'); if(!sub) return;
+  if(!_nextScanAt){ sub.textContent=''; return; }
+  const diff=_nextScanAt-Date.now();
+  if(diff<=0){ sub.textContent='Soon…'; return; }
+  const h=Math.floor(diff/3600000);
+  const m=Math.floor((diff%3600000)/60000);
+  const s=Math.floor((diff%60000)/1000);
+  sub.textContent = h>0 ? `Next: ${h}h ${m}m` : m>0 ? `Next: ${m}m ${s}s` : `Next: ${s}s`;
+}
+
+function _setScanRunning(running){
+  const btn=$('scan-btn'), lbl=$('scan-btn-label'), sub=$('scan-btn-sub'); if(!btn) return;
+  if(running){
+    btn.classList.add('running'); btn.disabled=true;
+    if(lbl) lbl.textContent='⟳ Scanning…';
+    if(sub) sub.textContent='';
+    if(_scanCountdownTimer){clearInterval(_scanCountdownTimer);_scanCountdownTimer=null;}
+  } else {
+    btn.classList.remove('running'); btn.disabled=false;
+    if(lbl) lbl.textContent='▶ Scan';
+    if(!_scanCountdownTimer) _scanCountdownTimer=setInterval(_scanCountdown,1000);
+    _scanCountdown();
+  }
+}
+
+async function triggerScan(){
+  _setScanRunning(true);
+  try{
+    const r=await fetch('/api/scan',{method:'POST'});
+    const d=await r.json();
+    if(d.status==='started'){
+      let checks=0;
+      const poll=setInterval(async()=>{
+        checks++;
+        const s=await(await fetch('/api/stats',{cache:'no-store'})).json();
+        const sub=$('scan-btn-sub'); if(sub) sub.textContent=`${s.total_jobs} jobs · ${checks*10}s`;
+        setStat('stat-total',s.total_jobs);
+        if(S.activeTab==='ops') loadOpsOverview(true);
+        if(checks>=30){clearInterval(poll);_setScanRunning(false);loadJobs();loadStats();if(S.activeTab==='ops') loadOpsOverview(true);}
+      },10000);
+    } else {
+      _setScanRunning(false);
+    }
+  }catch(e){_setScanRunning(false);}
+}
+
+async function loadScanStatus(){
+  try{
+    const d=await(await fetch('/api/scan/status',{cache:'no-store'})).json();
+    if(d.running){ _setScanRunning(true); return; }
+    _setScanRunning(false);
+    if(d.next_run){ _nextScanAt=new Date(d.next_run).getTime(); _scanCountdown(); }
+  }catch(e){}
+}
+
+function fmtNumber(v){
+  return (v ?? 0).toLocaleString('de-DE');
+}
+
+function renderJooblebudget(j){
+  if(!j) return '';
+  const pct = j.pct_used;
+  const color = pct >= 90 ? 'var(--red)' : pct >= 70 ? 'var(--yellow)' : 'var(--green)';
+  const warn = pct >= 80 ? '<span style="color:var(--red);font-weight:600">⚠ Пора заказать новый ключ</span>' : '';
+  return '<div class="mini-list" style="margin-top:6px">'
+    + '<span style="font-weight:600">Jooble API бюджет:</span>'
+    + '<span style="color:' + color + '">' + fmtNumber(j.requests_total) + ' / ' + fmtNumber(j.budget) + ' запросов (' + pct + '%)</span>'
+    + '<span style="color:var(--muted)">осталось: ' + fmtNumber(j.remaining) + '</span>'
+    + warn
+    + '</div>';
+}
+
+function fmtRelative(dateStr){
+  if(!dateStr) return '—';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const totalMins = Math.floor(diff / 60000);
+  if(totalMins < 1) return 'just now';
+  if(totalMins < 60) return `${totalMins}m ago`;
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  if(h < 24) return m > 0 ? `${h}h ${m}m ago` : `${h}h ago`;
+  const days = Math.floor(h / 24);
+  const rh = h % 24;
+  return rh > 0 ? `${days}d ${rh}h ago` : `${days}d ago`;
+}
+
+function fmtDateTime(dateStr){
+  if(!dateStr) return '—';
+  const d = new Date(dateStr);
+  if(isNaN(d)) return '—';
+  const p = n => String(n).padStart(2,'0');
+  return `${p(d.getDate())}.${p(d.getMonth()+1)}. ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function setOpsWindow(hours){
+  S.opsWindow = hours;
+  document.querySelectorAll('[data-ops-window]').forEach(btn => {
+    btn.classList.toggle('active', Number(btn.dataset.opsWindow) === hours);
+  });
+  $('ops-window-label').textContent = hours >= 168 ? 'Последние 7д' : `Последние ${hours}ч`;
+  loadOpsOverview();
+}
+
+function renderPipelineRow(label, value, max){
+  const width = max ? Math.max(8, Math.round((value / max) * 100)) : 8;
+  return `<div class="pipeline-row">
+    <div class="label">${label}</div>
+    <div class="bar"><div class="fill" style="width:${width}%"></div></div>
+    <div class="count">${fmtNumber(value)}</div>
+  </div>`;
+}
+
+function eventPill(status){
+  const cls = status === 'success' ? 'success' : status === 'error' ? 'error' : (status === 'running' ? 'running' : 'warning');
+  return `<span class="pill ${cls}">${esc(status)}</span>`;
+}
+
+function renderOpsAlerts(d){
+  const alerts = [];
+  const queueRisk = d.kpis.pending_pct || 0;
+  const apiErrors = (d.kpis.api_401 || 0) + (d.kpis.api_500 || 0);
+  const lastScanAgeHours = d.scan.last_at ? ((Date.now() - new Date(d.scan.last_at).getTime()) / 3600000) : null;
+
+  if(queueRisk >= 35 || d.kpis.unscored_total >= 150){
+    alerts.push(`
+      <div class="ops-alert queue">
+        <strong>Давление очереди растёт</strong>
+        <p>${fmtNumber(d.kpis.unscored_total)} вакансий ещё без оценки (${queueRisk}%). Обычно это значит, что скоринг отстаёт от сбора.</p>
+        <button type="button" onclick="openJobsView({ tab:'jobs', minScore:0 })">Открыть все вакансии</button>
+      </div>
+    `);
+  }
+
+  if(apiErrors > 0){
+    alerts.push(`
+      <div class="ops-alert errors">
+        <strong>Обнаружены ошибки API</strong>
+        <p>За выбранный период: ${fmtNumber(d.kpis.api_401)} проблем аутентификации и ${fmtNumber(d.kpis.api_500)} серверных ошибок. Проверьте последние события.</p>
+        <button type="button" onclick="loadOpsOverview(true)">Обновить события</button>
+      </div>
+    `);
+  }
+
+  if(!d.scan.running && lastScanAgeHours !== null && lastScanAgeHours > 6){
+    alerts.push(`
+      <div class="ops-alert queue">
+        <strong>Последний скан устарел</strong>
+        <p>Последний успешный скан был ${fmtRelative(d.scan.last_at)}. Если это неожиданно — запустите скан вручную и проверьте планировщик.</p>
+        <button type="button" onclick="triggerScan()">Запустить скан</button>
+      </div>
+    `);
+  }
+
+  if(!alerts.length){
+    alerts.push(`
+      <div class="ops-alert success">
+        <strong>Система работает нормально</strong>
+        <p>Нет очевидных сигналов тревоги: очередь управляема, сканы свежие, ошибки API в норме.</p>
+        <button type="button" onclick="openJobsView({ tab:'jobs', minScore:70 })">Топ-совпадения</button>
+      </div>
+    `);
+  }
+
+  $('ops-alerts').innerHTML = alerts.join('');
+}
+
+function handleOpsCardAction(action){
+  if(action === 'jobs_recent') openJobsView({ tab:'jobs', minScore:0 });
+  else if(action === 'coverage') openJobsView({ tab:'inbox', minScore:0 });
+  else if(action === 'top_matches') openJobsView({ tab:'jobs', minScore:70 });
+  else if(action === 'queue') openJobsView({ tab:'jobs', minScore:0 });
+  else if(action === 'api') loadOpsOverview(true);
+}
+
+async function loadOpsOverview(force=false){
+  if(S.role !== 'admin') return;
+  const kpis = $('ops-kpis');
+  const alerts = $('ops-alerts');
+  const pipeline = $('ops-pipeline');
+  const sources = $('ops-sources');
+  const events = $('ops-events');
+  const scan = $('ops-scan');
+  const usersEl = $('ops-users');
+
+  if(!force && S.activeTab !== 'ops') return;
+
+  kpis.innerHTML = '<div class="ops-card"><div class="kicker">Загрузка</div><div class="value">...</div><div class="sub">Обновление метрик</div></div>';
+  alerts.innerHTML = '<div class="ops-alert"><strong>Загрузка алертов</strong><p>Проверяем давление очереди, здоровье API и свежесть скана.</p></div>';
+  pipeline.innerHTML = '<div class="ops-empty">Загрузка пайплайна...</div>';
+  sources.innerHTML = '<div class="ops-empty">Загрузка источников...</div>';
+  events.innerHTML = '<div class="ops-empty">Загрузка событий...</div>';
+  scan.innerHTML = '<div class="ops-empty">Загрузка состояния скана...</div>';
+  if(usersEl) usersEl.innerHTML = '<div class="ops-empty">Загрузка пользователей...</div>';
+
+  try {
+    const d = await (await fetch(`/api/ops/overview?window_hours=${S.opsWindow}`)).json();
+    if(d.error){
+      throw new Error(d.error);
+    }
+
+    const scanPayload = d.scan.last_payload || {};
+    const aggregator = scanPayload.aggregator || {};
+    const sourceStats = aggregator.sources || [];
+
+    kpis.innerHTML = [
+      { kicker:'Сырых (посл. скан)', value:fmtNumber(aggregator.raw_count||0), sub:`уник. ${fmtNumber(aggregator.unique_count||0)} · слито ${fmtNumber(aggregator.fuzzy_removed||0)}`, delta:'до агрегатор-фильтра', action:'jobs_recent' },
+      { kicker:'В базу (посл. скан)', value:fmtNumber(aggregator.filtered_count||0), sub:`neg. ${aggregator.rejected_negative||0} · стар. ${aggregator.rejected_old||0} · loc. ${aggregator.rejected_location||0}`, delta:'прошло агрегатор', action:'jobs_recent' },
+      { kicker:'Вакансий в базе', value:fmtNumber(d.kpis.total_jobs), sub:`+${fmtNumber(d.kpis.jobs_recent)} за период`, delta:`${fmtNumber(d.kpis.active_sources)} источников активно`, action:'jobs_recent' },
+      { kicker:'Покрытие скорингом', value:`${d.kpis.coverage_pct}%`, sub:`${fmtNumber(d.kpis.scored_total)} оценено всего`, delta:`${fmtNumber(d.kpis.unscored_total)} в очереди`, action:'coverage' },
+      { kicker:'Топ-совпадения', value:fmtNumber(d.kpis.top_matches), sub:`${fmtNumber(d.kpis.top_recent)} новых топ-совпадений`, delta:d.kpis.avg_score_recent != null ? `ср. ${d.kpis.avg_score_recent}` : 'ср. —', action:'top_matches' },
+      { kicker:'Нагрузка очереди', value:`${d.kpis.pending_pct}%`, sub:'Вакансии без оценки', delta:`${fmtNumber(d.kpis.unscored_total)} вакансий`, action:'queue' },
+      { kicker:'Отсечено фильтром', value:fmtNumber(d.kpis.prefilter_rejected), sub:'pre-filter, без AI-оценки', delta:'hard reject (score=0)', action:'queue' },
+      { kicker:'Ошибки API', value:fmtNumber(d.kpis.api_401 + d.kpis.api_500), sub:`${fmtNumber(d.kpis.api_401)} авт. · ${fmtNumber(d.kpis.api_500)} сервер`, delta:'Последние проблемы', action:'api' },
+    ].map(card => `
+      <div class="ops-card clickable" onclick="handleOpsCardAction('${card.action}')">
+        <div class="kicker">${card.kicker}</div>
+        <div class="value">${card.value}</div>
+        <div class="sub">${card.sub}</div>
+        <div class="delta">${card.delta}</div>
+      </div>
+    `).join('');
+    renderOpsAlerts(d);
+
+    const PIPELINE_RU = { collected:'собрано', scored:'оценено', top:'топ', applied:'откликов', rejected:'отказов', saved:'сохранено' };
+    const pipelineMax = Math.max(...Object.values(d.pipeline), 1);
+    pipeline.innerHTML = Object.entries(d.pipeline)
+      .map(([label, value]) => renderPipelineRow(PIPELINE_RU[label] || label.replace('_', ' '), value, pipelineMax))
+      .join('');
+
+    // Sync scan button countdown with freshest next_run from server
+    if(d.scan.next_run && !d.scan.running){
+      const freshTs = new Date(d.scan.next_run).getTime();
+      if(!_nextScanAt || Math.abs(freshTs - _nextScanAt) > 60000){
+        _nextScanAt = freshTs;
+        _scanCountdown();
+      }
+    }
+
+    const scanStatus = d.scan.running ? 'running' : (d.scan.last_status || 'unknown');
+    $('ops-scan-pill').outerHTML = `<span id="ops-scan-pill" class="pill ${scanStatus === 'success' ? 'success' : scanStatus === 'error' ? 'error' : scanStatus === 'running' ? 'running' : 'warning'}">${scanStatus}</span>`;
+    scan.innerHTML = `
+      <div class="scan-grid">
+        <div class="scan-stat"><span class="label">Последний скан</span><span class="value">${fmtDateTime(d.scan.last_at)}</span><span style="font-size:11px;color:var(--muted);margin-top:2px;display:block">${fmtRelative(d.scan.last_at)}</span></div>
+        <div class="scan-stat"><span class="label">Следующий запуск</span><span class="value">${d.scan.running ? 'Идёт сейчас' : fmtDateTime(d.scan.next_run)}</span></div>
+        <div class="scan-stat"><span class="label">Длительность</span><span class="value">${scanPayload.duration_seconds != null ? `${scanPayload.duration_seconds}с` : '—'}</span></div>
+        <div class="scan-stat"><span class="label">Отфильтровано</span><span class="value">${fmtNumber(aggregator.filtered_count || 0)}</span></div>
+      </div>
+      <div class="scan-list">
+        <div><strong>${esc(d.scan.last_message || 'No scans recorded yet')}</strong></div>
+        <div class="mini-list">
+          <span>сырых ${fmtNumber(aggregator.raw_count || 0)}</span>
+          <span>уникальных ${fmtNumber(aggregator.unique_count || 0)}</span>
+          ${aggregator.fuzzy_removed > 0 ? `<span style="color:var(--blue)">⊕ слито ${fmtNumber(aggregator.fuzzy_removed)}</span>` : ''}
+          <span>негативных ${fmtNumber(aggregator.rejected_negative || 0)}</span>
+          <span>старых ${fmtNumber(aggregator.rejected_old || 0)}</span>
+          <span>по локации ${fmtNumber(aggregator.rejected_location || 0)}</span>
+          <span>запросов ${fmtNumber(scanPayload.query_count || 0)}</span>
+          <span>стран ${fmtNumber(scanPayload.country_count || 0)}</span>
+        </div>
+        ${sourceStats.length ? `<div class="mini-list">${sourceStats.map(s => {
+          const reqNote = s.api_requests != null ? ` <span style="color:var(--muted)">(${s.api_requests} req)</span>` : '';
+          const errNote = s.status === 'error' ? ' <span style="color:var(--red)">error</span>' : '';
+          return `<span>${esc(s.source)}: ${fmtNumber(s.raw_count || 0)}${reqNote}${errNote}</span>`;
+        }).join('')}</div>` : ''}
+        ${renderJooblebudget(d.jooble)}
+      </div>
+    `;
+
+    sources.innerHTML = d.sources.length
+      ? d.sources.map(s => `
+          <div class="source-item" style="cursor:pointer" onclick="openJobsView({ tab:'jobs', minScore:0, source:'${jsq(s.name)}' })">
+            <div>
+              <div class="name">${esc(s.name)}</div>
+              <div class="meta">${fmtNumber(s.recent)} свежих / ${fmtNumber(s.total)} всего</div>
+            </div>
+            <div class="source-bar"><div class="fill" style="width:${Math.max(s.fresh_share, 6)}%"></div></div>
+            <div class="meta">${s.fresh_share}%</div>
+          </div>
+        `).join('')
+      : '<div class="ops-empty">Данных по источникам пока нет.</div>';
+
+    events.innerHTML = d.events.length
+      ? d.events.map(ev => `
+          <div class="event-item">
+            <div>${eventPill(ev.status)}</div>
+            <div class="summary">
+              <strong>${esc(ev.type)}${ev.source ? ` · ${esc(ev.source)}` : ''}</strong>
+              <p>${esc(ev.message || 'Нет деталей')}</p>
+            </div>
+            <div class="time">${fmtRelative(ev.at)}</div>
+          </div>
+        `).join('')
+      : '<div class="ops-empty">Событий пока не записано.</div>';
+    // ── Users panel ──
+    loadDedupPanel();
+
+    if(usersEl && d.users) {
+      const u = d.users;
+      const summary = $('ops-users-summary');
+      if(summary) summary.textContent = `${u.total} всего · ${u.new_in_window} новых · ${u.with_profile} с профилем`;
+
+      const maxScores = Math.max(...(u.activity.map(a => a.scores_total)), 1);
+      const maxActions = Math.max(...(u.activity.map(a => a.actions_total)), 1);
+
+      usersEl.innerHTML = `
+        <div class="mini-list" style="margin-bottom:14px">
+          <span>👥 ${u.total} пользователей</span>
+          <span>✅ ${u.active} активных</span>
+          <span>📋 ${u.with_profile} с профилем</span>
+          <span>✈️ ${u.via_telegram} telegram</span>
+          <span>🔑 ${u.via_google} google</span>
+          ${u.new_in_window > 0 ? `<span style="color:var(--green)">+${u.new_in_window} новых за период</span>` : ''}
+        </div>
+        <table class="user-table">
+          <thead>
+            <tr>
+              <th>Имя</th>
+              <th>Авторизация</th>
+              <th>Роль</th>
+              <th>Оценок всего</th>
+              <th>Оценок за период</th>
+              <th>Действий всего</th>
+              <th>Действий за период</th>
+              <th>Последняя активность</th>
+              <th>Дата регистрации</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${u.activity.map(a => `
+              <tr>
+                <td><strong>${esc(a.name)}</strong></td>
+                <td><span class="pill ${a.auth.includes('telegram') ? 'running' : 'success'}" style="font-size:10px">${esc(a.auth||'—')}</span></td>
+                <td>${a.role === 'admin' ? '<span class="pill warning">admin</span>' : '<span style="color:var(--muted)">user</span>'}</td>
+                <td>
+                  <div class="u-bar-wrap">
+                    <div class="u-bar"><div class="u-fill" style="width:${Math.round((a.scores_total/maxScores)*100)}%"></div></div>
+                    <span>${fmtNumber(a.scores_total)}</span>
+                  </div>
+                </td>
+                <td style="color:${a.scores_window > 0 ? 'var(--green)' : 'var(--muted)'}">+${fmtNumber(a.scores_window)}</td>
+                <td>${fmtNumber(a.actions_total)}</td>
+                <td style="color:${a.actions_window > 0 ? 'var(--blue)' : 'var(--muted)'}">+${fmtNumber(a.actions_window)}</td>
+                <td>${a.last_active ? fmtRelative(a.last_active) : '<span style="color:var(--muted)">never</span>'}</td>
+                <td style="color:var(--muted)">${a.joined ? fmtRelative(a.joined) : '—'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+  } catch (e) {
+    kpis.innerHTML = `<div class="ops-card"><div class="kicker">Пульт недоступен</div><div class="value">!</div><div class="sub">${esc(e.message || 'Неизвестная ошибка')}</div></div>`;
+    alerts.innerHTML = '<div class="ops-alert errors"><strong>Ошибка загрузки пульта</strong><p>Дашборд не смог загрузить данные. Проверьте авторизацию API и таблицу событий.</p></div>';
+    pipeline.innerHTML = '<div class="ops-empty">Не удалось загрузить метрики пайплайна.</div>';
+    sources.innerHTML = '<div class="ops-empty">Не удалось загрузить метрики источников.</div>';
+    events.innerHTML = '<div class="ops-empty">Не удалось загрузить события.</div>';
+    scan.innerHTML = '<div class="ops-empty">Не удалось загрузить состояние скана.</div>';
+    if(usersEl) usersEl.innerHTML = '<div class="ops-empty">Не удалось загрузить данные пользователей.</div>';
+  }
+}
+
+async function loadDedupPanel() {
+  const wrap = $('ops-dedup-wrap');
+  const el = $('ops-dedup');
+  const summary = $('ops-dedup-summary');
+  if (!wrap || !el) return;
+  el.innerHTML = '<div class="ops-empty">Загрузка...</div>';
+  try {
+    const jobs = await (await fetch('/api/ops/dedup?limit=200')).json();
+    if (!jobs.length) {
+      el.innerHTML = '<div class="ops-empty">Объединённых вакансий не найдено.</div>';
+      return;
+    }
+    if (summary) summary.textContent = `${jobs.length} объединённых`;
+    el.innerHTML = `
+      <table class="dedup-table">
+        <thead><tr>
+          <th>Вакансия</th>
+          <th>Компания</th>
+          <th>Локация</th>
+          <th>Источники</th>
+        </tr></thead>
+        <tbody>
+          ${jobs.map(j => `
+            <tr>
+              <td><a href="${esc(j.url || '#')}" target="_blank" rel="noopener">${esc(j.title)}</a></td>
+              <td>${esc(j.company)}</td>
+              <td>${esc(j.location)}</td>
+              <td><div class="dedup-sources">${(j.sources || []).map(s => `<span class="dedup-src">${esc(s)}</span>`).join('')}</div></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch(e) {
+    el.innerHTML = `<div class="ops-empty">Ошибка загрузки: ${esc(e.message)}</div>`;
+  }
+}
+
+function toggleLogin() {
+    if(!S.authenticated) {
+        window.location.href = '/auth/google/login';
+    } else {
+        if(confirm('Log out?')) window.location.href = '/auth/logout';
+    }
+}
+
+/* Init */
+async function initApp() {
+  try {
+    const me = await (await fetch('/api/me',{cache:'no-store'})).json();
+    S.role = me.role || 'guest';
+    S.authenticated = !!me.authenticated;
+    const rb = $('role-badge');
+    const avatar = $('user-avatar');
+    const avatarIcon = $('user-avatar-icon');
+    const scanBtn = $('scan-btn');
+    const opsTab = $('tab-ops');
+
+    if (!S.authenticated) {
+      // Guest
+      if (rb) rb.textContent = T('btn.login');
+      const userBtn = $('user-btn');
+      if (userBtn) { userBtn.style.borderColor = '#4285f4'; userBtn.style.color = '#4285f4'; }
+      if (scanBtn) scanBtn.style.display = 'none';
+      if (opsTab) opsTab.style.display = 'none';
+      $('f-score').value = '0';
+    } else {
+      // Logged in
+      document.querySelectorAll('.auth-only').forEach(el => el.style.display = '');
+      $('f-score').value = '70';
+
+      if (me.avatar) {
+        avatar.src = me.avatar; avatar.style.display = 'inline-block';
+        if (avatarIcon) avatarIcon.style.display = 'none';
+      }
+
+      if (S.role === 'admin') {
+        if (rb) rb.textContent = 'Admin';
+        const userBtn = $('user-btn');
+        if (userBtn) { userBtn.style.borderColor = 'var(--green)'; userBtn.style.color = 'var(--green)'; }
+        if (scanBtn) { scanBtn.style.display = 'inline-flex'; }
+        if (opsTab) opsTab.style.display = '';
+      } else {
+        // Show first name only
+        if (rb) rb.textContent = (me.name || '').split(' ')[0] || T('btn.guest');
+        if (scanBtn) scanBtn.style.display = 'none';
+        if (opsTab) opsTab.style.display = 'none';
+      }
+    }
+  } catch(e) { console.error('initApp error:', e); }
+
+  // Restore last active tab (only for authenticated users)
+  if (S.authenticated) {
+    try {
+      const saved = localStorage.getItem('pipka_tab');
+      if (saved && saved !== 'jobs') { switchTab(saved, false); }
+    } catch(e) {}
+  }
+
+  // Sync theme toggle icon after DOM ready
+  const isDarkNow = document.documentElement.getAttribute('data-theme') === 'dark';
+  if ($('theme-toggle')) $('theme-toggle').textContent = isDarkNow ? '☀️' : '🌙';
+
+  applyLang();
+  loadCountries(); loadStats(); loadJobs(); loadScanStatus();
+  setInterval(()=>{
+    loadStats();
+    loadScanStatus();
+    if(S.activeTab === 'ops' && S.role === 'admin') loadOpsOverview(true);
+    else if(S.activeTab !== 'settings') loadJobs();
+  },300000);
+}
+initApp();
+</script>
 </body>
 </html>
