@@ -6,9 +6,15 @@ from app.models.user import UserProfile
 # Director+ level only — no plain "Manager"
 DIRECTOR_KEYWORDS = [
     "director", "head of", "vp ", "vice president", "chief",
-    "coo", "cfo", "cpo", "cso",  # C-suite
+    "coo", "cfo", "cpo", "cso", "cro",  # C-suite
     "senior director", "global director",
     "principal", "partner",
+    # Interim / Crisis / Turnaround — senior by nature
+    "interim manager", "interim director", "interim head",
+    "crisis manager", "crisis director", "krisenmanager",
+    "turnaround manager", "turnaround director",
+    "restructuring",
+    "growth director",
     # German equivalents
     "direktor", "leiter", "abteilungsleiter", "bereichsleiter",
     "geschäftsführer", "geschaeftsfuehrer",
@@ -51,6 +57,11 @@ DOMAIN_KEYWORDS = [
     "demand planning", "inventory", "distribution", "fulfillment",
     "supplier", "vendor management", "category management",
     "strategic sourcing", "indirect procurement", "direct procurement",
+    # Crisis / Turnaround / Transformation — closely related to operations
+    "crisis management", "turnaround", "transformation",
+    "restructuring", "interim management", "business continuity",
+    "operational excellence", "continuous improvement",
+    "growth",  # growth roles often overlap with operations leadership
 ]
 
 ENGLISH_FRIENDLY_SIGNALS = [
