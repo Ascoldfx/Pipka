@@ -40,7 +40,7 @@ class NoCacheAPIMiddleware(BaseHTTPMiddleware):
                 )
             raise
 
-        if path.startswith("/api/") or path.startswith("/auth/"):
+        if path == "/" or path.startswith("/api/") or path.startswith("/auth/"):
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
             response.headers["Pragma"] = "no-cache"
             # Log to access log for 4xx/5xx and all mutating methods (debug aid)
