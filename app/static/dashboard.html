@@ -1762,33 +1762,43 @@ async function loadOpsOverview(force=false){
           <thead>
             <tr>
               <th>Имя</th>
+              <th>Email</th>
               <th>Авторизация</th>
               <th>Роль</th>
-              <th>Оценок всего</th>
-              <th>Оценок за период</th>
-              <th>Действий всего</th>
-              <th>Действий за период</th>
-              <th>Последняя активность</th>
-              <th>Дата регистрации</th>
+              <th>Оценок (период)</th>
+              <th>Действий (период)</th>
+              <th>Активность</th>
+              <th>Регистрация</th>
+              <th>Действия</th>
             </tr>
           </thead>
           <tbody>
             ${u.activity.map(a => `
               <tr>
                 <td><strong>${esc(a.name)}</strong></td>
+                <td><span style="font-size:11px;color:var(--muted)">${esc(a.email)}</span></td>
                 <td><span class="pill ${a.auth.includes('telegram') ? 'running' : 'success'}" style="font-size:10px">${esc(a.auth||'—')}</span></td>
                 <td>${a.role === 'admin' ? '<span class="pill warning">admin</span>' : '<span style="color:var(--muted)">user</span>'}</td>
                 <td>
                   <div class="u-bar-wrap">
                     <div class="u-bar"><div class="u-fill" style="width:${Math.round((a.scores_total/maxScores)*100)}%"></div></div>
-                    <span>${fmtNumber(a.scores_total)}</span>
+                    <span title="Всего: ${a.scores_total}">${fmtNumber(a.scores_window)}</span>
                   </div>
                 </td>
-                <td style="color:${a.scores_window > 0 ? 'var(--green)' : 'var(--muted)'}">+${fmtNumber(a.scores_window)}</td>
-                <td>${fmtNumber(a.actions_total)}</td>
-                <td style="color:${a.actions_window > 0 ? 'var(--blue)' : 'var(--muted)'}">+${fmtNumber(a.actions_window)}</td>
+                <td>
+                  <div class="u-bar-wrap">
+                    <div class="u-bar"><div class="u-fill" style="width:${Math.round((a.actions_total/maxActions)*100)}%" style="background:var(--blue)"></div></div>
+                    <span title="Всего: ${a.actions_total}">${fmtNumber(a.actions_window)}</span>
+                  </div>
+                </td>
                 <td>${a.last_active ? fmtRelative(a.last_active) : '<span style="color:var(--muted)">never</span>'}</td>
                 <td style="color:var(--muted)">${a.joined ? fmtRelative(a.joined) : '—'}</td>
+                <td>
+                  <div class="actions-wrap">
+                    <button onclick="viewAdminUserProfile(${a.id})" title="View Profile">🔍</button>
+                    ${a.role !== 'admin' ? `<button onclick="deleteUser(${a.id}, '${jsq(a.name)}')" title="Delete User" style="color:var(--red)">🗑️</button>` : ''}
+                  </div>
+                </td>
               </tr>
             `).join('')}
           </tbody>
@@ -1842,6 +1852,63 @@ async function loadDedupPanel() {
     `;
   } catch(e) {
     el.innerHTML = `<div class="ops-empty">Ошибка загрузки: ${esc(e.message)}</div>`;
+  }
+}
+
+async function viewAdminUserProfile(userId) {
+  openModal('Loading profile...', '🔍 Fetching data');
+  try {
+    const d = await (await fetch(`/api/admin/user/${userId}/profile`)).json();
+    if(d.detail) throw new Error(d.detail);
+    
+    const p = d.profile || {};
+    const resumeLines = (p.resume_text || '').split('\n').slice(0, 15).join('\n') + (p.resume_text && p.resume_text.length > 500 ? '\n...' : '');
+
+    const body = `
+      <div style="font-size:13px">
+        <div style="margin-bottom:15px; padding:12px; background:var(--hover); border-radius:10px">
+          <strong>${esc(d.name)}</strong> (${esc(d.email)})<br>
+          <span class="pill">${d.role}</span> · <span class="pill ${d.is_active?'success':'error'}">${d.is_active?'Active':'Inactive'}</span>
+        </div>
+        
+        <h4 style="margin:12px 0 6px; font-size:11px; text-transform:uppercase; color:var(--muted)">Resume Preview</h4>
+        <pre style="background:var(--badge); padding:10px; border-radius:8px; font-size:11px; max-height:200px; overflow:auto; margin-bottom:12px">${esc(resumeLines || 'No resume text')}</pre>
+        
+        <h4 style="margin:12px 0 6px; font-size:11px; text-transform:uppercase; color:var(--muted)">Settings</h4>
+        <div class="mini-list">
+          <span>🎯 Titles: ${esc((p.target_titles||[]).join(', ') || '—')}</span>
+          <span>📍 Countries: ${esc((p.preferred_countries||[]).join(', ').toUpperCase() || '—')}</span>
+          <span>💰 Salary: ${p.min_salary ? fmtNumber(p.min_salary) + ' EUR' : '—'}</span>
+          <span>🏢 Mode: ${esc(p.work_mode || 'any')}</span>
+          <span>🗣️ Lang: ${esc(Object.keys(p.languages||{}).join(', ') || '—')}</span>
+        </div>
+        
+        <div style="margin-top:15px; border-top:1px solid var(--border); padding-top:12px">
+          <button class="btn btn-outline" onclick="closeModal()">Close</button>
+        </div>
+      </div>
+    `;
+    openModal(body, `User Profile: ${esc(d.name)}`);
+    // Re-trigger esc conversion for the body since we used template literals
+    $('modal-body').innerHTML = body;
+  } catch(e) {
+    openModal(`<p style="color:var(--red)">Error: ${esc(e.message)}</p>`, 'Error');
+  }
+}
+
+async function deleteUser(userId, userName) {
+  if(!confirm(`Are you sure you want to delete user "${userName}"? This will disable their account.`)) return;
+  try {
+    const r = await fetch(`/api/admin/user/${userId}`, { method: 'DELETE' });
+    const d = await r.json();
+    if(d.ok) {
+      alert('User deleted.');
+      loadOpsOverview(true);
+    } else {
+      alert('Error: ' + (d.detail || 'Unknown error'));
+    }
+  } catch(e) {
+    alert('Failed to delete: ' + e.message);
   }
 }
 

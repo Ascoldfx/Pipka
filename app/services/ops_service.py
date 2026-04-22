@@ -284,6 +284,7 @@ async def build_ops_overview(
         user_activity.append({
             "id": u.id,
             "name": u.name or "—",
+            "email": u.email or "—",
             "role": u.role,
             "auth": ("telegram" if u.telegram_id else "") + ("+" if u.telegram_id and u.google_sub else "") + ("google" if u.google_sub else ""),
             "tier": u.subscription_tier,
