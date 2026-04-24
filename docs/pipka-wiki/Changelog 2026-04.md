@@ -272,4 +272,30 @@ B2_ENDPOINT=https://s3.us-west-004.backblazeb2.com   # при необходим
 
 ---
 
+## 24 апреля 2026 (вечер)
+
+### Переход на `gemini-3.1-flash-lite-preview`
+
+- `gemini-2.5-flash-lite` выбрала дневной лимит за ~5 запросов (free tier 20 RPD на этой модели).
+- На free tier `ascoldfx@gmail` живой остаётся только `gemini-3.1-flash-lite-preview` (**15 RPM / 500 RPD**).
+- Обновлён `app/config.py`: `gemini_model = "gemini-3.1-flash-lite-preview"` (коммит `ae2aa42`).
+- **Claude временно отключён — нет баланса.** Все AI-операции идут через Gemini.
+
+### Фаза 1 рефакторинга скоринга: retry + pacer + semaphore
+
+**Файл:** `app/scoring/gemini_matcher.py`
+
+- Добавлен `tenacity>=9.0` в `pyproject.toml`.
+- `_generate_with_retry()` — оборачивает `generate_content_async`:
+  - `AsyncRetrying` на 5 попыток, exp backoff `wait_exponential(multiplier=5, min=5, max=80)` + ±2с jitter.
+  - `retry_if_exception(_is_retryable)` ловит только `ResourceExhausted` (429), `ServiceUnavailable` (503), `DeadlineExceeded`, `InternalServerError`, `Aborted`. Прочие ошибки пробрасываются без retry.
+- **Семафор `asyncio.Semaphore(1)`** — единственный in-flight запрос к Gemini на процесс. Без него несколько пользователей сожгут RPM мгновенно.
+- **Глобальный pacer** (`asyncio.Lock` + `last_call_monotonic`) — минимум **4.5с** между любыми вызовами Gemini (15 RPM с запасом).
+- При 429 пишется `OpsEvent(event_type="gemini_429", status="retry")` — счётчик виден в Ops Cockpit.
+- При исчерпании ретраев пишется `OpsEvent(event_type="gemini_exhausted", status="error")`.
+
+**Эффект:** один прогон backfill на 399+ вакансий больше не теряет батчи из-за 429 — каждый запрос получает до 5 попыток с backoff до 80с.
+
+---
+
 → [[Источники вакансий]] → [[Скоринг]] → [[Сервисы]] → [[API]]

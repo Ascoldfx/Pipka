@@ -19,20 +19,40 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import random
+import time
 from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from tenacity import (
+    AsyncRetrying,
+    RetryError,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from app.config import settings
 from app.models.job import Job, JobScore
 from app.models.user import User
 from app.scoring.matcher import SCORING_PROMPT, build_profile_text
+from app.services.ops_service import record_ops_event
 
 logger = logging.getLogger(__name__)
 
 _gemini_model = None  # lazy singleton
+
+# Serialise all Gemini calls across the process — free tier is 15 RPM on a single
+# project key, so any concurrency makes the 4s pacer useless.
+_gemini_semaphore = asyncio.Semaphore(1)
+
+# Global pacer — enforces min interval between any two Gemini requests.
+# 15 RPM = 1 req / 4s; keep 4.5s for safety margin.
+_pacer_lock = asyncio.Lock()
+_last_call_monotonic: float = 0.0
+_MIN_INTERVAL_SECONDS = 4.5
 
 
 def _get_model():
@@ -44,6 +64,31 @@ def _get_model():
         _gemini_model = genai.GenerativeModel(settings.gemini_model)
         logger.info("Gemini model initialised: %s", settings.gemini_model)
     return _gemini_model
+
+
+async def _pace() -> None:
+    """Sleep so at least _MIN_INTERVAL_SECONDS elapses between Gemini requests."""
+    global _last_call_monotonic
+    async with _pacer_lock:
+        now = time.monotonic()
+        elapsed = now - _last_call_monotonic
+        if elapsed < _MIN_INTERVAL_SECONDS:
+            await asyncio.sleep(_MIN_INTERVAL_SECONDS - elapsed)
+        _last_call_monotonic = time.monotonic()
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    """429 / 503 / timeouts from google-generativeai all surface as subclasses of
+    google.api_core.exceptions.GoogleAPICallError. We match by class name to avoid
+    hard-importing google.api_core at module scope."""
+    name = type(exc).__name__
+    return name in {
+        "ResourceExhausted",   # 429
+        "ServiceUnavailable",  # 503
+        "DeadlineExceeded",    # timeout
+        "InternalServerError", # 500
+        "Aborted",             # 409 retryable
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +114,43 @@ def _build_jobs_text(jobs: list[Job]) -> str:
     return jobs_text
 
 
+async def _generate_with_retry(prompt: str, batch_size: int):
+    """Call Gemini with pacing, single-flight serialisation, and tenacity retry
+    on 429/503/timeouts. Exp backoff 5→10→20→40→80s + ±25% jitter, 5 attempts."""
+    model = _get_model()
+    attempt_counter = {"n": 0}
+
+    async for attempt in AsyncRetrying(
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=5, min=5, max=80),
+        retry=retry_if_exception(_is_retryable),
+        reraise=True,
+    ):
+        with attempt:
+            attempt_counter["n"] += 1
+            async with _gemini_semaphore:
+                await _pace()
+                try:
+                    return await model.generate_content_async(prompt)
+                except Exception as exc:
+                    if _is_retryable(exc):
+                        # Additive jitter so parallel users don't collide
+                        jitter = random.uniform(0, 2.0)
+                        await asyncio.sleep(jitter)
+                        logger.warning(
+                            "Gemini transient error (attempt %d, batch=%d): %s",
+                            attempt_counter["n"], batch_size, type(exc).__name__,
+                        )
+                        if type(exc).__name__ == "ResourceExhausted":
+                            await record_ops_event(
+                                "gemini_429",
+                                "retry",
+                                source="gemini",
+                                message=f"attempt={attempt_counter['n']} batch={batch_size}",
+                            )
+                    raise
+
+
 async def _call_gemini_raw(
     jobs: list[Job],
     profile_text: str,
@@ -79,8 +161,7 @@ async def _call_gemini_raw(
         jobs_text=_build_jobs_text(jobs),
     )
     try:
-        model = _get_model()
-        response = await model.generate_content_async(prompt)
+        response = await _generate_with_retry(prompt, len(jobs))
         text = response.text.strip()
 
         # Strip markdown fences
@@ -98,6 +179,17 @@ async def _call_gemini_raw(
                 text = text[: last_brace + 1] + "]"
 
         results = json.loads(text)
+    except RetryError as exc:
+        logger.error(
+            "Gemini retries exhausted (batch_size=%d): %s", len(jobs), exc.last_attempt.exception()
+        )
+        await record_ops_event(
+            "gemini_exhausted",
+            "error",
+            source="gemini",
+            message=f"batch={len(jobs)} final={type(exc.last_attempt.exception()).__name__}",
+        )
+        return []
     except Exception as exc:
         logger.error("Gemini API call failed (batch_size=%d): %s", len(jobs), exc)
         return []
