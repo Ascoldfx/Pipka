@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import selectinload
 
 from app.bot.formatters import format_job_card
@@ -100,6 +100,14 @@ def start_scheduler(bot_app):
         "interval",
         hours=2,
         id="backfill_score",
+        replace_existing=True,
+    )
+    # NVIDIA idle rescorer: every 30 min — runs only when Gemini queue drained
+    scheduler.add_job(
+        _nvidia_idle_rescore,
+        "interval",
+        minutes=30,
+        id="nvidia_idle_rescore",
         replace_existing=True,
     )
     # Watchlist scan: every 6 hours — search for jobs at target companies per user
@@ -430,6 +438,68 @@ async def _backfill_score():
                 logger.error("Backfill scorer failed for user %s: %s", user.telegram_id, e)
 
     logger.info("Backfill scorer completed")
+
+
+async def _nvidia_idle_rescore():
+    """Rescore DE jobs via NVIDIA Build (Gemma) when the Gemini queue is drained.
+
+    Runs every 30 min but is a no-op unless:
+      • `NVIDIA_API_KEY` is set in .env
+      • the user has no unscored jobs in the last 45 days for country=DE
+
+    Two priorities per user:
+      (a) recheck pre-filter rejects (score=0, ai_analysis IS NULL)
+      (b) refresh stale successful scores (score > 0, scored_at older than N days)
+    """
+    if not settings.nvidia_api_key:
+        return
+
+    from app.scoring.nvidia_matcher import idle_rescore_for_user  # noqa: PLC0415
+
+    country = settings.nvidia_country.lower()
+    cutoff = datetime.now() - timedelta(days=settings.job_max_age_days)
+
+    async with async_session() as session:
+        users_result = await session.execute(
+            select(User).options(selectinload(User.profile)).where(User.is_active == True)
+        )
+        users = users_result.scalars().all()
+
+        for user in users:
+            if not user.profile:
+                continue
+
+            # Guard: only fire when the Gemini backfill queue is fully drained for DE.
+            unscored_count_result = await session.execute(
+                select(func.count(Job.id)).where(
+                    Job.country == country,
+                    Job.scraped_at >= cutoff,
+                    ~Job.id.in_(
+                        select(JobScore.job_id).where(JobScore.user_id == user.id)
+                    ),
+                )
+            )
+            unscored = unscored_count_result.scalar() or 0
+            if unscored > 0:
+                logger.debug(
+                    "NVIDIA rescore skipped for user %s: %d unscored in queue",
+                    user.telegram_id, unscored,
+                )
+                continue
+
+            try:
+                checked, upgraded, refreshed = await idle_rescore_for_user(user, session)
+                if checked or refreshed:
+                    await record_ops_event(
+                        "nvidia_rescore", "success", source="nvidia",
+                        message=f"user={user.telegram_id} checked={checked} upgraded={upgraded} refreshed={refreshed}",
+                    )
+            except Exception as exc:
+                logger.error("NVIDIA idle rescore failed for user %s: %s", user.telegram_id, exc)
+                await record_ops_event(
+                    "nvidia_rescore", "error", source="nvidia",
+                    message=f"user={user.telegram_id} {type(exc).__name__}: {exc}",
+                )
 
 
 async def _watchlist_scan(bot_app):

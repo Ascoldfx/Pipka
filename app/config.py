@@ -18,6 +18,16 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-3.1-flash-lite-preview"  # 15 RPM / 500 RPD free tier — единственная живая модель на ascoldfx@gmail free tier (2.5/2.0/3-flash все выбраны)
     gemini_batch_delay: float = 4.0  # seconds between batches (30 RPM → 1 req/2s, use 4s to be safe)
 
+    # NVIDIA Build (optional — idle rescorer, runs only when Gemini queue drained)
+    # Get key at https://build.nvidia.com → set NVIDIA_API_KEY in .env to enable.
+    nvidia_api_key: str = ""
+    nvidia_model: str = "google/gemma-4-31b-it"
+    nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
+    nvidia_batch_delay: float = 2.0      # seconds between batches (conservative)
+    nvidia_max_per_run: int = 300        # hard cap per scheduler tick
+    nvidia_country: str = "de"           # ISO country filter for idle rescore
+    nvidia_rescore_stale_days: int = 7   # refresh successful scores older than N days
+
     # Database
     database_url: str = "sqlite+aiosqlite:///./pipka.db"
 

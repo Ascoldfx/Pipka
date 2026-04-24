@@ -316,4 +316,25 @@ B2_ENDPOINT=https://s3.us-west-004.backblazeb2.com   # при необходим
 
 ---
 
+## 24 апреля 2026 (ночь)
+
+### NVIDIA Build как idle-rescorer для Германии
+
+Добавлен третий AI-backend — NVIDIA Build (модель `google/gemma-4-31b-it` через OpenAI-совместимый endpoint `https://integrate.api.nvidia.com/v1/chat/completions`). Не заменяет Gemini, работает только в простое.
+
+**Новые файлы / правки:**
+
+- `app/scoring/nvidia_matcher.py` — `idle_rescore_for_user(user, session)`. Полный цикл retry/pacer/semaphore по образу `gemini_matcher.py`: `Semaphore(1)`, pacer `nvidia_batch_delay` (default 2с), `tenacity` на 429/5xx/таймауты. На 429 → `OpsEvent("nvidia_429")`, на exhausted → `OpsEvent("nvidia_exhausted")`.
+- `app/services/scheduler_service.py` — `_nvidia_idle_rescore()`, запускается каждые **30 минут**. Гард на вход: для каждого пользователя считает кол-во вакансий DE за 45 дней без `JobScore`; если > 0 → skip (Gemini ещё не дренировал очередь).
+- `app/config.py` — новые env-настройки: `nvidia_api_key`, `nvidia_model`, `nvidia_base_url`, `nvidia_batch_delay`, `nvidia_max_per_run` (default 300), `nvidia_country="de"`, `nvidia_rescore_stale_days=7`.
+
+**Две фазы в `idle_rescore_for_user`:**
+
+1. **Priority (a):** pre-filter rejects (`score=0 AND ai_analysis IS NULL`) с `country=de, scraped_at ≥ now-45d`. Если Gemma поднимает score > 0 — вакансия появляется в inbox.
+2. **Priority (b):** stale successful scores (`score > 0 AND scored_at < now - 7d`) — освежение старых оценок тем же промптом.
+
+**Активация:** `NVIDIA_API_KEY=nvapi-...` в `/opt/pipka/.env` → рестарт. Пусто → job работает, но сразу выходит.
+
+---
+
 → [[Источники вакансий]] → [[Скоринг]] → [[Сервисы]] → [[API]]
