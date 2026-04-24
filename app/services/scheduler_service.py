@@ -396,7 +396,7 @@ async def _backfill_score():
 
                 # Tier 1 first: director / head of / VP
                 if need_ai_t1:
-                    to_score = need_ai_t1[:500]
+                    to_score = need_ai_t1[:1000]
                     logger.info(
                         "Backfill tier1 [%s]: AI-scoring %d director-level jobs for user %s",
                         backend, len(to_score), user.telegram_id,
@@ -406,7 +406,7 @@ async def _backfill_score():
 
                 # Tier 2: manager-level, only when tier1 is fully cleared
                 if need_ai_t2:
-                    to_score = need_ai_t2[:500]
+                    to_score = need_ai_t2[:1000]
                     logger.info(
                         "Backfill tier2 [%s]: AI-scoring %d manager-level jobs for user %s",
                         backend, len(to_score), user.telegram_id,

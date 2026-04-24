@@ -151,4 +151,93 @@ B2_ENDPOINT=https://s3.us-west-004.backblazeb2.com   # при необходим
 
 ---
 
+## 20 апреля 2026
+
+### Scan funnel + pre-filter rejected KPI (ops_service.py, dashboard.html)
+
+- В `/api/ops/overview` добавлено поле `kpis.prefilter_rejected` — количество `JobScore(score=0, ai_analysis IS NULL)` по пользователю.
+- В Ops-дашборде отрисован funnel `Собрано → После pre-filter → Оценено AI → score ≥ 70`.
+- Fix: UTC-таймстемпы в `ops_service` + локально-независимый формат времени в UI.
+
+### Exclusions chip UI (dashboard.html)
+
+- Чипы-исключения (`excluded_keywords`) в Settings tab — клик по X удаляет.
+- Search counter показывает количество активных фильтров.
+
+---
+
+## 22 апреля 2026
+
+### Публичная инфографика (`/infographic`, `GET /api/public/stats`)
+
+- Отдельный HTML-дашборд `infographic.html` — воронка с нарративом «1 пользователь», SMM-friendly.
+- Публичный эндпоинт `/api/public/stats`: `{total_jobs_processed, ai_analyses_performed, jobs_last_24h, active_sources, system_status}` — без авторизации.
+- Кнопка «SMM Infographic» в Ops cockpit открывает дашборд.
+- `app/main.py`: отключен кэш для корневого HTML — чтобы dashboard всегда был свежим.
+- CSS: height-limit и scrollbar для Ops events list.
+
+### Admin-функции в Ops cockpit (app/api/dashboard.py, ops_service.py)
+
+**Новые эндпоинты (admin-only):**
+- `GET  /api/admin/user/{user_id}/profile` — возвращает профиль пользователя (resume_text, target_titles, languages, preferences) + агрегаты по его JobScore.
+- `DELETE /api/admin/user/{user_id}` — удаление пользователя (каскадно: profile, scores, applications).
+
+**UI в Ops → Users:**
+- Кнопка 👁 View — открывает модалку с профилем через существующий `jobModal` (а не несуществующий `openModal()`).
+- Кнопка 🗑 Delete — с confirm-диалогом, после удаления reload страницы.
+- Плюс: dynamic plural для label «Active User(s)».
+
+### Pre-filter: расширение для crisis / turnaround / CRO / interim / growth (rules.py)
+
+**`DIRECTOR_KEYWORDS` — добавлены:**
+- `cro` (Chief Restructuring / Revenue Officer)
+- `interim manager`, `interim director`, `interim head`
+- `crisis manager`, `crisis director`, `krisenmanager` (DE)
+- `turnaround manager`, `turnaround director`
+- `restructuring`
+- `growth director`
+
+**`DOMAIN_KEYWORDS` — добавлены:**
+- `crisis management`, `turnaround`, `transformation`
+- `restructuring`, `interim management`, `business continuity`
+- `operational excellence`, `continuous improvement`
+- `growth`
+
+**Эффект:** вакансии типа «Interim Head of Operations», «Turnaround Director», «CRO» больше не отсекаются pre-filter'ом, идут на AI-скоринг.
+
+### Temporary switch всех AI-операций на Gemini Flash (matcher.py, scheduler_service.py)
+
+Коммит `623fdd6`: и `_score_and_notify` (реальное время), и `analyze_single_job` временно переведены на Gemini Flash — чтобы снизить Claude spend.
+
+---
+
+## 23 апреля 2026
+
+### Revert: real-time скоринг обратно на Claude (scheduler_service.py)
+
+**Причина:** Gemini Flash free tier (30 RPM / 1500 RPD) словил 429 Rate Limit при реально-временном скоринге — новые вакансии не оценивались, топ-push в Telegram пропадал.
+
+**Что осталось на Gemini:**
+- `_backfill_score` (каждые 2ч) — Gemini Flash остаётся backend'ом, если `GEMINI_API_KEY` задан. Здесь 4-секундная задержка между батчами держит нас в лимите.
+- `analyze_single_job` (кнопка «AI-анализ» в боте) — Gemini Flash, если ключ задан.
+- `recheck_zero_scores` — Gemini Flash, проверка pre-filter rejects.
+
+**Что вернулось на Claude:**
+- `_score_and_notify` — реальное время, сразу после скана, до 80 новых вакансий на пользователя.
+
+Актуальная таблица backend'ов по типам операций — в [[Скоринг]].
+
+---
+
+## 24 апреля 2026
+
+### Backfill: лимит 500 → 1000 за запуск (scheduler_service.py)
+
+- `_backfill_score`: Tier 1 и Tier 2 cap подняты с **500** до **1000** за запуск.
+- Интервал **2 часа** не меняем.
+- Причина: накопилась остаточная очередь (≈5% необработанных) из-за роста числа источников (9). Gemini Flash free tier (1500 RPD, 30 RPM) выдерживает: 1000 / 8 = 125 батчей × 4с задержки ≈ 8 мин на прогон, ~15 RPM — с запасом.
+- Обновлено в [[Сервисы]] и [[Скоринг]].
+
+---
+
 → [[Источники вакансий]] → [[Скоринг]] → [[Сервисы]] → [[API]]

@@ -44,6 +44,8 @@ Cookie `pipka_session` (signed, 30 дней, HTTPS-only, SameSite=lax).
 | GET | `/api/scan/status` | Состояние планировщика (`{next_run, running}`) |
 | GET | `/api/ops/overview` | Операционная сводка системы (только admin). Query: `window_hours` (6–168, default 24) |
 | GET | `/api/ops/dedup` | Список вакансий объединённых fuzzy-дедупом (`merged_sources` > 1). Query: `limit` (10–500, default 200). Только admin. |
+| GET | `/api/admin/user/{user_id}/profile` | Профиль пользователя + агрегаты по JobScore (только admin) |
+| DELETE | `/api/admin/user/{user_id}` | Удаление пользователя каскадно (profile, scores, applications). Только admin |
 
 ### Профиль
 
