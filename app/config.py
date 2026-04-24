@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     # Google Gemini (optional — free tier backfill scorer)
     # Set GEMINI_API_KEY in .env to enable; leave empty to use Claude for backfill too
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash-lite"  # 30 RPM / 1500 RPD free tier
+    gemini_model: str = "gemini-1.5-flash"  # 15 RPM / 1500 RPD free tier
     gemini_batch_delay: float = 4.0  # seconds between batches (30 RPM → 1 req/2s, use 4s to be safe)
 
     # Database
