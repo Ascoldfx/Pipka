@@ -540,7 +540,6 @@ async def admin_get_user_profile(request: Request, user_id: int):
                 "min_salary": p.min_salary if p else None,
                 "languages": p.languages if p else {},
                 "experience_years": p.experience_years if p else None,
-                "industries": p.industries if p else [],
                 "work_mode": p.work_mode if p else "any",
                 "preferred_countries": p.preferred_countries if p else [],
                 "excluded_keywords": p.excluded_keywords if p else [],
@@ -583,7 +582,6 @@ async def get_profile(request: Request):
             "max_commute_km": p.max_commute_km,
             "languages": p.languages or {},
             "experience_years": p.experience_years,
-            "industries": p.industries or [],
             "work_mode": p.work_mode or "any",
             "preferred_countries": p.preferred_countries or [],
             "excluded_keywords": p.excluded_keywords or [],
@@ -603,7 +601,6 @@ async def update_profile(
     min_salary: int = Form(None),
     languages: str = Form(None),
     experience_years: int = Form(None),
-    industries: str = Form(None),
     work_mode: str = Form(None),
     preferred_countries: str = Form(None),
     excluded_keywords: str = Form(None),
@@ -648,8 +645,6 @@ async def update_profile(
                     p.languages = langs
             if experience_years is not None:
                 p.experience_years = experience_years
-            if industries is not None:
-                p.industries = [i.strip() for i in industries.split(",") if i.strip()]
             if work_mode is not None:
                 p.work_mode = work_mode
             if preferred_countries is not None:

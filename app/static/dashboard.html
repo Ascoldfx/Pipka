@@ -335,12 +335,6 @@
   .exp-pill:hover { border-color:var(--muted); color:var(--fg); }
   .exp-pill.active { border-color:var(--fg); background:var(--fg); color:var(--bg); font-weight:600; }
 
-  /* ── Industry pills ── */
-  .ind-grid { display:flex; flex-wrap:wrap; gap:7px; margin-top:6px; }
-  .ind-pill { padding:6px 14px; border:1.5px solid var(--border); border-radius:999px; background:var(--bg); color:var(--muted); cursor:pointer; font-size:12px; font-weight:500; transition:all .18s; user-select:none; }
-  .ind-pill:hover { border-color:var(--muted); color:var(--fg); }
-  .ind-pill.active { border-color:var(--fg); background:var(--fg); color:var(--bg); font-weight:600; }
-
   /* ── Settings 2-col grid ── */
   .settings-2col { display:grid; grid-template-columns:1fr 1fr; gap:12px 28px; }
   .settings-2col .span2 { grid-column:1/-1; }
@@ -433,7 +427,7 @@ const TRANSLATIONS = {
     'settings.prefs':'Preferences','settings.salary':'Min salary (EUR/year)','settings.experience':'Experience (years)',
     'settings.languages':'Languages','settings.workMode':'Work mode',
     'settings.workAny':'Any','settings.workRemote':'Remote','settings.workHybrid':'Hybrid','settings.workOnsite':'On-site',
-    'settings.countries':'Active Target Countries','settings.industries':'Industries',
+    'settings.countries':'Active Target Countries',
     'msg.loading':'Loading...','msg.noJobs':'No jobs found.','msg.loginRequired':'Login required',
     'btn.guest':'Guest','btn.login':'Sign in with Google',
     'lang.label':'Language',
@@ -462,7 +456,7 @@ const TRANSLATIONS = {
     'settings.prefs':'Предпочтения','settings.salary':'Мин. зарплата (EUR/год)','settings.experience':'Опыт работы (лет)',
     'settings.languages':'Языки','settings.workMode':'Режим работы',
     'settings.workAny':'Любой','settings.workRemote':'Удалённо','settings.workHybrid':'Гибрид','settings.workOnsite':'В офисе',
-    'settings.countries':'Целевые страны поиска','settings.industries':'Отрасли',
+    'settings.countries':'Целевые страны поиска',
     'msg.loading':'Загрузка...','msg.noJobs':'Вакансии не найдены.','msg.loginRequired':'Требуется вход',
     'btn.guest':'Гость','btn.login':'Войти через Google',
     'lang.label':'Язык',
@@ -491,7 +485,7 @@ const TRANSLATIONS = {
     'settings.prefs':'Einstellungen','settings.salary':'Mindestgehalt (EUR/Jahr)','settings.experience':'Erfahrung (Jahre)',
     'settings.languages':'Sprachen','settings.workMode':'Arbeitsmodell',
     'settings.workAny':'Beliebig','settings.workRemote':'Remote','settings.workHybrid':'Hybrid','settings.workOnsite':'Vor Ort',
-    'settings.countries':'Aktive Zielländer','settings.industries':'Branchen',
+    'settings.countries':'Aktive Zielländer',
     'msg.loading':'Wird geladen...','msg.noJobs':'Keine Stellen gefunden.','msg.loginRequired':'Anmeldung erforderlich',
     'btn.guest':'Gast','btn.login':'Mit Google anmelden',
     'lang.label':'Sprache',
@@ -520,7 +514,7 @@ const TRANSLATIONS = {
     'settings.prefs':'Preferencias','settings.salary':'Salario mínimo (EUR/año)','settings.experience':'Experiencia (años)',
     'settings.languages':'Idiomas','settings.workMode':'Modo de trabajo',
     'settings.workAny':'Cualquiera','settings.workRemote':'Remoto','settings.workHybrid':'Híbrido','settings.workOnsite':'Presencial',
-    'settings.countries':'Países objetivo activos','settings.industries':'Industrias',
+    'settings.countries':'Países objetivo activos',
     'msg.loading':'Cargando...','msg.noJobs':'No se encontraron trabajos.','msg.loginRequired':'Inicio de sesión requerido',
     'btn.guest':'Invitado','btn.login':'Iniciar sesión con Google',
     'lang.label':'Idioma',
@@ -786,28 +780,6 @@ function applyLang() {
         </div>
       </div>
 
-      <!-- Full width: Industries -->
-      <div class="field span2">
-        <label data-i18n="settings.industries">Industries</label>
-        <div class="ind-grid" id="s-ind-grid">
-          <span class="ind-pill" data-ind="FMCG / Consumer Goods"     onclick="toggleInd(this)">FMCG / Consumer Goods</span>
-          <span class="ind-pill" data-ind="Manufacturing"             onclick="toggleInd(this)">Manufacturing</span>
-          <span class="ind-pill" data-ind="Automotive"                onclick="toggleInd(this)">Automotive</span>
-          <span class="ind-pill" data-ind="Pharma & Life Sciences"    onclick="toggleInd(this)">Pharma & Life Sciences</span>
-          <span class="ind-pill" data-ind="Chemicals"                 onclick="toggleInd(this)">Chemicals</span>
-          <span class="ind-pill" data-ind="Logistics & Transport"     onclick="toggleInd(this)">Logistics & Transport</span>
-          <span class="ind-pill" data-ind="Retail & E-commerce"       onclick="toggleInd(this)">Retail & E-commerce</span>
-          <span class="ind-pill" data-ind="Technology & Electronics"  onclick="toggleInd(this)">Technology & Electronics</span>
-          <span class="ind-pill" data-ind="Energy & Utilities"        onclick="toggleInd(this)">Energy & Utilities</span>
-          <span class="ind-pill" data-ind="Construction & Engineering" onclick="toggleInd(this)">Construction & Engineering</span>
-          <span class="ind-pill" data-ind="Food & Beverage"           onclick="toggleInd(this)">Food & Beverage</span>
-          <span class="ind-pill" data-ind="Healthcare"                onclick="toggleInd(this)">Healthcare</span>
-          <span class="ind-pill" data-ind="Aerospace & Defense"       onclick="toggleInd(this)">Aerospace & Defense</span>
-          <span class="ind-pill" data-ind="Financial Services"        onclick="toggleInd(this)">Financial Services</span>
-          <span class="ind-pill" data-ind="Other"                     onclick="toggleInd(this)">Other</span>
-        </div>
-      </div>
-
     </div>
 
     <h3>Interface Language</h3>
@@ -973,27 +945,6 @@ function _expFromYears(n){
   if(n<=8) return 8;
   if(n<=10) return 10;
   return 15;
-}
-
-const INDUSTRIES = [
-  'FMCG / Consumer Goods','Manufacturing','Automotive','Pharma & Life Sciences',
-  'Chemicals','Logistics & Transport','Retail & E-commerce','Technology & Electronics',
-  'Energy & Utilities','Construction & Engineering','Food & Beverage','Healthcare',
-  'Aerospace & Defense','Financial Services','Other'
-];
-let _industries = new Set();
-
-function toggleInd(el){
-  const name=el.dataset.ind;
-  if(_industries.has(name)){ _industries.delete(name); el.classList.remove('active'); }
-  else { _industries.add(name); el.classList.add('active'); }
-}
-
-function _loadIndustries(arr){
-  _industries=new Set(arr||[]);
-  document.querySelectorAll('#s-ind-grid .ind-pill').forEach(p=>{
-    p.classList.toggle('active', _industries.has(p.dataset.ind));
-  });
 }
 
 function _normLevel(v){ return LEVEL_MIGRATE[v]||(['basic','conversational','fluent','native'].includes(v)?v:'fluent'); }
@@ -1326,7 +1277,6 @@ async function loadProfile(){
     document.querySelectorAll('#s-countries-grid .country-item').forEach(el => {
       el.classList.toggle('active', pc.includes(el.dataset.code));
     });
-    _loadIndustries(p.industries||[]);
   }catch(e){console.error(e)}
 }
 
@@ -1343,7 +1293,6 @@ async function saveProfile(){
   fd.append('work_mode',_workMode);
   const activeCountries = Array.from(document.querySelectorAll('#s-countries-grid .country-item.active')).map(el => el.dataset.code);
   fd.append('preferred_countries', activeCountries.join(','));
-  fd.append('industries',[..._industries].join(','));
   try{
     const r=await fetch('/api/profile',{method:'POST',body:fd});
     const d=await r.json();
@@ -1885,7 +1834,6 @@ async function viewAdminUserProfile(userId) {
           <span>🏢 Mode: ${esc(p.work_mode || 'any')}</span>
           <span>🗣️ Lang: ${esc(Object.entries(p.languages||{}).map(([k,v])=>k+': '+v).join(', ') || '—')}</span>
           <span>🚫 Excluded: ${esc((p.excluded_keywords||[]).join(', ') || '—')}</span>
-          <span>🏭 Industries: ${esc((p.industries||[]).join(', ') || '—')}</span>
           <span>⭐ Companies: ${esc((p.target_companies||[]).join(', ') || '—')}</span>
           <span>🇬🇧 English Only: ${p.english_only ? 'Yes' : 'No'}</span>
         </div>

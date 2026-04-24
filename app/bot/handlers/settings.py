@@ -14,7 +14,6 @@ PROFILE_FIELDS = {
     "prof_salary": ("min_salary", "💰 Минимальная годовая зарплата (EUR, число):"),
     "prof_languages": ("languages", "🌐 Языки в формате: EN:C1, DE:B1, RU:native"),
     "prof_location": ("base_location", "📍 Ваш город (напр: Leipzig):"),
-    "prof_industries": ("industries", "🏭 Индустрии через запятую (напр: Manufacturing, FMCG, Automotive):"),
 }
 
 
@@ -33,7 +32,6 @@ async def profile_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     lines.append(f"💰 Мин. зарплата: {profile.min_salary or '❌'}")
     lines.append(f"🌐 Языки: {profile.languages or '❌'}")
     lines.append(f"📍 Локация: {profile.base_location or '❌'}")
-    lines.append(f"🏭 Индустрии: {', '.join(profile.industries) if profile.industries else '❌'}")
 
     await query.edit_message_text("\n".join(lines), reply_markup=profile_menu())
 
@@ -78,8 +76,6 @@ async def profile_text_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 if ":" in part:
                     lang, level = part.split(":", 1)
                     value[lang.strip().lower()] = level.strip().upper()
-        elif field_name == "industries":
-            value = [t.strip() for t in text.split(",") if t.strip()]
         else:
             value = text
 

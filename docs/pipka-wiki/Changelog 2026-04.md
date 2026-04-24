@@ -298,4 +298,22 @@ B2_ENDPOINT=https://s3.us-west-004.backblazeb2.com   # при необходим
 
 ---
 
+## 24 апреля 2026 (вечер, позже)
+
+### Удалён фильтр Industries из профиля
+
+По запросу пользователя — поле не давало практической пользы и создавало лишний шум в промпте.
+
+**Удалено:**
+- UI-секция Industries из `app/static/dashboard.html` (включая `.ind-grid`/`.ind-pill` CSS, `INDUSTRIES` массив, `toggleInd()`, `_loadIndustries()`, i18n-ключи).
+- `Form industries` в POST `/api/profile` и ключ в GET `/api/profile` + admin endpoint (`app/api/dashboard.py`).
+- Строка `Industries: ...` из scoring-промпта `build_profile_text()` (`app/scoring/matcher.py`).
+- Кнопка «🏭 Индустрии» и обработчики в Telegram-боте (`app/bot/keyboards.py`, `app/bot/handlers/settings.py`).
+- Поле `s-industries` из `app/static/js/app.js` (legacy).
+- Seed-значение в `fill_profile.py`.
+
+**Сохранено:** колонка `user_profiles.industries` (JSON) в БД — миграция не запускалась, старые значения игнорируются. Можно дропнуть в следующем релизе.
+
+---
+
 → [[Источники вакансий]] → [[Скоринг]] → [[Сервисы]] → [[API]]

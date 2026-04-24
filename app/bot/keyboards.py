@@ -78,7 +78,6 @@ def profile_menu() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("💰 Мин. зарплата", callback_data="prof_salary")],
         [InlineKeyboardButton("🌐 Языки", callback_data="prof_languages")],
         [InlineKeyboardButton("📍 Локация / Режим", callback_data="prof_location")],
-        [InlineKeyboardButton("🏭 Индустрии", callback_data="prof_industries")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="back_main")],
     ])
 

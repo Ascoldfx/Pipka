@@ -107,8 +107,6 @@ def build_profile_text(profile: UserProfile) -> str:
         prefs.append(f"Work mode: {profile.work_mode}")
     if profile.preferred_countries:
         prefs.append(f"Countries: {', '.join(profile.preferred_countries)}")
-    if profile.industries:
-        prefs.append(f"Industries: {', '.join(profile.industries)}")
     if profile.min_salary:
         prefs.append(f"Target salary: {profile.min_salary}+ EUR (note: many listings omit salary — do not penalise if absent)")
     if prefs:

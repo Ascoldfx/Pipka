@@ -181,7 +181,6 @@ async function loadProfile(){
     document.querySelectorAll('#s-countries-grid .country-item').forEach(el => {
       el.classList.toggle('active', pc.includes(el.dataset.code));
     });
-    $('s-industries').value=(p.industries||[]).join(', ');
   }catch(e){console.error(e)}
 }
 
@@ -197,7 +196,6 @@ async function saveProfile(){
   fd.append('work_mode',$('s-workmode').value);
   const activeCountries = Array.from(document.querySelectorAll('#s-countries-grid .country-item.active')).map(el => el.dataset.code);
   fd.append('preferred_countries', activeCountries.join(','));
-  fd.append('industries',$('s-industries').value);
   try{
     const r=await fetch('/api/profile',{method:'POST',body:fd});
     const d=await r.json();

@@ -77,7 +77,6 @@ with Session(engine) as session:
     profile.max_commute_km = 100
     profile.languages = {"en": "C1", "de": "B1", "uk": "Native", "ru": "Native"}
     profile.experience_years = 16
-    profile.industries = ["FMCG", "Manufacturing", "Logistics", "Automotive", "Retail", "Pharma", "Food & Beverage"]
     profile.work_mode = "any"
     profile.preferred_countries = ["de", "at", "nl"]
     profile.base_location = "Leipzig"

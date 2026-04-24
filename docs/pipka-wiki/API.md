@@ -58,7 +58,7 @@ Cookie `pipka_session` (signed, 30 дней, HTTPS-only, SameSite=lax).
 #### Поля POST /api/profile
 ```
 resume_text, target_titles, min_salary, languages,
-experience_years, industries, work_mode,
+experience_years, work_mode,
 preferred_countries, excluded_keywords,
 english_only (0/1), target_companies
 ```
