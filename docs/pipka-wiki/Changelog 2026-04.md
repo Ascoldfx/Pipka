@@ -237,6 +237,20 @@ B2_ENDPOINT=https://s3.us-west-004.backblazeb2.com   # при необходим
 - **Причина:** у `2.0-flash-lite` на free tier нулевая квота.
 - **Цена:** лимиты у `1.5-flash` вдвое строже — **15 RPM** (было 30) / 1500 RPD (без изменений).
 
+### Hotfix: Gemini model → `2.5-flash-lite` (config.py)
+
+**Проблема:** на проде все запросы к Gemini отдавали **404** —
+`models/gemini-1.5-flash is not found for API version v1beta`. Вся серия `gemini-1.5-*` официально retired. В результате очередь скоринга стояла (369 вакансий висело часами).
+
+**Диагностика:** `genai.list_models()` на сервере показала живые модели:
+- `gemini-2.0-flash`, `gemini-2.0-flash-lite` → 429 (квота выбрана у обеих)
+- `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-flash-latest` → работают
+
+**Решение:** переключились на `gemini-2.5-flash-lite` — lite-вариант новейшего поколения:
+- 15 RPM / 250 K TPM / **1000 RPD** free tier
+- Ближе всего к изначальной архитектуре (flash-lite класс)
+- `GEMINI_BATCH_DELAY` остаётся 4с (15 RPM → 1 req/4с = 15 RPM ровно)
+
 ### Real-time скоринг снова на Gemini (scheduler_service.py, коммит 72a6dcf)
 
 - В `_score_and_notify` добавлен выбор: если `GEMINI_API_KEY` задан → `score_jobs_gemini`, иначе `score_jobs` (Claude).
