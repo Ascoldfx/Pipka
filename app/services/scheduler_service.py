@@ -253,11 +253,14 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
 
     logger.info("Scoring %d new jobs for user %s", len(new_jobs), user.telegram_id)
 
-    # Score only new jobs (max 80 per run to control costs)
+    # Score only new jobs (max 80 per run to control costs/limits)
     to_score = new_jobs[:80]
     
-    # Reverted to Claude because Gemini free tier hit 429 Rate Limit (Quota Exceeded)
-    scores = await score_jobs(to_score, user, session)
+    if settings.gemini_api_key:
+        logger.info("Using Gemini for real-time scoring")
+        scores = await score_jobs_gemini(to_score, user, session)
+    else:
+        scores = await score_jobs(to_score, user, session)
 
     # Find top results to push
     top_results = []
