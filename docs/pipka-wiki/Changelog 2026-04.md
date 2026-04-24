@@ -231,11 +231,29 @@ B2_ENDPOINT=https://s3.us-west-004.backblazeb2.com   # при необходим
 
 ## 24 апреля 2026
 
-### Backfill: лимит 500 → 1000 за запуск (scheduler_service.py)
+### Gemini model → `1.5-flash` (config.py, коммит b2e5164)
+
+- `gemini_model: "gemini-2.0-flash-lite"` → `"gemini-1.5-flash"`.
+- **Причина:** у `2.0-flash-lite` на free tier нулевая квота.
+- **Цена:** лимиты у `1.5-flash` вдвое строже — **15 RPM** (было 30) / 1500 RPD (без изменений).
+
+### Real-time скоринг снова на Gemini (scheduler_service.py, коммит 72a6dcf)
+
+- В `_score_and_notify` добавлен выбор: если `GEMINI_API_KEY` задан → `score_jobs_gemini`, иначе `score_jobs` (Claude).
+- Откат ранее введённого hard-code «Claude-только» (23.04.2026). Новый hotfix на лимиты — switch by env var.
+- Теперь **все** AI-операции (real-time + backfill + analyze + recheck) унифицированно идут через Gemini, если ключ задан.
+
+### Backfill: cap 500 → 1000 за запуск (scheduler_service.py)
 
 - `_backfill_score`: Tier 1 и Tier 2 cap подняты с **500** до **1000** за запуск.
 - Интервал **2 часа** не меняем.
-- Причина: накопилась остаточная очередь (≈5% необработанных) из-за роста числа источников (9). Gemini Flash free tier (1500 RPD, 30 RPM) выдерживает: 1000 / 8 = 125 батчей × 4с задержки ≈ 8 мин на прогон, ~15 RPM — с запасом.
+- **Математика под 1.5-flash (15 RPM / 1500 RPD):**
+  - 1000 вакансий / 8 per batch = **125 батчей**, 125 × 4с задержки = 500с (~8 мин на прогон)
+  - 125 req / 8 мин = ~**15.6 RPM** — на границе лимита, retry разрулит короткие 429
+  - Суточная нагрузка при типичной очереди ≤500 ваканий/запуск: 12 × 60 = 720 req/день на backfill
+  - Плюс real-time: 8 runs × 10 батчей = 80 req/день
+  - Итого ~**800 req/день** — комфортно в 1500 RPD
+- Если будет стабильно срабатывать 429 — поднять `GEMINI_BATCH_DELAY` с 4с до 6с в `.env`.
 - Обновлено в [[Сервисы]] и [[Скоринг]].
 
 ---
