@@ -24,7 +24,7 @@ import time
 from datetime import datetime
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import (
     AsyncRetrying,
@@ -233,34 +233,44 @@ async def score_jobs_gemini(
 
         batch = jobs[i : i + settings.max_jobs_per_scoring_batch]
         batch_results = await _call_gemini_raw(batch, profile_text)
+        if not batch_results:
+            continue
 
-        # INSERT new records
-        for job, score, verdict in batch_results:
-            score_obj = JobScore(
-                job_id=job.id,
-                user_id=user.id,
-                score=score,
-                ai_analysis=verdict,
-            )
-            try:
-                session.add(score_obj)
-                await session.flush()
-                new_scores.append(score_obj)
-            except IntegrityError:
-                await session.rollback()
-                logger.debug(
-                    "Gemini: score for job_id=%s user_id=%s already exists (race), skipping",
-                    job.id, user.id,
-                )
-
+        # Atomic bulk insert with ON CONFLICT DO NOTHING — survives races with
+        # _background_scan touching the same (job_id, user_id) pair.
+        rows = [
+            {
+                "job_id": job.id,
+                "user_id": user.id,
+                "score": score,
+                "ai_analysis": verdict,
+            }
+            for job, score, verdict in batch_results
+        ]
+        stmt = pg_insert(JobScore).values(rows).on_conflict_do_nothing(
+            index_elements=["job_id", "user_id"]
+        ).returning(JobScore.id, JobScore.job_id)
         try:
+            inserted = (await session.execute(stmt)).all()
             await session.commit()
-        except IntegrityError:
+        except Exception as exc:
             await session.rollback()
             logger.warning(
-                "Gemini score_jobs_gemini commit IntegrityError for user_id=%s, batch discarded",
-                user.id,
+                "Gemini batch insert failed for user_id=%s: %s", user.id, exc
             )
+            continue
+
+        inserted_job_ids = {row.job_id for row in inserted}
+        job_map = {job.id: (job, score, verdict) for job, score, verdict in batch_results}
+        for jid in inserted_job_ids:
+            if jid in job_map:
+                job, score, verdict = job_map[jid]
+                new_scores.append(JobScore(
+                    job_id=jid,
+                    user_id=user.id,
+                    score=score,
+                    ai_analysis=verdict,
+                ))
 
     return new_scores
 
