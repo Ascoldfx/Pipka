@@ -21,7 +21,7 @@ import json
 import logging
 import random
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -53,6 +53,59 @@ _gemini_semaphore = asyncio.Semaphore(1)
 _pacer_lock = asyncio.Lock()
 _last_call_monotonic: float = 0.0
 _MIN_INTERVAL_SECONDS = 4.5
+
+# Circuit breaker — trip when daily quota is exhausted so backfill can hand work
+# off to NVIDIA instead of looping retries forever. Resets at next UTC midnight.
+_breaker_lock = asyncio.Lock()
+_gemini_disabled_until: datetime | None = None  # UTC, naive
+_consecutive_exhausts: int = 0
+_BREAKER_TRIP_THRESHOLD = 3  # exhausted batches in a row
+
+
+def _next_utc_midnight() -> datetime:
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    tomorrow = (now + timedelta(days=1)).date()
+    return datetime.combine(tomorrow, datetime.min.time())
+
+
+def is_gemini_available() -> bool:
+    """Check the breaker. True if Gemini calls may proceed."""
+    global _gemini_disabled_until
+    if _gemini_disabled_until is None:
+        return True
+    if datetime.now(timezone.utc).replace(tzinfo=None) >= _gemini_disabled_until:
+        _gemini_disabled_until = None
+        return True
+    return False
+
+
+async def _record_success() -> None:
+    """Reset the consecutive-exhausts counter on a successful Gemini response."""
+    global _consecutive_exhausts
+    if _consecutive_exhausts:
+        _consecutive_exhausts = 0
+
+
+async def _record_exhaust(reason: str) -> None:
+    """Bump the breaker counter; trip if threshold reached."""
+    global _consecutive_exhausts, _gemini_disabled_until
+    async with _breaker_lock:
+        _consecutive_exhausts += 1
+        logger.warning(
+            "Gemini exhausted #%d/%d (reason=%s)",
+            _consecutive_exhausts, _BREAKER_TRIP_THRESHOLD, reason,
+        )
+        if _consecutive_exhausts >= _BREAKER_TRIP_THRESHOLD and _gemini_disabled_until is None:
+            _gemini_disabled_until = _next_utc_midnight()
+            await record_ops_event(
+                "gemini_breaker_open",
+                "warning",
+                source="gemini",
+                message=f"disabled_until={_gemini_disabled_until.isoformat()}Z reason={reason}",
+            )
+            logger.warning(
+                "Gemini circuit breaker OPEN until %s UTC", _gemini_disabled_until.isoformat()
+            )
 
 
 def _get_model():
@@ -156,12 +209,16 @@ async def _call_gemini_raw(
     profile_text: str,
 ) -> list[tuple[Job, int, str]]:
     """Call Gemini, return list of (job, score, verdict). No DB interaction."""
+    if not is_gemini_available():
+        return []
+
     prompt = SCORING_PROMPT.format(
         profile_text=profile_text,
         jobs_text=_build_jobs_text(jobs),
     )
     try:
         response = await _generate_with_retry(prompt, len(jobs))
+        await _record_success()
         text = response.text.strip()
 
         # Strip markdown fences
@@ -180,15 +237,18 @@ async def _call_gemini_raw(
 
         results = json.loads(text)
     except RetryError as exc:
+        final_exc = exc.last_attempt.exception()
+        final_name = type(final_exc).__name__
         logger.error(
-            "Gemini retries exhausted (batch_size=%d): %s", len(jobs), exc.last_attempt.exception()
+            "Gemini retries exhausted (batch_size=%d): %s", len(jobs), final_exc
         )
         await record_ops_event(
             "gemini_exhausted",
             "error",
             source="gemini",
-            message=f"batch={len(jobs)} final={type(exc.last_attempt.exception()).__name__}",
+            message=f"batch={len(jobs)} final={final_name}",
         )
+        await _record_exhaust(final_name)
         return []
     except Exception as exc:
         logger.error("Gemini API call failed (batch_size=%d): %s", len(jobs), exc)
@@ -224,10 +284,17 @@ async def score_jobs_gemini(
     if not profile:
         return []
 
+    if not is_gemini_available():
+        logger.info("Gemini breaker open — score_jobs_gemini no-op for user %s", user.id)
+        return []
+
     profile_text = build_profile_text(profile)
     new_scores: list[JobScore] = []
 
     for i in range(0, len(jobs), settings.max_jobs_per_scoring_batch):
+        if not is_gemini_available():
+            logger.info("Gemini breaker tripped mid-loop — aborting at batch %d", i)
+            break
         if i > 0:
             await asyncio.sleep(settings.gemini_batch_delay)
 
@@ -297,6 +364,10 @@ async def recheck_zero_scores(
     """
     profile = user.profile
     if not profile:
+        return 0, 0
+
+    if not is_gemini_available():
+        logger.info("Gemini breaker open — recheck_zero_scores no-op for user %s", user.id)
         return 0, 0
 
     # Find pre-filter rejects not yet rechecked (ai_analysis IS NULL = never seen by AI)

@@ -190,6 +190,65 @@ async def _score_batch(
 # Public entry: idle rescore pass for one user
 # ---------------------------------------------------------------------------
 
+async def score_jobs_nvidia(
+    jobs: list[Job],
+    user: User,
+    session: AsyncSession,
+) -> list[JobScore]:
+    """Backfill scorer via NVIDIA Build — drop-in replacement for ``score_jobs_gemini``.
+
+    Used when Gemini circuit breaker is open (daily quota exhausted). Country filter
+    is NOT applied here — that's only for the idle rescorer. Backfill via NVIDIA
+    runs across whatever jobs the caller hands in.
+    """
+    profile = user.profile
+    if not profile:
+        return []
+    if not settings.nvidia_api_key:
+        return []
+
+    profile_text = build_profile_text(profile)
+    new_scores: list[JobScore] = []
+    batch_size = settings.max_jobs_per_scoring_batch
+
+    for i in range(0, len(jobs), batch_size):
+        batch = jobs[i : i + batch_size]
+        batch_results = await _score_batch(batch, profile_text)
+        if not batch_results:
+            continue
+
+        rows = [
+            {
+                "job_id": job.id,
+                "user_id": user.id,
+                "score": score,
+                "ai_analysis": verdict or "✓ confirmed (NVIDIA)",
+            }
+            for job, score, verdict in batch_results
+        ]
+        stmt = pg_insert(JobScore).values(rows).on_conflict_do_nothing(
+            index_elements=["job_id", "user_id"]
+        ).returning(JobScore.id, JobScore.job_id)
+        try:
+            inserted = (await session.execute(stmt)).all()
+            await session.commit()
+        except Exception as exc:
+            await session.rollback()
+            logger.warning("NVIDIA batch insert failed for user_id=%s: %s", user.id, exc)
+            continue
+
+        inserted_ids = {row.job_id for row in inserted}
+        job_map = {job.id: (job, score, verdict) for job, score, verdict in batch_results}
+        for jid in inserted_ids:
+            job, score, verdict = job_map[jid]
+            new_scores.append(JobScore(
+                job_id=jid, user_id=user.id, score=score,
+                ai_analysis=verdict or "✓ confirmed (NVIDIA)",
+            ))
+
+    return new_scores
+
+
 async def idle_rescore_for_user(
     user: User,
     session: AsyncSession,

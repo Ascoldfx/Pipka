@@ -321,13 +321,23 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
 def _backfill_score_fn():
     """Return the appropriate scoring function for backfill.
 
-    Uses Gemini Flash (free tier) when GEMINI_API_KEY is set in .env,
-    otherwise falls back to Claude (paid).
+    Priority:
+      1. Gemini Flash (free) — if key set AND circuit breaker is closed.
+      2. NVIDIA Build (free) — if Gemini is exhausted/disabled and NVIDIA key is set.
+      3. Claude (paid)       — last resort.
     """
     if settings.gemini_api_key:
-        from app.scoring.gemini_matcher import score_jobs_gemini  # noqa: PLC0415
-        logger.debug("Backfill scorer: using Gemini Flash (%s)", settings.gemini_model)
-        return score_jobs_gemini
+        from app.scoring.gemini_matcher import is_gemini_available, score_jobs_gemini  # noqa: PLC0415
+        if is_gemini_available():
+            logger.debug("Backfill scorer: using Gemini Flash (%s)", settings.gemini_model)
+            return score_jobs_gemini
+        logger.warning("Backfill scorer: Gemini breaker open — falling back")
+
+    if settings.nvidia_api_key:
+        from app.scoring.nvidia_matcher import score_jobs_nvidia  # noqa: PLC0415
+        logger.info("Backfill scorer: using NVIDIA Build (%s)", settings.nvidia_model)
+        return score_jobs_nvidia
+
     logger.debug("Backfill scorer: using Claude (%s)", settings.claude_model)
     return score_jobs
 
@@ -342,7 +352,7 @@ async def _backfill_score():
          (Gemini Flash if GEMINI_API_KEY is set, Claude otherwise).
     """
     _score_fn = _backfill_score_fn()
-    backend = "Gemini" if settings.gemini_api_key else "Claude"
+    backend = _score_fn.__name__.replace("score_jobs_", "").replace("score_jobs", "claude") or "claude"
     logger.info("Backfill scorer started (backend=%s)", backend)
 
     async with async_session() as session:

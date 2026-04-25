@@ -337,4 +337,33 @@ B2_ENDPOINT=https://s3.us-west-004.backblazeb2.com   # при необходим
 
 ---
 
+## 25 апреля 2026
+
+### Gemini circuit breaker + NVIDIA fallback для backfill
+
+**Проблема.** Free-tier `gemini-3.1-flash-lite-preview` = 500 RPD. После выработки дневного лимита `_backfill_score` не выходил из livelock-а: tenacity делал 5 попыток × 80с backoff на каждый батч, все 5 ловили 429, батч умирал, через 2ч следующий тик подбирал те же job_id и всё повторялось. За сутки 119 ретраев в `ops_events` — без полезной работы.
+
+**Решение — process-local circuit breaker в `app/scoring/gemini_matcher.py`:**
+
+- Константа `_BREAKER_TRIP_THRESHOLD = 3` подряд-exhausted батчей. На 3-м `gemini_disabled_until = next UTC midnight`.
+- `is_gemini_available()` — новая публичная функция. Возвращает `True` если breaker закрыт ИЛИ дедлайн прошёл (тогда автосброс).
+- `_record_exhaust(reason)` / `_record_success()` — ведут счётчик в `_breaker_lock`. На trip пишут `OpsEvent("gemini_breaker_open", "warning")`.
+- `_call_gemini_raw`, `score_jobs_gemini`, `recheck_zero_scores` — все ранний выход если breaker открыт.
+
+**Перераспределение нагрузки — `app/scoring/nvidia_matcher.py`:**
+
+- Новая функция `score_jobs_nvidia(jobs, user, session)` — drop-in mirror `score_jobs_gemini`. Записывает новые `JobScore` через `pg_insert(...).on_conflict_do_nothing(...)`. Country-фильтр **не** применяется (это только для idle rescorer).
+
+**Цепочка выбора в `_backfill_score_fn` (app/services/scheduler_service.py):**
+
+1. **Gemini** — если ключ задан И `is_gemini_available()`.
+2. **NVIDIA** — если Gemini exhausted/нет ключа И `nvidia_api_key` задан.
+3. **Claude** — последний fallback.
+
+После полуночи UTC breaker автоматически сбрасывается на ближайшем тике, Gemini снова становится приоритетом.
+
+**Эффект на ops:** ушёл шум `gemini_429 retry` в холостую. Появился `gemini_breaker_open warning` (1 событие за день при триппинге) и `nvidia_rescore success` чаще, т.к. NVIDIA забирает backfill.
+
+---
+
 → [[Источники вакансий]] → [[Скоринг]] → [[Сервисы]] → [[API]]
