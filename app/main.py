@@ -17,6 +17,26 @@ from app.database import init_db
 from app.services.ops_service import record_ops_event
 _access_log = logging.getLogger("pipka.access")
 
+# Sentry — initialise BEFORE FastAPI() so the SDK can install its hooks on
+# the ASGI app. Skipped entirely when SENTRY_DSN is empty.
+if settings.sentry_dsn:
+    import sentry_sdk
+    from sentry_sdk.integrations.asyncio import AsyncioIntegration
+    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.sentry_environment,
+        traces_sample_rate=settings.sentry_traces_sample_rate,
+        profiles_sample_rate=settings.sentry_profiles_sample_rate,
+        # Attach context: which logger emitted the event, last 100 breadcrumbs.
+        attach_stacktrace=True,
+        send_default_pii=False,  # don't ship session cookies / IPs
+        integrations=[AsyncioIntegration(), SqlalchemyIntegration()],
+        # FastAPI integration is auto-loaded by sentry-sdk[fastapi].
+    )
+    logging.getLogger("pipka").info("Sentry initialised (env=%s)", settings.sentry_environment)
+
 # Methods that mutate server state and therefore require a CSRF token.
 _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 

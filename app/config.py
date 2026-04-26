@@ -70,6 +70,12 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
+    # Sentry — error tracking. Empty DSN disables Sentry entirely (no SDK init).
+    sentry_dsn: str = ""
+    sentry_environment: str = "production"
+    sentry_traces_sample_rate: float = 0.05   # 5% performance traces
+    sentry_profiles_sample_rate: float = 0.05  # 5% profiling samples
+
     # Backblaze B2 backups (optional — local backup always runs when DB is PostgreSQL)
     # Set all three to enable cloud upload; leave empty to use local-only backups
     b2_key_id: str = ""

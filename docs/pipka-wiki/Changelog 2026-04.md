@@ -390,4 +390,32 @@ B2_ENDPOINT=https://s3.us-west-004.backblazeb2.com   # при необходим
 
 ---
 
-→ [[Источники вакансий]] → [[Скоринг]] → [[Сервисы]] → [[API]]
+## 26 апреля 2026 (вечер)
+
+### Sentry, rate-limit на AI-анализ, JSONB-миграция
+
+Прошли пункты #1–#3 из аудит-листа.
+
+**1. Sentry SDK (`app/main.py`, `app/config.py`, `pyproject.toml`).** `sentry-sdk[fastapi]>=2.18` добавлен в зависимости. Инициализация в `main.py` ДО создания `FastAPI()` — иначе ASGI-хуки SDK не повесятся. Конфиг через env: `SENTRY_DSN` (пусто → SDK не инициализируется), `SENTRY_ENVIRONMENT=production`, `SENTRY_TRACES_SAMPLE_RATE=0.05`, `SENTRY_PROFILES_SAMPLE_RATE=0.05`. Включены интеграции `AsyncioIntegration` + `SqlalchemyIntegration`. PII не отправляется (`send_default_pii=False`).
+
+**Активация:** взять DSN на sentry.io (бесплатный тариф 5 000 событий/мес), добавить `SENTRY_DSN=https://...@o0.ingest.sentry.io/0` в `/opt/pipka/.env`, рестарт. Без DSN — нулевая нагрузка.
+
+**2. In-process rate-limit (`app/api/_ratelimit.py`).** Sliding-window per (user_id, key) на `collections.deque[float]` под `threading.Lock`. Хук в `analyze_job` — **30 запросов в час на пользователя**. На 31-й клик возвращается `429` + заголовок `Retry-After`. Каждый клик жжёт один запрос к Gemini/Claude — без ограничения юзер мог click-spam'ом высадить дневной RPD за минуту.
+
+Single-process решение (живёт в памяти контейнера). При горизонтальном масштабировании — заменить на `slowapi` + Redis.
+
+**3. JSON → JSONB (`app/models/job.py`, `app/models/ops_event.py`, `app/api/dashboard.py`).** Колонки `jobs.raw_data` и `ops_events.payload` мигрированы:
+
+```sql
+ALTER TABLE jobs ALTER COLUMN raw_data TYPE jsonb USING raw_data::jsonb;
+ALTER TABLE ops_events ALTER COLUMN payload TYPE jsonb USING payload::jsonb;
+CREATE INDEX CONCURRENTLY ix_jobs_merged_sources ON jobs USING gin ((raw_data->'merged_sources'));
+```
+
+Модели используют `JSON().with_variant(JSONB(), "postgresql")` — сохраняем совместимость с sqlite (dev/тесты). `dashboard.py:get_dedup_jobs` переключён на `func.jsonb_array_length` (json_array_length не работает с jsonb-аргументом в PG).
+
+GIN-индекс ускоряет `/api/ops/dedup` и любые будущие запросы по подкомпонентам `raw_data`.
+
+---
+
+→ [[Источники вакансий]] → [[Скоринг]] → [[Сервисы]] → [[API]] → [[Настройки]]

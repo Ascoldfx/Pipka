@@ -1,9 +1,13 @@
 from datetime import datetime
 
 from sqlalchemy import DateTime, Integer, JSON, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models import Base
+
+# JSONB on PostgreSQL, JSON on sqlite (dev/tests).
+_JSON = JSON().with_variant(JSONB(), "postgresql")
 
 
 class OpsEvent(Base):
@@ -14,5 +18,5 @@ class OpsEvent(Base):
     status: Mapped[str] = mapped_column(String(30), index=True)
     source: Mapped[str | None] = mapped_column(String(120), index=True)
     message: Mapped[str | None] = mapped_column(Text)
-    payload: Mapped[dict | None] = mapped_column(JSON)
+    payload: Mapped[dict | None] = mapped_column(_JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)

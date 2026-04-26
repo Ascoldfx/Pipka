@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import and_, asc, desc, func, select
 from sqlalchemy.orm import selectinload
 
+from app.api._ratelimit import check_rate_limit
 from app.config import settings
 from app.database import async_session
 from app.models.application import Application
@@ -406,6 +407,10 @@ async def analyze_job(job_id: int, request: Request):
         user = await _get_user(request, session)
         if not user or not user.profile:
             raise HTTPException(status_code=404, detail="No user/profile")
+        # Each call burns one Gemini/Claude request — without a cap a logged-in
+        # user could exhaust the daily AI quota with a click-spam loop. 30/hour
+        # is generous for normal browsing, restrictive for automation.
+        check_rate_limit(user_id=user.id, key="analyze", limit=30, window_s=3600)
         job = await session.get(Job, job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
@@ -488,13 +493,14 @@ async def get_dedup_jobs(request: Request, limit: int = Query(200, ge=10, le=500
         raise HTTPException(status_code=403, detail="Admin only")
 
     async with async_session() as session:
-        # Jobs where merged_sources array has more than 1 element
-        from sqlalchemy import cast, text
+        # Jobs where merged_sources array has more than 1 element. raw_data
+        # is jsonb on prod (PostgreSQL); jsonb_array_length is the matching
+        # function. This admin-only endpoint is never hit on sqlite dev.
         result = await session.execute(
             select(Job)
             .where(
                 Job.raw_data.op("->")("merged_sources").isnot(None),
-                func.json_array_length(Job.raw_data.op("->")("merged_sources")) > 1,
+                func.jsonb_array_length(Job.raw_data.op("->")("merged_sources")) > 1,
             )
             .order_by(Job.scraped_at.desc())
             .limit(limit)

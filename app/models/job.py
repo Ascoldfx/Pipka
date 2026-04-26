@@ -1,7 +1,12 @@
 from datetime import datetime
 
 from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+# Use JSONB on PostgreSQL (faster operators, GIN-indexable) but keep JSON for
+# sqlite (used in dev/tests) — SQLAlchemy variant picks the right one per dialect.
+_JSON = JSON().with_variant(JSONB(), "postgresql")
 
 from app.models import Base
 
@@ -35,7 +40,7 @@ class Job(Base):
     is_remote: Mapped[bool | None] = mapped_column(default=None)
     posted_at: Mapped[datetime | None] = mapped_column(DateTime)
     scraped_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    raw_data: Mapped[dict | None] = mapped_column(JSON)
+    raw_data: Mapped[dict | None] = mapped_column(_JSON)
     dedup_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
 
     scores: Mapped[list["JobScore"]] = relationship(back_populates="job")
