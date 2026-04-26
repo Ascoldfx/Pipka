@@ -15,13 +15,14 @@ def _get_engine():
         # pool. Tuned conservatively — most legit queries finish in <100ms.
         connect_args: dict = {}
         if settings.database_url.startswith("postgresql"):
-            # 30s per statement — accommodates large IN-batches in the
-            # aggregator (~1500 dedup_hashes per scan) running concurrently
-            # with CPU-heavy JobSpy/LinkedIn scrapers. 10s was too tight.
+            # 30s per statement bounds runaway queries; 5s lock_timeout fails
+            # fast on contended writes. We deliberately do NOT set
+            # idle_in_transaction_session_timeout — the scanner holds an open
+            # transaction during the multi-minute scrape phase, and killing
+            # idle txs there would (and did) terminate live connections.
             connect_args["server_settings"] = {
                 "statement_timeout": "30000",
                 "lock_timeout": "5000",
-                "idle_in_transaction_session_timeout": "120000",
                 "application_name": "pipka",
             }
         _engine = create_async_engine(

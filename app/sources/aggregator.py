@@ -302,18 +302,14 @@ class JobAggregator:
             upserted_hashes = [r.dedup_hash for r in filtered]
 
         # Re-fetch via the caller's session so the returned ORM instances are
-        # bound to it (matches old contract). Same chunked pattern.
+        # bound to it (matches old contract). NOTE: we do NOT probe/rollback
+        # the caller's session here — that would expire all ORM state and
+        # trigger sync lazy-loads on previously-loaded relationships
+        # (e.g. user.profile in _background_scan), causing MissingGreenlet.
+        # If the caller's connection died during the long scrape, the next
+        # execute() will surface that and the caller can recover on its own.
         if upserted_hashes:
-            try:
-                ttl_test = await session.execute(select(Job.id).limit(1))
-                ttl_test.scalar_one_or_none()
-            except Exception:
-                # Caller's session is dead after the long idle — invalidate
-                # so the next execute checks out a fresh connection.
-                await session.rollback()
-
             existing_by_hash = await _fetch_chunked(session, upserted_hashes)
-            await session.commit()
         else:
             existing_by_hash = {}
 
