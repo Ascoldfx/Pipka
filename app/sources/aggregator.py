@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.database import async_session
 from app.models.job import Job
 from app.sources.base import JobSource, RawJob, SearchParams, is_fuzzy_duplicate
 
@@ -238,67 +239,83 @@ class JobAggregator:
             "sources": source_stats,
         }
 
-        # Bulk upsert — replaces N+1 SELECT pattern that previously made one query
-        # per filtered raw job. Strategy: SELECT existing rows by dedup_hash
-        # in chunks (asyncpg/PostgreSQL prepared-statement size grows linearly
-        # with parameter count, and a 1500-param SELECT under concurrent CPU
-        # load can race the statement_timeout); then bulk INSERT new rows with
-        # ON CONFLICT DO NOTHING; then SELECT the freshly-inserted rows back to
-        # get ORM-tracked instances with assigned PKs.
+        # Bulk upsert on a FRESH session. Why a new session: the caller's
+        # session has been holding a checked-out connection unused since the
+        # very first user-query (~3 minutes ago, while scrapers ran). asyncpg
+        # in that idle window can be reaped by Postgres or by docker-network
+        # TCP timeouts even with pool_pre_ping=True. Opening a new session
+        # forces a fresh checkout — the pool re-validates and we never touch
+        # the stale connection.
+        #
+        # Implementation: pass dedup hashes through Python, do all writes on
+        # the new session, then re-attach to the caller's session via merge()
+        # so callers continue to use ORM-tracked instances.
         UPSERT_CHUNK = 400
 
-        all_hashes = [r.dedup_hash for r in filtered]
-        existing_by_hash: dict[str, Job] = {}
-
-        async def _fetch_chunked(hashes: list[str]) -> dict[str, Job]:
+        async def _fetch_chunked(s, hashes: list[str]) -> dict[str, Job]:
             out: dict[str, Job] = {}
             for i in range(0, len(hashes), UPSERT_CHUNK):
                 chunk = hashes[i : i + UPSERT_CHUNK]
-                q = await session.execute(
-                    select(Job).where(Job.dedup_hash.in_(chunk))
-                )
+                q = await s.execute(select(Job).where(Job.dedup_hash.in_(chunk)))
                 for j in q.scalars().all():
                     out[j.dedup_hash] = j
             return out
 
-        if all_hashes:
-            existing_by_hash = await _fetch_chunked(all_hashes)
+        all_hashes = [r.dedup_hash for r in filtered]
+        # Detached snapshots — keys we'll re-merge into the caller's session.
+        upserted_hashes: list[str] = []
 
-        new_rows = [
-            {
-                "external_id": r.external_id,
-                "source": r.source,
-                "title": r.title,
-                "company_name": r.company_name,
-                "location": r.location,
-                "country": r.country,
-                "description": r.description,
-                "salary_min": r.salary_min,
-                "salary_max": r.salary_max,
-                "salary_currency": r.salary_currency,
-                "url": r.url,
-                "is_remote": r.is_remote,
-                "posted_at": r.posted_at,
-                "raw_data": r.raw_data,
-                "dedup_hash": r.dedup_hash,
-            }
-            for r in filtered
-            if r.dedup_hash not in existing_by_hash
-        ]
+        async with async_session() as wsession:
+            existing_by_hash = await _fetch_chunked(wsession, all_hashes) if all_hashes else {}
 
-        if new_rows:
-            for i in range(0, len(new_rows), UPSERT_CHUNK):
-                chunk = new_rows[i : i + UPSERT_CHUNK]
-                stmt = pg_insert(Job).values(chunk).on_conflict_do_nothing(
-                    index_elements=["dedup_hash"]
-                )
-                await session.execute(stmt)
+            new_rows = [
+                {
+                    "external_id": r.external_id,
+                    "source": r.source,
+                    "title": r.title,
+                    "company_name": r.company_name,
+                    "location": r.location,
+                    "country": r.country,
+                    "description": r.description,
+                    "salary_min": r.salary_min,
+                    "salary_max": r.salary_max,
+                    "salary_currency": r.salary_currency,
+                    "url": r.url,
+                    "is_remote": r.is_remote,
+                    "posted_at": r.posted_at,
+                    "raw_data": r.raw_data,
+                    "dedup_hash": r.dedup_hash,
+                }
+                for r in filtered
+                if r.dedup_hash not in existing_by_hash
+            ]
+
+            if new_rows:
+                for i in range(0, len(new_rows), UPSERT_CHUNK):
+                    chunk = new_rows[i : i + UPSERT_CHUNK]
+                    stmt = pg_insert(Job).values(chunk).on_conflict_do_nothing(
+                        index_elements=["dedup_hash"]
+                    )
+                    await wsession.execute(stmt)
+                await wsession.commit()
+
+            upserted_hashes = [r.dedup_hash for r in filtered]
+
+        # Re-fetch via the caller's session so the returned ORM instances are
+        # bound to it (matches old contract). Same chunked pattern.
+        if upserted_hashes:
+            try:
+                ttl_test = await session.execute(select(Job.id).limit(1))
+                ttl_test.scalar_one_or_none()
+            except Exception:
+                # Caller's session is dead after the long idle — invalidate
+                # so the next execute checks out a fresh connection.
+                await session.rollback()
+
+            existing_by_hash = await _fetch_chunked(session, upserted_hashes)
             await session.commit()
-            # Re-fetch newly-inserted rows in chunks so ORM has assigned PKs.
-            new_hashes = [r["dedup_hash"] for r in new_rows]
-            existing_by_hash.update(await _fetch_chunked(new_hashes))
         else:
-            await session.commit()
+            existing_by_hash = {}
 
         # Preserve original ordering (caller relies on filtered[] order)
         db_jobs: list[Job] = [
