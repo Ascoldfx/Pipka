@@ -8,7 +8,5 @@ dist/
 *.egg-info/
 .ruff_cache/
 .pytest_cache/
-alembic/versions/*.py
-!alembic/versions/.gitkeep
 .claude/settings.local.json
 .claude/worktrees/
