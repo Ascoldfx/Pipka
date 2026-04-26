@@ -306,8 +306,10 @@ async def score_jobs_gemini(
         if not batch_results:
             continue
 
-        # Atomic bulk insert with ON CONFLICT DO NOTHING — survives races with
-        # _background_scan touching the same (job_id, user_id) pair.
+        # Phase 2b UPSERT: insert new scores; on conflict, overwrite ONLY when
+        # the existing row's profile_hash differs (i.e. stale provenance from
+        # a previous profile or backend). Legacy NULL rows are NOT touched —
+        # `NULL != X` is unknown, which the WHERE clause filters out.
         rows = [
             {
                 "job_id": job.id,
@@ -319,8 +321,17 @@ async def score_jobs_gemini(
             }
             for job, score, verdict in batch_results
         ]
-        stmt = pg_insert(JobScore).values(rows).on_conflict_do_nothing(
-            index_elements=["job_id", "user_id"]
+        stmt = pg_insert(JobScore).values(rows)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["job_id", "user_id"],
+            set_={
+                "score": stmt.excluded.score,
+                "ai_analysis": stmt.excluded.ai_analysis,
+                "scored_at": datetime.now(),
+                "profile_hash": stmt.excluded.profile_hash,
+                "model_version": stmt.excluded.model_version,
+            },
+            where=JobScore.profile_hash != stmt.excluded.profile_hash,
         ).returning(JobScore.id, JobScore.job_id)
         try:
             inserted = (await session.execute(stmt)).all()

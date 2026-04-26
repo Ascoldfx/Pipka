@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 from anthropic import AsyncAnthropic
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -138,14 +139,17 @@ async def score_jobs(
     if not profile:
         return []
 
-    # Check cache — single batch SELECT instead of N+1 queries
+    # Check cache — single batch SELECT instead of N+1 queries.
+    # Phase 2b: cache hit requires profile_hash match (or legacy NULL).
     cache_cutoff = datetime.now() - timedelta(hours=settings.score_cache_hours)
     job_ids = [j.id for j in jobs]
+    current_hash = compute_profile_hash(profile)
     cached_result = await session.execute(
         select(JobScore).where(
             JobScore.job_id.in_(job_ids),
             JobScore.user_id == user.id,
             JobScore.scored_at > cache_cutoff,
+            (JobScore.profile_hash.is_(None)) | (JobScore.profile_hash == current_hash),
         )
     )
     cached_map = {s.job_id: s for s in cached_result.scalars().all()}
@@ -243,35 +247,66 @@ async def _score_batch(
         logger.error("Claude parsing JSON failed: %s. Output was: %s", e, text)
         return []
 
-    scores: list[JobScore] = []
+    # Phase 2b: bulk UPSERT instead of per-row flush+IntegrityError.
+    # ON CONFLICT DO UPDATE overwrites stale rows whose profile_hash differs;
+    # the WHERE clause leaves matching ones untouched (no churn) and legacy
+    # NULL ones too (NULL != X is unknown, not true).
+    rows = []
     for item in results:
         idx = item.get("job_index", 0)
         if idx >= len(jobs):
             continue
         job = jobs[idx]
-        score_obj = JobScore(
-            job_id=job.id,
-            user_id=user_id,
-            score=min(100, max(0, int(item.get("score", 0)))),
-            ai_analysis=item.get("verdict", ""),
-            breakdown=item.get("breakdown"),
-            profile_hash=profile_hash,
-            model_version=model_version,
-        )
-        try:
-            session.add(score_obj)
-            await session.flush()  # catch IntegrityError early, per-row
-            scores.append(score_obj)
-        except IntegrityError:
-            # Race condition: another task (backfill/scan) already inserted this score
-            await session.rollback()
-            logger.debug("Score for job_id=%s user_id=%s already exists (race), skipping", job.id, user_id)
+        rows.append({
+            "job_id": job.id,
+            "user_id": user_id,
+            "score": min(100, max(0, int(item.get("score", 0)))),
+            "ai_analysis": item.get("verdict", ""),
+            "breakdown": item.get("breakdown"),
+            "profile_hash": profile_hash,
+            "model_version": model_version,
+        })
+
+    if not rows:
+        return []
+
+    stmt = pg_insert(JobScore).values(rows)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["job_id", "user_id"],
+        set_={
+            "score": stmt.excluded.score,
+            "ai_analysis": stmt.excluded.ai_analysis,
+            "breakdown": stmt.excluded.breakdown,
+            "scored_at": datetime.now(),
+            "profile_hash": stmt.excluded.profile_hash,
+            "model_version": stmt.excluded.model_version,
+        },
+        where=JobScore.profile_hash != stmt.excluded.profile_hash,
+    ).returning(JobScore.id, JobScore.job_id)
 
     try:
+        result = await session.execute(stmt)
+        inserted_job_ids = {row.job_id for row in result.all()}
         await session.commit()
-    except IntegrityError:
+    except Exception:
         await session.rollback()
-        logger.warning("_score_batch commit IntegrityError for user_id=%s, partial batch discarded", user_id)
+        logger.exception("_score_batch UPSERT failed for user_id=%s", user_id)
+        return []
+
+    # Build returned ORM-tracked instances mirroring the caller's contract.
+    by_job: dict[int, dict] = {r["job_id"]: r for r in rows}
+    scores: list[JobScore] = []
+    for jid in inserted_job_ids:
+        r = by_job[jid]
+        scores.append(JobScore(
+            job_id=r["job_id"],
+            user_id=r["user_id"],
+            score=r["score"],
+            ai_analysis=r["ai_analysis"],
+            breakdown=r["breakdown"],
+            profile_hash=r["profile_hash"],
+            model_version=r["model_version"],
+        ))
     return scores
 
 

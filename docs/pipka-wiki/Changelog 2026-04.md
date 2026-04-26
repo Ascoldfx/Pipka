@@ -447,4 +447,46 @@ GIN-индекс ускоряет `/api/ops/dedup` и любые будущие 
 
 ---
 
+## 26 апреля 2026 (ночь)
+
+### Phase 2b — read-side инвалидация по profile_hash
+
+Используем поля Phase 2a для постепенного освежения скоринга при смене профиля. Без destructive deletes, без массового удара по AI-квоте при коммите.
+
+**Read filter** в `_backfill_score`, `_score_and_notify` и кеше `score_jobs`:
+
+```python
+WHERE user_id = X
+  AND (profile_hash IS NULL                  -- legacy, не считаем устаревшим
+       OR profile_hash = current_profile_hash)
+```
+
+Mismatched-строки вылетают из множества "уже оценено" и попадают в очередь backfill'а. Legacy NULL — остаются как есть (защита от шторма апгрейда).
+
+**Write path — UPSERT** во всех сайтах JobScore-INSERT:
+
+```python
+INSERT ... ON CONFLICT (job_id, user_id) DO UPDATE
+  SET score=EXCLUDED.score, ai_analysis=EXCLUDED.ai_analysis,
+      profile_hash=EXCLUDED.profile_hash, model_version=EXCLUDED.model_version,
+      scored_at=now()
+  WHERE job_scores.profile_hash != EXCLUDED.profile_hash
+```
+
+`NULL != X` в Postgres = unknown, не TRUE → legacy строки UPDATE'ом не задеваются. Свежий скоринг с тем же hash-ем — no-op (без churn'а scored_at).
+
+**Затронуто:**
+
+- `app/services/scheduler_service.py` — `_score_and_notify` и `_backfill_score`. Pre-filter rejects (model_version=`prefilter`) теперь тоже UPSERT — смена `excluded_keywords` вызовет их пере-оценку.
+- `app/scoring/gemini_matcher.py:score_jobs_gemini` — UPSERT.
+- `app/scoring/nvidia_matcher.py:score_jobs_nvidia` — UPSERT.
+- `app/scoring/matcher.py:_score_batch` — заодно убрал старый per-row `flush+IntegrityError+rollback`, заменён единым batch UPSERT (drop-in совместимый contract — возвращает list[JobScore]).
+- `app/scoring/matcher.py:score_jobs` — кеш-проверка тоже учитывает `profile_hash`.
+
+**Ожидаемое поведение:** пользователь правит профиль → следующий 2-часовой backfill подбирает stale-строки и перезаписывает (cap 1000/тик × 2 backend'а = ~12k/сутки). Реальное-время `_score_and_notify` обновляет mismatched-строки тут же при следующем скане.
+
+Никакого глобального DELETE/UPDATE на endpoint'е смены профиля — quota-friendly.
+
+---
+
 → [[Источники вакансий]] → [[Скоринг]] → [[Сервисы]] → [[API]] → [[Настройки]] → [[База данных]]

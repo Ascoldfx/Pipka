@@ -231,8 +231,18 @@ async def score_jobs_nvidia(
             }
             for job, score, verdict in batch_results
         ]
-        stmt = pg_insert(JobScore).values(rows).on_conflict_do_nothing(
-            index_elements=["job_id", "user_id"]
+        # Phase 2b: UPSERT, overwriting stale rows whose profile_hash differs.
+        stmt = pg_insert(JobScore).values(rows)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["job_id", "user_id"],
+            set_={
+                "score": stmt.excluded.score,
+                "ai_analysis": stmt.excluded.ai_analysis,
+                "scored_at": datetime.now(),
+                "profile_hash": stmt.excluded.profile_hash,
+                "model_version": stmt.excluded.model_version,
+            },
+            where=JobScore.profile_hash != stmt.excluded.profile_hash,
         ).returning(JobScore.id, JobScore.job_id)
         try:
             inserted = (await session.execute(stmt)).all()

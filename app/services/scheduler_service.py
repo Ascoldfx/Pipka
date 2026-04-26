@@ -6,7 +6,8 @@ import time
 from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
 
 from app.bot.formatters import format_job_card
@@ -228,9 +229,17 @@ async def _background_scan(bot_app, trigger: str = "scheduled"):
 
 async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
     """Score new jobs for user, push top ones to Telegram."""
-    # Get already-scored job IDs
+    # Phase 2b: scope "already scored" to rows whose profile_hash matches the
+    # user's current profile. Mismatched rows go back into the scoring queue.
+    profile_hash = compute_profile_hash(user.profile)
     scored_result = await session.execute(
-        select(JobScore.job_id).where(JobScore.user_id == user.id)
+        select(JobScore.job_id).where(
+            JobScore.user_id == user.id,
+            or_(
+                JobScore.profile_hash.is_(None),
+                JobScore.profile_hash == profile_hash,
+            ),
+        )
     )
     already_scored_ids = {row[0] for row in scored_result.fetchall()}
 
@@ -372,8 +381,20 @@ async def _backfill_score():
                 )
                 all_jobs = all_jobs_result.scalars().all()
 
+                # Phase 2b: "already scored" = has a JobScore row whose
+                # profile_hash matches the user's current profile, OR is NULL
+                # (legacy, pre-Phase 2). Rows with mismatched profile_hash are
+                # treated as unscored — they'll be re-evaluated and the UPSERT
+                # below overwrites them with fresh provenance.
+                profile_hash = compute_profile_hash(user.profile)
                 scored_result = await session.execute(
-                    select(JobScore.job_id).where(JobScore.user_id == user.id)
+                    select(JobScore.job_id).where(
+                        JobScore.user_id == user.id,
+                        or_(
+                            JobScore.profile_hash.is_(None),
+                            JobScore.profile_hash == profile_hash,
+                        ),
+                    )
                 )
                 already_scored_ids = {row[0] for row in scored_result.fetchall()}
 
@@ -382,12 +403,7 @@ async def _backfill_score():
 
                 need_ai_t1: list[Job] = []   # director/head/VP + domain
                 need_ai_t2: list[Job] = []   # plain manager + domain (lower priority)
-                skip_batch: list[JobScore] = []
-
-                # Pre-filter rejects also get a profile_hash — when the user
-                # changes excluded_keywords (etc.), these zero-scores will be
-                # invalidated by Phase 2b lookup logic and re-evaluated.
-                profile_hash = compute_profile_hash(user.profile)
+                skip_rows: list[dict] = []
 
                 for job in all_jobs:
                     if job.id in already_scored_ids:
@@ -404,23 +420,38 @@ async def _backfill_score():
                         # model_version='prefilter' marks the source so AI rescore
                         # paths (recheck_zero_scores) can distinguish rule-based
                         # zeros from genuine AI-rated zeros.
-                        skip_batch.append(JobScore(
-                            job_id=job.id,
-                            user_id=user.id,
-                            score=0,
-                            ai_analysis=None,
-                            profile_hash=profile_hash,
-                            model_version="prefilter",
-                        ))
+                        skip_rows.append({
+                            "job_id": job.id,
+                            "user_id": user.id,
+                            "score": 0,
+                            "ai_analysis": None,
+                            "profile_hash": profile_hash,
+                            "model_version": "prefilter",
+                        })
 
-                # Bulk-insert hard rejects (no API calls) — cap at 2000 per run
-                if skip_batch:
-                    for rec in skip_batch[:2000]:
-                        session.add(rec)
+                # Bulk UPSERT hard rejects (no API calls) — cap at 2000 per run.
+                # ON CONFLICT DO UPDATE only triggers when the existing row's
+                # profile_hash differs from the incoming one, keeping legacy
+                # NULL rows untouched (NULL != X is unknown, not true).
+                if skip_rows:
+                    capped = skip_rows[:2000]
+                    stmt = pg_insert(JobScore).values(capped)
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=["job_id", "user_id"],
+                        set_={
+                            "score": stmt.excluded.score,
+                            "ai_analysis": stmt.excluded.ai_analysis,
+                            "scored_at": func.now(),
+                            "profile_hash": stmt.excluded.profile_hash,
+                            "model_version": stmt.excluded.model_version,
+                        },
+                        where=JobScore.profile_hash != stmt.excluded.profile_hash,
+                    )
+                    await session.execute(stmt)
                     await session.commit()
                     logger.info(
                         "Backfill: marked %d jobs as rejected (pre-filter) for user %s",
-                        min(len(skip_batch), 2000), user.telegram_id,
+                        len(capped), user.telegram_id,
                     )
 
                 # Tier 1 first: director / head of / VP
