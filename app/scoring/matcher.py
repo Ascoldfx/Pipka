@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.job import Job, JobScore
 from app.models.user import User, UserProfile
+from app.scoring.profile_hash import MODEL_CLAUDE, compute_profile_hash
 
 logger = logging.getLogger(__name__)
 
@@ -157,11 +158,16 @@ async def score_jobs(
 
     # Batch score
     profile_text = build_profile_text(profile)
+    profile_hash = compute_profile_hash(profile)
+    model_version = MODEL_CLAUDE()
     new_scores: list[JobScore] = []
 
     for i in range(0, len(to_score), settings.max_jobs_per_scoring_batch):
         batch = to_score[i : i + settings.max_jobs_per_scoring_batch]
-        batch_scores = await _score_batch(batch, profile_text, user.id, session)
+        batch_scores = await _score_batch(
+            batch, profile_text, user.id, session,
+            profile_hash=profile_hash, model_version=model_version,
+        )
         new_scores.extend(batch_scores)
 
     all_scores = cached_scores + new_scores
@@ -170,7 +176,13 @@ async def score_jobs(
 
 
 async def _score_batch(
-    jobs: list[Job], profile_text: str, user_id: int, session: AsyncSession
+    jobs: list[Job],
+    profile_text: str,
+    user_id: int,
+    session: AsyncSession,
+    *,
+    profile_hash: str | None = None,
+    model_version: str | None = None,
 ) -> list[JobScore]:
     jobs_text = ""
     for idx, job in enumerate(jobs):
@@ -243,6 +255,8 @@ async def _score_batch(
             score=min(100, max(0, int(item.get("score", 0)))),
             ai_analysis=item.get("verdict", ""),
             breakdown=item.get("breakdown"),
+            profile_hash=profile_hash,
+            model_version=model_version,
         )
         try:
             session.add(score_obj)

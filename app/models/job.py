@@ -56,6 +56,9 @@ class JobScore(Base):
         # NVIDIA idle rescorer (priority b) walks stale successful scores
         # ordered by scored_at — index lets us skip the seq scan.
         Index("ix_job_scores_user_scored_at", "user_id", "scored_at"),
+        # Phase 2 cache lookups: "is this (job, profile, model) tuple already
+        # scored?" Compound covers both equality probes and invalidation scans.
+        Index("ix_job_scores_user_profile_model", "user_id", "profile_hash", "model_version"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -65,6 +68,12 @@ class JobScore(Base):
     ai_analysis: Mapped[str | None] = mapped_column(Text)
     breakdown: Mapped[dict | None] = mapped_column(JSON)  # {"relevance": 85, "language_fit": 70, ...}
     scored_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    # Phase 2 — fingerprints for cache invalidation.
+    # profile_hash: sha256 of stable JSON of scoring-relevant profile fields.
+    # model_version: e.g. "gemini-3.1-flash-lite-preview" or "claude-sonnet-4-20250514".
+    # Both nullable for legacy rows scored before the migration.
+    profile_hash: Mapped[str | None] = mapped_column(String(64), index=False)
+    model_version: Mapped[str | None] = mapped_column(String(64), index=False)
 
     job: Mapped["Job"] = relationship(back_populates="scores")
     user: Mapped["User"] = relationship(back_populates="scores")

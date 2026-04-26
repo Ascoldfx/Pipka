@@ -418,4 +418,33 @@ GIN-индекс ускоряет `/api/ops/dedup` и любые будущие 
 
 ---
 
-→ [[Источники вакансий]] → [[Скоринг]] → [[Сервисы]] → [[API]] → [[Настройки]]
+## 26 апреля 2026 (поздний вечер)
+
+### Bootstrap Alembic + Phase 2 (profile_hash + model_version)
+
+**1. Alembic как источник истины схемы.** `app/database.py:init_db()` теперь не вызывает `Base.metadata.create_all()` напрямую, а запускает `command.upgrade(cfg, "head")` через `run_in_executor` (alembic — sync). Прежний путь оставался формально нелегальным (CLAUDE.md → "только Alembic", но `create_all` использовался) — теперь приведён в соответствие.
+
+Появились две миграции:
+
+- **`0001_baseline.py`** — идемпотентный `Base.metadata.create_all()` под `op.get_bind()`. На fresh dev DB разворачивает всю схему. На проде (где все 8 таблиц + индексы уже существуют) — no-op, потому что `create_all` пропускает существующие таблицы. Downgrade рейзит ошибку (защита от случайного DROP всего).
+- **`0002_phase2_profile_hash.py`** — добавляет колонки `profile_hash VARCHAR(64) NULL` и `model_version VARCHAR(64) NULL` в `job_scores`, plus composite index `ix_job_scores_user_profile_model (user_id, profile_hash, model_version)`.
+
+При первом старте контейнера на проде Alembic создаст таблицу `alembic_version`, отметит обе миграции как применённые (baseline — no-op, Phase 2 — `ALTER TABLE` за <50мс на 7700 строк).
+
+**2. `app/scoring/profile_hash.py`** — новый модуль:
+
+- `compute_profile_hash(profile)` — sha256 поверх стабильного JSON из 10 scoring-relevant полей (`resume_text`, `target_titles`, `languages`, `work_mode`, `preferred_countries`, `excluded_keywords`, `english_only`, `target_companies`, `min_salary`, `experience_years`). Whitespace стрипается, списки сортируются — тривиальные правки ("Sales Manager " → "Sales Manager") не инвалидируют кеш.
+- `MODEL_GEMINI()`, `MODEL_CLAUDE()`, `MODEL_NVIDIA()` — фабрики идентификатора бэкенда, читают `settings.{gemini,claude,nvidia}_model` (env-only смена модели автоматически инвалидирует кеш).
+
+**3. Все JobScore-write пути проставляют оба поля** (`app/scoring/{matcher,gemini_matcher,nvidia_matcher}.py`, `app/services/scheduler_service.py`):
+
+- Gemini real-time + backfill + recheck → `model_version="gemini:<model>"`.
+- Claude (fallback) → `model_version="claude:<model>"`.
+- NVIDIA score_jobs + idle_rescore (priority a + b) → `model_version="nvidia:<model>"`.
+- Pre-filter rejects (`score=0`) в `_backfill_score` → `model_version="prefilter"`. Маркер позволяет AI rescore-путям отличать rule-based нули от настоящих AI-нулей.
+
+**Текущее поведение чтения не изменено.** Колонки только заполняются; инвалидация (Phase 2b) — следующим коммитом, чтобы избежать одновременной массовой переоценки. Существующие 7700 строк остаются с `profile_hash=NULL, model_version=NULL` — они в применении не отличаются от свежих.
+
+---
+
+→ [[Источники вакансий]] → [[Скоринг]] → [[Сервисы]] → [[API]] → [[Настройки]] → [[База данных]]

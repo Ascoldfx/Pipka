@@ -54,11 +54,37 @@ async def get_session() -> AsyncSession:
 
 
 async def init_db():
-    from app.models import Base
-    from sqlalchemy import text
+    """Bring the database schema to ``head`` via Alembic.
+
+    Replaces the legacy ``Base.metadata.create_all()`` call. On a fresh
+    database, runs every migration from baseline forward. On an
+    already-provisioned production DB, the baseline migration is itself
+    idempotent (calls ``create_all`` against existing tables = no-op),
+    and subsequent migrations apply normally.
+
+    Alembic uses sync engines, so we run it inside ``run_in_executor`` to
+    avoid blocking the event loop during startup.
+    """
+    import asyncio
     import logging
+    from pathlib import Path
 
-    async with _get_engine().begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    from alembic import command
+    from alembic.config import Config
 
-    # База данных будет управляться через мануальные миграции Alembic
+    logger = logging.getLogger(__name__)
+
+    def _run_alembic_upgrade() -> None:
+        # alembic.ini sits at the repo root; resolve relative to this file.
+        ini_path = Path(__file__).resolve().parent.parent / "alembic.ini"
+        cfg = Config(str(ini_path))
+        # Override the sqlalchemy.url so Alembic uses the same DB as the app.
+        cfg.set_main_option("sqlalchemy.url", settings.database_url)
+        command.upgrade(cfg, "head")
+
+    try:
+        await asyncio.get_running_loop().run_in_executor(None, _run_alembic_upgrade)
+        logger.info("Alembic migrations applied (head)")
+    except Exception:
+        logger.exception("Alembic upgrade failed during init_db")
+        raise

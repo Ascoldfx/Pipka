@@ -38,6 +38,7 @@ from app.config import settings
 from app.models.job import Job, JobScore
 from app.models.user import User
 from app.scoring.matcher import SCORING_PROMPT, build_profile_text
+from app.scoring.profile_hash import MODEL_GEMINI, compute_profile_hash
 from app.services.ops_service import record_ops_event
 
 logger = logging.getLogger(__name__)
@@ -289,6 +290,8 @@ async def score_jobs_gemini(
         return []
 
     profile_text = build_profile_text(profile)
+    profile_hash = compute_profile_hash(profile)
+    model_version = MODEL_GEMINI()
     new_scores: list[JobScore] = []
 
     for i in range(0, len(jobs), settings.max_jobs_per_scoring_batch):
@@ -311,6 +314,8 @@ async def score_jobs_gemini(
                 "user_id": user.id,
                 "score": score,
                 "ai_analysis": verdict,
+                "profile_hash": profile_hash,
+                "model_version": model_version,
             }
             for job, score, verdict in batch_results
         ]
@@ -390,6 +395,8 @@ async def recheck_zero_scores(
 
     jobs_list = [jobs_map[jid] for jid in job_ids if jid in jobs_map]
     profile_text = build_profile_text(profile)
+    profile_hash = compute_profile_hash(profile)
+    model_version = MODEL_GEMINI()
 
     checked = 0
     upgraded = 0
@@ -409,6 +416,8 @@ async def recheck_zero_scores(
             # Non-NULL ai_analysis marks this job as "seen by AI" — won't be rechecked
             existing.ai_analysis = verdict if verdict else "✓ confirmed"
             existing.scored_at = datetime.now()
+            existing.profile_hash = profile_hash
+            existing.model_version = model_version
             checked += 1
             if score > 0:
                 upgraded += 1

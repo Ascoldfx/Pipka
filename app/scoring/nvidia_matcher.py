@@ -32,6 +32,7 @@ from app.config import settings
 from app.models.job import Job, JobScore
 from app.models.user import User
 from app.scoring.matcher import SCORING_PROMPT, build_profile_text
+from app.scoring.profile_hash import MODEL_NVIDIA, compute_profile_hash
 from app.services.ops_service import record_ops_event
 
 logger = logging.getLogger(__name__)
@@ -208,6 +209,8 @@ async def score_jobs_nvidia(
         return []
 
     profile_text = build_profile_text(profile)
+    profile_hash = compute_profile_hash(profile)
+    model_version = MODEL_NVIDIA()
     new_scores: list[JobScore] = []
     batch_size = settings.max_jobs_per_scoring_batch
 
@@ -223,6 +226,8 @@ async def score_jobs_nvidia(
                 "user_id": user.id,
                 "score": score,
                 "ai_analysis": verdict or "✓ confirmed (NVIDIA)",
+                "profile_hash": profile_hash,
+                "model_version": model_version,
             }
             for job, score, verdict in batch_results
         ]
@@ -265,6 +270,8 @@ async def idle_rescore_for_user(
         return 0, 0, 0
 
     profile_text = build_profile_text(profile)
+    profile_hash = compute_profile_hash(profile)
+    model_version = MODEL_NVIDIA()
     budget = settings.nvidia_max_per_run
     batch_size = settings.max_jobs_per_scoring_batch
     country = settings.nvidia_country.lower()
@@ -302,6 +309,8 @@ async def idle_rescore_for_user(
             js.score = score
             js.ai_analysis = verdict if verdict else "✓ confirmed (NVIDIA)"
             js.scored_at = datetime.now()
+            js.profile_hash = profile_hash
+            js.model_version = model_version
             checked += 1
             if score > 0:
                 upgraded += 1
@@ -340,6 +349,8 @@ async def idle_rescore_for_user(
                 js.score = score
                 js.ai_analysis = verdict if verdict else js.ai_analysis
                 js.scored_at = datetime.now()
+                js.profile_hash = profile_hash
+                js.model_version = model_version
                 refreshed += 1
             await session.commit()
             budget -= len(batch)

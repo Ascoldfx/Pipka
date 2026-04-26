@@ -18,6 +18,7 @@ from app.models.job import Job, JobScore
 from app.models.user import User
 from app.scoring.gemini_matcher import score_jobs_gemini
 from app.scoring.matcher import score_jobs
+from app.scoring.profile_hash import compute_profile_hash
 from app.scoring.rules import pre_filter
 from app.services.backup_service import run_backup
 from app.services.ops_service import record_ops_event
@@ -383,6 +384,11 @@ async def _backfill_score():
                 need_ai_t2: list[Job] = []   # plain manager + domain (lower priority)
                 skip_batch: list[JobScore] = []
 
+                # Pre-filter rejects also get a profile_hash — when the user
+                # changes excluded_keywords (etc.), these zero-scores will be
+                # invalidated by Phase 2b lookup logic and re-evaluated.
+                profile_hash = compute_profile_hash(user.profile)
+
                 for job in all_jobs:
                     if job.id in already_scored_ids:
                         continue
@@ -394,12 +400,17 @@ async def _backfill_score():
                     elif not passed and bucket == "manager_tier2":
                         need_ai_t2.append(job)
                     else:
-                        # Hard reject — mark score=0 so it never re-enters the queue
+                        # Hard reject — mark score=0 so it never re-enters the queue.
+                        # model_version='prefilter' marks the source so AI rescore
+                        # paths (recheck_zero_scores) can distinguish rule-based
+                        # zeros from genuine AI-rated zeros.
                         skip_batch.append(JobScore(
                             job_id=job.id,
                             user_id=user.id,
                             score=0,
                             ai_analysis=None,
+                            profile_hash=profile_hash,
+                            model_version="prefilter",
                         ))
 
                 # Bulk-insert hard rejects (no API calls) — cap at 2000 per run
