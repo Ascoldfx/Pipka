@@ -239,16 +239,30 @@ class JobAggregator:
         }
 
         # Bulk upsert — replaces N+1 SELECT pattern that previously made one query
-        # per filtered raw job. Now: 1 SELECT for existing + 1 INSERT ON CONFLICT
-        # DO NOTHING for new + 1 SELECT for newly-assigned IDs. Total = 3 queries
-        # regardless of batch size.
+        # per filtered raw job. Strategy: SELECT existing rows by dedup_hash
+        # in chunks (asyncpg/PostgreSQL prepared-statement size grows linearly
+        # with parameter count, and a 1500-param SELECT under concurrent CPU
+        # load can race the statement_timeout); then bulk INSERT new rows with
+        # ON CONFLICT DO NOTHING; then SELECT the freshly-inserted rows back to
+        # get ORM-tracked instances with assigned PKs.
+        UPSERT_CHUNK = 400
+
         all_hashes = [r.dedup_hash for r in filtered]
         existing_by_hash: dict[str, Job] = {}
+
+        async def _fetch_chunked(hashes: list[str]) -> dict[str, Job]:
+            out: dict[str, Job] = {}
+            for i in range(0, len(hashes), UPSERT_CHUNK):
+                chunk = hashes[i : i + UPSERT_CHUNK]
+                q = await session.execute(
+                    select(Job).where(Job.dedup_hash.in_(chunk))
+                )
+                for j in q.scalars().all():
+                    out[j.dedup_hash] = j
+            return out
+
         if all_hashes:
-            existing_q = await session.execute(
-                select(Job).where(Job.dedup_hash.in_(all_hashes))
-            )
-            existing_by_hash = {j.dedup_hash: j for j in existing_q.scalars().all()}
+            existing_by_hash = await _fetch_chunked(all_hashes)
 
         new_rows = [
             {
@@ -273,19 +287,16 @@ class JobAggregator:
         ]
 
         if new_rows:
-            stmt = pg_insert(Job).values(new_rows).on_conflict_do_nothing(
-                index_elements=["dedup_hash"]
-            )
-            await session.execute(stmt)
+            for i in range(0, len(new_rows), UPSERT_CHUNK):
+                chunk = new_rows[i : i + UPSERT_CHUNK]
+                stmt = pg_insert(Job).values(chunk).on_conflict_do_nothing(
+                    index_elements=["dedup_hash"]
+                )
+                await session.execute(stmt)
             await session.commit()
-            # Fetch newly-inserted rows so the caller gets ORM-tracked Job
-            # instances with assigned PKs.
+            # Re-fetch newly-inserted rows in chunks so ORM has assigned PKs.
             new_hashes = [r["dedup_hash"] for r in new_rows]
-            new_q = await session.execute(
-                select(Job).where(Job.dedup_hash.in_(new_hashes))
-            )
-            for j in new_q.scalars().all():
-                existing_by_hash[j.dedup_hash] = j
+            existing_by_hash.update(await _fetch_chunked(new_hashes))
         else:
             await session.commit()
 
