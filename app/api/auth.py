@@ -75,10 +75,16 @@ async def logout(request: Request):
 
 @router.get("/api/me")
 async def get_me(request: Request):
-    """Return current user info from session."""
+    """Return current user info from session.
+
+    Includes the CSRF token so the SPA can echo it back via the
+    ``X-CSRF-Token`` header on unsafe requests. The token is also delivered
+    as a JS-readable cookie by ``CSRFMiddleware`` — either source works.
+    """
     user_id = request.session.get("user_id")
+    csrf_token = request.session.get("csrf_token", "")
     if not user_id:
-        return {"authenticated": False, "role": "guest"}
+        return {"authenticated": False, "role": "guest", "csrf_token": csrf_token}
 
     return {
         "authenticated": True,
@@ -87,4 +93,5 @@ async def get_me(request: Request):
         "name": request.session.get("user_name", ""),
         "avatar": request.session.get("user_avatar", ""),
         "role": request.session.get("user_role", "user"),
+        "csrf_token": csrf_token,
     }

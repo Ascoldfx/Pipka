@@ -10,12 +10,24 @@ _async_session = None
 def _get_engine():
     global _engine
     if _engine is None:
+        # Per-statement guards so a runaway query (e.g. ``ILIKE '%foo%'`` over
+        # the full jobs table) can't pin a connection forever and starve the
+        # pool. Tuned conservatively — most legit queries finish in <100ms.
+        connect_args: dict = {}
+        if settings.database_url.startswith("postgresql"):
+            connect_args["server_settings"] = {
+                "statement_timeout": "10000",                  # 10s per query
+                "lock_timeout": "3000",                        # 3s waiting on locks
+                "idle_in_transaction_session_timeout": "60000",  # 60s idle txn
+                "application_name": "pipka",
+            }
         _engine = create_async_engine(
             settings.database_url,
             echo=False,
-            pool_size=5,
-            max_overflow=10,
+            pool_size=10,
+            max_overflow=20,
             pool_pre_ping=True,
+            connect_args=connect_args,
         )
     return _engine
 

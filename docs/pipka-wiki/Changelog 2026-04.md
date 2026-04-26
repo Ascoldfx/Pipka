@@ -366,4 +366,28 @@ B2_ENDPOINT=https://s3.us-west-004.backblazeb2.com   # при необходим
 
 ---
 
+## 26 апреля 2026
+
+### Performance + security: bulk upsert, CSRF, statement_timeout, новые индексы
+
+Три параллельных правки по итогам аудита.
+
+**1. Bulk upsert в `app/sources/aggregator.py`.** Удалён N+1 паттерн (per-row `SELECT WHERE dedup_hash = ?`), который генерировал по 500–800 запросов на каждый скан. По `pg_stat_user_indexes` это давало 186 000 сканов `ix_jobs_dedup_hash` за день. Теперь один `SELECT WHERE dedup_hash IN (...)` для существующих + один `pg_insert(...).on_conflict_do_nothing(index_elements=["dedup_hash"])` для новых + один `SELECT` для возврата ID. Итого 3 запроса независимо от размера батча.
+
+**2. CSRF middleware (`app/main.py`).** Double-submit pattern: `CSRFMiddleware` лениво генерирует токен в session при первом GET, ставит JS-readable cookie `csrf_token`, требует совпадения header `X-CSRF-Token` на POST/PUT/PATCH/DELETE. Исключения: `/auth/*` (Google callback), `/health`. JS-обёртка fetch в `app/static/js/app.js` подмешивает заголовок автоматически — call-сайты не меняются. `/api/me` теперь возвращает `csrf_token` в ответе как fallback. SameSite=lax уже стоял на session-cookie, но не защищал от form-сабмитов — теперь защищает.
+
+**3. Connection-level guards + новые индексы (`app/database.py`, `app/models/job.py`).**
+
+`statement_timeout=10s, lock_timeout=3s, idle_in_transaction_session_timeout=60s, application_name=pipka` через `connect_args.server_settings` для PostgreSQL. Pool: 5+10 → 10+20.
+
+Новые индексы (созданы на проде через `CREATE INDEX CONCURRENTLY` без блокировки таблиц, добавлены в модели для новых установок):
+
+- `ix_jobs_scraped_at (scraped_at)` — backfill scorer + cleanup ходят по `Job.scraped_at >= cutoff`. Раньше seq scan.
+- `ix_jobs_country_scraped (country, scraped_at)` — NVIDIA rescore + dashboard country-фильтры. Composite убирает второй проход.
+- `ix_job_scores_user_scored_at (user_id, scored_at)` — NVIDIA priority (b) ходит по `WHERE user_id AND scored_at < stale_cutoff ORDER BY scored_at`.
+
+**Аудит-список (что осталось):** Sentry/Prometheus, разнос `dashboard.py` по файлам, Alembic bootstrap (нужен для Phase 2 profile_hash), `raw_data` JSON→JSONB, rate-limit на `/api/jobs/{id}/analyze`, distributed lock для scheduler при горизонтальном масштабировании.
+
+---
+
 → [[Источники вакансий]] → [[Скоринг]] → [[Сервисы]] → [[API]]

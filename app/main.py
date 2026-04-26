@@ -1,8 +1,10 @@
 import logging
+import secrets
 from contextlib import asynccontextmanager
 import time
 
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -14,6 +16,76 @@ from app.config import settings
 from app.database import init_db
 from app.services.ops_service import record_ops_event
 _access_log = logging.getLogger("pipka.access")
+
+# Methods that mutate server state and therefore require a CSRF token.
+_UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+# Endpoints that are exempt from CSRF (no session cookie present, or external
+# redirect target). The OAuth callback is hit by Google as a top-level GET.
+_CSRF_EXEMPT_PREFIXES = ("/auth/", "/health")
+
+
+class CSRFMiddleware(BaseHTTPMiddleware):
+    """Double-submit CSRF protection.
+
+    On every request we ensure ``request.session["csrf_token"]`` exists. A
+    matching ``csrf_token`` cookie is set on the response (NOT HttpOnly so JS
+    can read it). On unsafe methods we require an ``X-CSRF-Token`` header that
+    equals the session token.
+
+    Why double-submit and not signed-token: SessionMiddleware already signs the
+    cookie payload (incl. our token) — an attacker can't forge a session, so
+    matching a JS-readable cookie against the session value is sufficient.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        is_exempt = any(path.startswith(p) for p in _CSRF_EXEMPT_PREFIXES)
+
+        # Lazily mint a per-session token. Must run AFTER SessionMiddleware
+        # populates request.session — that's guaranteed because Starlette
+        # walks middlewares outside-in (SessionMiddleware added first → outer).
+        try:
+            session = request.session
+        except AssertionError:
+            # No session middleware on this path (shouldn't happen post-mount)
+            session = None
+
+        token = None
+        if session is not None:
+            token = session.get("csrf_token")
+            if not token:
+                token = secrets.token_urlsafe(32)
+                session["csrf_token"] = token
+
+        if (
+            request.method in _UNSAFE_METHODS
+            and not is_exempt
+            and session is not None
+        ):
+            sent = request.headers.get("x-csrf-token", "")
+            if not sent or not secrets.compare_digest(sent, token or ""):
+                return JSONResponse(
+                    {"detail": "CSRF token missing or invalid"},
+                    status_code=403,
+                )
+
+        response: Response = await call_next(request)
+
+        # Refresh the cookie on every response so the JS layer always has a
+        # current value. Path=/, SameSite=Lax matches session cookie scope.
+        if token:
+            response.set_cookie(
+                "csrf_token",
+                token,
+                max_age=30 * 24 * 3600,
+                httponly=False,
+                samesite="lax",
+                secure=True,
+                path="/",
+            )
+
+        return response
 
 
 class NoCacheAPIMiddleware(BaseHTTPMiddleware):
@@ -91,6 +163,10 @@ app.add_middleware(
     same_site="lax",
     https_only=True,
 )
+# Starlette wraps middleware so the FIRST one added is outermost (runs first
+# on incoming requests). We need: Session → CSRF → NoCache → routes, so
+# Session was added above, CSRF here, NoCache last.
+app.add_middleware(CSRFMiddleware)
 app.add_middleware(NoCacheAPIMiddleware)
 
 app.include_router(auth_router)

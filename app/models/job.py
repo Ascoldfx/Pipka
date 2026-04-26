@@ -13,6 +13,11 @@ class Job(Base):
         Index("ix_jobs_posted_at_desc", "posted_at"),
         Index("ix_jobs_source", "source"),
         Index("ix_jobs_country", "country"),
+        # Hot path: backfill scorer + cleanup walk all jobs newer than N days.
+        Index("ix_jobs_scraped_at", "scraped_at"),
+        # NVIDIA idle rescorer + dashboard country filters scope by country
+        # then by recency in the same WHERE clause.
+        Index("ix_jobs_country_scraped", "country", "scraped_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -43,6 +48,9 @@ class JobScore(Base):
         # Hot paths: LEFT JOIN scores on (job_id, user_id) in get_jobs + per-user aggregates in get_stats.
         Index("ix_job_scores_user_job", "user_id", "job_id"),
         Index("ix_job_scores_user_score", "user_id", "score"),
+        # NVIDIA idle rescorer (priority b) walks stale successful scores
+        # ordered by scored_at — index lets us skip the seq scan.
+        Index("ix_job_scores_user_scored_at", "user_id", "scored_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

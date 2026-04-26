@@ -2,6 +2,27 @@
 const S = { page:1, perPage:50, sort:'score', order:'desc', totalPages:1, tabStatus:'', role:'guest', authenticated:false, activeTab:'jobs', opsWindow:24 };
 const $ = id => document.getElementById(id);
 
+/* ── CSRF: read JS-readable cookie set by CSRFMiddleware and inject the
+   X-CSRF-Token header on every unsafe (state-changing) request. We wrap the
+   global fetch once so call sites stay unchanged. ── */
+function _readCsrfCookie() {
+  const m = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : '';
+}
+const _UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const _origFetch = window.fetch.bind(window);
+window.fetch = (input, init = {}) => {
+  const method = (init.method || (typeof input === 'string' ? 'GET' : input.method) || 'GET').toUpperCase();
+  if (_UNSAFE.has(method)) {
+    const token = _readCsrfCookie();
+    if (token) {
+      init.headers = new Headers(init.headers || {});
+      if (!init.headers.has('X-CSRF-Token')) init.headers.set('X-CSRF-Token', token);
+    }
+  }
+  return _origFetch(input, init);
+};
+
 /* ── Tabs ── */
 function switchTab(name, save=true) {
   S.activeTab = name;

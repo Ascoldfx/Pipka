@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -237,33 +238,63 @@ class JobAggregator:
             "sources": source_stats,
         }
 
-        # Upsert into DB
-        db_jobs: list[Job] = []
-        for raw in filtered:
-            existing = await session.execute(select(Job).where(Job.dedup_hash == raw.dedup_hash))
-            job_row = existing.scalar_one_or_none()
-            if job_row is None:
-                job_row = Job(
-                    external_id=raw.external_id,
-                    source=raw.source,
-                    title=raw.title,
-                    company_name=raw.company_name,
-                    location=raw.location,
-                    country=raw.country,
-                    description=raw.description,
-                    salary_min=raw.salary_min,
-                    salary_max=raw.salary_max,
-                    salary_currency=raw.salary_currency,
-                    url=raw.url,
-                    is_remote=raw.is_remote,
-                    posted_at=raw.posted_at,
-                    raw_data=raw.raw_data,
-                    dedup_hash=raw.dedup_hash,
-                )
-                session.add(job_row)
-            db_jobs.append(job_row)
+        # Bulk upsert — replaces N+1 SELECT pattern that previously made one query
+        # per filtered raw job. Now: 1 SELECT for existing + 1 INSERT ON CONFLICT
+        # DO NOTHING for new + 1 SELECT for newly-assigned IDs. Total = 3 queries
+        # regardless of batch size.
+        all_hashes = [r.dedup_hash for r in filtered]
+        existing_by_hash: dict[str, Job] = {}
+        if all_hashes:
+            existing_q = await session.execute(
+                select(Job).where(Job.dedup_hash.in_(all_hashes))
+            )
+            existing_by_hash = {j.dedup_hash: j for j in existing_q.scalars().all()}
 
-        await session.commit()
+        new_rows = [
+            {
+                "external_id": r.external_id,
+                "source": r.source,
+                "title": r.title,
+                "company_name": r.company_name,
+                "location": r.location,
+                "country": r.country,
+                "description": r.description,
+                "salary_min": r.salary_min,
+                "salary_max": r.salary_max,
+                "salary_currency": r.salary_currency,
+                "url": r.url,
+                "is_remote": r.is_remote,
+                "posted_at": r.posted_at,
+                "raw_data": r.raw_data,
+                "dedup_hash": r.dedup_hash,
+            }
+            for r in filtered
+            if r.dedup_hash not in existing_by_hash
+        ]
+
+        if new_rows:
+            stmt = pg_insert(Job).values(new_rows).on_conflict_do_nothing(
+                index_elements=["dedup_hash"]
+            )
+            await session.execute(stmt)
+            await session.commit()
+            # Fetch newly-inserted rows so the caller gets ORM-tracked Job
+            # instances with assigned PKs.
+            new_hashes = [r["dedup_hash"] for r in new_rows]
+            new_q = await session.execute(
+                select(Job).where(Job.dedup_hash.in_(new_hashes))
+            )
+            for j in new_q.scalars().all():
+                existing_by_hash[j.dedup_hash] = j
+        else:
+            await session.commit()
+
+        # Preserve original ordering (caller relies on filtered[] order)
+        db_jobs: list[Job] = [
+            existing_by_hash[r.dedup_hash]
+            for r in filtered
+            if r.dedup_hash in existing_by_hash
+        ]
         # Sort: newest first
         db_jobs.sort(key=lambda j: j.posted_at or datetime.min, reverse=True)
         return db_jobs
