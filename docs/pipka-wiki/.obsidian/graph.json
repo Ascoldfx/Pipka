@@ -7,11 +7,30 @@
   "showOrphans": true,
   "collapse-color-groups": false,
   "colorGroups": [
-    { "query": "tag:#database", "color": { "a": 1, "rgb": 14701138 } },
-    { "query": "tag:#service", "color": { "a": 1, "rgb": 4349040 } },
-    { "query": "tag:#api", "color": { "a": 1, "rgb": 14940673 } },
-    { "query": "tag:#config", "color": { "a": 1, "rgb": 9699539 } },
-    { "query": "tag:#scoring", "color": { "a": 1, "rgb": 16744272 } }
+    {
+      "query": "tag:#api OR tag:#auth OR tag:#security OR tag:#ratelimit",
+      "color": { "a": 1, "rgb": 5212927 }
+    },
+    {
+      "query": "tag:#service OR tag:#bot OR tag:#tracker",
+      "color": { "a": 1, "rgb": 5294200 }
+    },
+    {
+      "query": "tag:#scoring OR tag:#cache OR tag:#dedup",
+      "color": { "a": 1, "rgb": 16747586 }
+    },
+    {
+      "query": "tag:#deploy OR tag:#backup OR tag:#alembic OR tag:#database",
+      "color": { "a": 1, "rgb": 11640025 }
+    },
+    {
+      "query": "tag:#observability OR tag:#ops",
+      "color": { "a": 1, "rgb": 16041008 }
+    },
+    {
+      "query": "tag:#config OR tag:#tests OR tag:#changelog OR tag:#roadmap OR file:\"index\"",
+      "color": { "a": 1, "rgb": 5294335 }
+    }
   ],
   "collapse-display": false,
   "showArrow": true,
