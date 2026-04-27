@@ -2,7 +2,7 @@
 
 # API Endpoints
 
-Все эндпоинты на `https://pipka.net`
+Все эндпоинты на `https://pipka.net`. После рефакторинга `dashboard.py` (26.04.2026) разнесены по 8 файлам в `app/api/` (см. [[Архитектура]]). Один `APIRouter` на файл, все включаются в `app/main.py`.
 
 ## Auth (`app/api/auth.py`)
 
@@ -10,61 +10,94 @@
 |-------|------|---------|
 | GET | `/auth/google/login` | Редирект на Google OAuth |
 | GET | `/auth/google/callback` | Callback от Google, создаёт сессию |
-| GET | `/auth/logout` | Очищает сессию, редирект на `/` |
-| GET | `/api/me` | Текущий пользователь (`{authenticated, role, name, email, avatar_url}`) |
+| GET | `/auth/logout` | Очищает сессию, редирект `/` |
+| GET | `/api/me` | `{authenticated, role, name, email, avatar, csrf_token}` |
 
-### Сессия
-Cookie `pipka_session` (signed, 30 дней, HTTPS-only, SameSite=lax).
+Подробнее — [[Auth]].
 
----
+## Pages (`app/api/pages.py`)
 
-## Dashboard (`app/api/dashboard.py`)
+| Метод | Путь | Возвращает |
+|-------|------|-----------|
+| GET | `/` | dashboard.html — SPA |
+| GET | `/llms.txt` | манифест для AI-краулеров |
+| GET | `/infographic` | infographic.html — публичная инфографика |
 
-### Вакансии
+## Jobs (`app/api/jobs.py`)
+
+### Просмотр
 
 | Метод | Путь | Параметры | Описание |
 |-------|------|-----------|---------|
-| GET | `/api/jobs` | `page`, `per_page`, `sort`, `order`, `search`, `country`, `countries` (comma-sep), `source`, `min_score`, `status`, `region` | Список вакансий с пагинацией |
-| POST | `/api/jobs/{job_id}/action` | `action=save/applied/reject` | Действие с вакансией |
-| GET | `/api/jobs/{job_id}/analyze` | — | Детальный AI-анализ вакансии |
+| GET | `/api/countries` | — | Список стран с количеством вакансий |
+| GET | `/api/jobs` | `page`, `per_page`, `sort`, `order`, `search`, `country`, `countries`, `source`, `min_score`, `status`, `region` | Список вакансий с пагинацией |
 
-> **Значения `source`:** `adzuna`, `linkedin`, `indeed`, `glassdoor`, `arbeitnow`, `remotive`, `arbeitsagentur`, `xing`, `berlinstartupjobs`, `wttj`, `watchlist`
+> **Значения `source`:** `adzuna`, `linkedin`, `indeed`, `glassdoor`, `arbeitnow`, `remotive`, `arbeitsagentur`, `xing`, `berlinstartupjobs`, `wttj`, `jooble`, `watchlist`
 > **Значения `region`:** `saxony`, `germany`, `dach`, `europe`, `cee`
 > **Значения `sort`:** `score`, `date`, `salary`, `title`, `company`
 
-### Статистика и прочее
+### Действия
+
+| Метод | Путь | Параметры | Описание |
+|-------|------|-----------|---------|
+| POST | `/api/jobs/{job_id}/action` | `action=save/applied/reject` | Действие через [[Трекер]] |
+| GET | `/api/jobs/{job_id}/analyze` | — | AI-анализ через Gemini/Claude. **Rate-limit: 30/час/user** ([[Rate limiting]]) |
+
+POST требует CSRF-заголовок — [[Безопасность#3-csrf-double-submit]].
+
+## Stats (`app/api/stats.py`)
+
+| Метод | Путь | Кэш | Описание |
+|-------|------|-----|---------|
+| GET | `/api/stats` | 30s/user | `{total_jobs, scored, top_matches, applied, rejected, inbox, sources}` |
+| GET | `/api/public/stats` | 5min global | Публичная статистика для лэндинга/инфографики |
+
+`/api/stats` инвалидируется через `invalidate_stats_cache(user_id)` после `job_action` и `update_profile`.
+
+## Profile (`app/api/profile.py`)
 
 | Метод | Путь | Описание |
 |-------|------|---------|
-| GET | `/api/stats` | `{total_jobs, scored, top_matches, applied, rejected, inbox, sources}` |
-| GET | `/infographic` | Возвращает публичный дашборд-инфографику в HTML |
-| GET | `/api/public/stats` | Публичная статистика платформы: `{total_jobs_processed, ai_analyses_performed, jobs_last_24h, active_sources, system_status}` |
-| GET | `/api/countries` | Список стран с количеством вакансий |
-| POST | `/api/scan` | Запустить сканирование вручную (только admin) |
-| GET | `/api/scan/status` | Состояние планировщика (`{next_run, running}`) |
-| GET | `/api/ops/overview` | Операционная сводка системы (только admin). Query: `window_hours` (6–168, default 24) |
-| GET | `/api/ops/dedup` | Список вакансий объединённых fuzzy-дедупом (`merged_sources` > 1). Query: `limit` (10–500, default 200). Только admin. |
-| GET | `/api/admin/user/{user_id}/profile` | Профиль пользователя + агрегаты по JobScore (только admin) |
-| DELETE | `/api/admin/user/{user_id}` | Удаление пользователя каскадно (profile, scores, applications). Только admin |
-
-### Профиль
-
-| Метод | Путь | Описание |
-|-------|------|---------|
-| GET | `/api/profile` | Профиль пользователя |
+| GET | `/api/profile` | Профиль текущего пользователя |
 | POST | `/api/profile` | Сохранить профиль (Form data) |
-| POST | `/api/profile/resume` | Загрузить резюме (PDF/DOCX/TXT, max 10MB) |
+| POST | `/api/profile/resume` | Upload резюме (PDF/DOCX/TXT, ≤10 MB) |
 
-#### Поля POST /api/profile
+### Поля POST /api/profile
+
 ```
 resume_text, target_titles, min_salary, languages,
-experience_years, work_mode,
-preferred_countries, excluded_keywords,
-english_only (0/1), target_companies
+experience_years, work_mode, preferred_countries,
+excluded_keywords, english_only (0/1), target_companies
 ```
-> `base_location` удалён (апрель 2026)
 
----
+Валидация — [[Безопасность#4-input-validation]].
+
+Изменение профиля → новый `profile_hash` → постепенная пере-оценка stale-строк ([[Кэш и инвалидация]]).
+
+## Scan (`app/api/scan.py`)
+
+| Метод | Путь | Доступ | Описание |
+|-------|------|--------|---------|
+| POST | `/api/scan` | admin | Запустить scan вручную |
+| GET | `/api/scan/status` | публичный | `{next_run, running}` |
+
+## Ops (`app/api/ops.py`)
+
+| Метод | Путь | Доступ | Описание |
+|-------|------|--------|---------|
+| GET | `/api/ops/overview?window_hours=24` | admin | Health & throughput |
+| GET | `/api/ops/dedup?limit=200` | admin | Fuzzy-merged вакансии |
+
+Подробнее — [[Ops панель]].
+
+## Admin (`app/api/admin.py`)
+
+| Метод | Путь | Описание |
+|-------|------|---------|
+| GET | `/api/admin/user/{user_id}/profile` | Полный профиль + статистика по user'у |
+| DELETE | `/api/admin/user/{user_id}` | Soft-delete (`is_active=False`) |
+
+Все требуют `require_admin` ([[Auth#хелперы]]).
 
 ## Health (`app/api/health.py`)
 
@@ -72,30 +105,22 @@ english_only (0/1), target_companies
 |-------|------|-------|
 | GET | `/health` | `{"status": "ok", "service": "pipka"}` |
 
----
+Сейчас это shallow check. Deep healthcheck — пункт [[Roadmap]].
 
-## Авторизация в dashboard
+## CSRF на mutating запросах
 
-```python
-async def _get_user(request, session):
-    # Session cookie (Google OAuth) — единственный метод аутентификации
-    user_id = request.session.get("user_id")
-    if user_id: return user by id
-    return None  # не аутентифицирован
-```
+POST/PUT/PATCH/DELETE требуют заголовок `X-CSRF-Token`, равный `csrf_token` cookie. JS-обёртка fetch автоматически подмешивает (см. [[Безопасность#3-csrf-double-submit]]).
 
-Роль: `admin` — полный доступ, `user` — только свои данные, `guest` — только просмотр All Jobs.
-
-Роль определяется из `request.session["user_role"]` (устанавливается при OAuth callback) или из поля `user.role` в БД.
-
----
+Исключения: `/auth/*` (Google callback), `/health`.
 
 ## Гостевой режим
 
-- Показывается полный список вакансий (`min_score=0`)
-- Скрыты вкладки: Inbox, Applied, Rejected, Settings
-- Скрыты Stats: Scored, Applied, Rejected
-- Нет кнопок действий (apply/reject/save)
-- Кнопка "Sign in with Google"
+Без логина:
+- `/api/me` → `{authenticated: false, role: "guest"}`.
+- `/api/jobs` показывает все вакансии без `min_score` фильтра.
+- Скрыты Inbox, Applied, Rejected, Settings вкладки.
+- Нет кнопок действий.
 
-→ [[Архитектура]] → [[База данных]] → [[Настройки]]
+Подробнее — [[Auth#гостевой-режим]].
+
+→ [[Архитектура]] → [[Auth]] → [[База данных]] → [[Безопасность]] → [[Настройки]]
