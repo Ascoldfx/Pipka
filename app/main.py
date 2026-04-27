@@ -9,9 +9,15 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.api.health import router as health_router
-from app.api.dashboard import router as dashboard_router
+from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
+from app.api.health import router as health_router
+from app.api.jobs import router as jobs_router
+from app.api.ops import router as ops_router
+from app.api.pages import router as pages_router
+from app.api.profile import router as profile_router
+from app.api.scan import router as scan_router
+from app.api.stats import router as stats_router
 from app.config import settings
 from app.database import init_db
 from app.services.ops_service import record_ops_event
@@ -191,4 +197,13 @@ app.add_middleware(NoCacheAPIMiddleware)
 
 app.include_router(auth_router)
 app.include_router(health_router, tags=["health"])
-app.include_router(dashboard_router, tags=["dashboard"])
+# Former monolithic dashboard router, now split by concern. Order matters
+# only insofar as `pages_router` claims `/` — must be mounted before any
+# router whose paths could otherwise be matched.
+app.include_router(pages_router, tags=["pages"])
+app.include_router(jobs_router, tags=["jobs"])
+app.include_router(stats_router, tags=["stats"])
+app.include_router(profile_router, tags=["profile"])
+app.include_router(scan_router, tags=["scan"])
+app.include_router(ops_router, tags=["ops"])
+app.include_router(admin_router, tags=["admin"])
