@@ -101,6 +101,11 @@
   .source-tag { font-size:9px; padding:1px 5px; border:1px solid var(--border); border-radius:3px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); white-space:nowrap; }
   .source-tag.watchlist { background:#fff3cd; border-color:#ffc107; color:#856404; font-weight:600; }
   .source-tag.merged { border-color:var(--blue); color:var(--blue); }
+  .url-badge { display:inline-block; padding:1px 6px; margin-left:6px; border-radius:3px; font-size:10px; font-weight:600; vertical-align:middle; cursor:default; }
+  .url-badge.closed { background:#ffe5e5; color:#8b1a1a; border:1px solid #f5b3b3; }
+  .url-badge.unreachable { background:#fff3cd; color:#7c5400; border:1px solid #ffd96b; }
+  tr.job-closed { opacity:0.55; }
+  tr.job-closed .job-title { text-decoration:line-through; }
   .source-merged-tip { font-size:8px; color:var(--muted); display:block; margin-top:2px; letter-spacing:.3px; }
 
 
@@ -407,7 +412,7 @@ const TRANSLATIONS = {
     'nav.jobs':'All Jobs','nav.inbox':'Inbox','nav.applied':'Applied','nav.rejected':'Rejected','nav.settings':'Profile',
     'stats.jobs':'Jobs','stats.scored':'Scored','stats.top':'Top','stats.applied':'Applied','stats.rejected':'Rejected',
     'filter.search':'Search title or company...','filter.score':'Score','filter.country':'Country',
-    'filter.allCountries':'All Countries','filter.source':'Source','filter.all':'All','filter.status':'Status',
+    'filter.allCountries':'All Countries','filter.source':'Source','filter.all':'All','filter.status':'Status','filter.includeClosed':'Show closed',
     'filter.new':'New','filter.saved':'Saved','filter.applied':'Applied','filter.rejected':'Rejected',
     'filter.region':'Region','filter.regionAny':'Any region','filter.regionSaxony':'Saxony','filter.regionDe':'Germany only',
     'filter.regionDach':'DACH','filter.regionEurope':'Europe','filter.regionCee':'CEE',
@@ -436,7 +441,7 @@ const TRANSLATIONS = {
     'nav.jobs':'Все вакансии','nav.inbox':'Входящие','nav.applied':'Отклики','nav.rejected':'Отклонённые','nav.settings':'Профиль',
     'stats.jobs':'Вакансий','stats.scored':'Оценённых','stats.top':'Топ','stats.applied':'Откликов','stats.rejected':'Отклонённых',
     'filter.search':'Поиск по названию или компании...','filter.score':'Оценка','filter.country':'Страна',
-    'filter.allCountries':'Все страны','filter.source':'Источник','filter.all':'Все','filter.status':'Статус',
+    'filter.allCountries':'Все страны','filter.source':'Источник','filter.all':'Все','filter.status':'Статус','filter.includeClosed':'Показывать закрытые',
     'filter.new':'Новые','filter.saved':'Сохранённые','filter.applied':'Отклики','filter.rejected':'Отклонённые',
     'filter.region':'Регион','filter.regionAny':'Любой','filter.regionSaxony':'Саксония','filter.regionDe':'Только Германия',
     'filter.regionDach':'DACH','filter.regionEurope':'Европа','filter.regionCee':'CEE',
@@ -465,7 +470,7 @@ const TRANSLATIONS = {
     'nav.jobs':'Alle Stellen','nav.inbox':'Eingang','nav.applied':'Bewerbungen','nav.rejected':'Abgelehnt','nav.settings':'Profil',
     'stats.jobs':'Stellen','stats.scored':'Bewertet','stats.top':'Top','stats.applied':'Bewerbungen','stats.rejected':'Abgelehnt',
     'filter.search':'Titel oder Firma suchen...','filter.score':'Bewertung','filter.country':'Land',
-    'filter.allCountries':'Alle Länder','filter.source':'Quelle','filter.all':'Alle','filter.status':'Status',
+    'filter.allCountries':'Alle Länder','filter.source':'Quelle','filter.all':'Alle','filter.status':'Status','filter.includeClosed':'Geschlossene zeigen',
     'filter.new':'Neu','filter.saved':'Gespeichert','filter.applied':'Beworben','filter.rejected':'Abgelehnt',
     'filter.region':'Region','filter.regionAny':'Beliebig','filter.regionSaxony':'Sachsen','filter.regionDe':'Nur Deutschland',
     'filter.regionDach':'DACH','filter.regionEurope':'Europa','filter.regionCee':'Osteuropa',
@@ -494,7 +499,7 @@ const TRANSLATIONS = {
     'nav.jobs':'Todos los trabajos','nav.inbox':'Bandeja','nav.applied':'Aplicados','nav.rejected':'Rechazados','nav.settings':'Perfil',
     'stats.jobs':'Trabajos','stats.scored':'Puntuados','stats.top':'Top','stats.applied':'Aplicados','stats.rejected':'Rechazados',
     'filter.search':'Buscar título o empresa...','filter.score':'Puntuación','filter.country':'País',
-    'filter.allCountries':'Todos los países','filter.source':'Fuente','filter.all':'Todos','filter.status':'Estado',
+    'filter.allCountries':'Todos los países','filter.source':'Fuente','filter.all':'Todos','filter.status':'Estado','filter.includeClosed':'Mostrar cerradas',
     'filter.new':'Nuevo','filter.saved':'Guardados','filter.applied':'Aplicados','filter.rejected':'Rechazados',
     'filter.region':'Región','filter.regionAny':'Cualquiera','filter.regionSaxony':'Sajonia','filter.regionDe':'Solo Alemania',
     'filter.regionDach':'DACH','filter.regionEurope':'Europa','filter.regionCee':'Europa del Este',
@@ -631,6 +636,10 @@ function applyLang() {
       <option value="xing">Xing</option>
       <option value="arbeitsagentur">Arbeitsagentur</option>
     </select>
+    <label class="checkbox-inline" style="display:flex;align-items:center;gap:6px;font-weight:normal;cursor:pointer;">
+      <input type="checkbox" id="f-include-closed">
+      <span data-i18n="filter.includeClosed">Show closed</span>
+    </label>
   </div>
   <div class="table-wrap">
     <table>
@@ -1055,7 +1064,7 @@ function openJobsView({ tab='jobs', minScore=null, source=null, search='' } = {}
 /* ── Filters ── */
 let searchTimeout;
 $('f-search').addEventListener('input', () => { clearTimeout(searchTimeout); searchTimeout=setTimeout(()=>{S.page=1;loadJobs()},400); });
-['f-score','f-source'].forEach(id => $(id).addEventListener('change', ()=>{S.page=1;loadJobs()}));
+['f-score','f-source','f-include-closed'].forEach(id => { const el=$(id); if(el) el.addEventListener('change', ()=>{S.page=1;loadJobs()}); });
 
 /* ── Multi-select country ── */
 const COUNTRY_NAMES = {
@@ -1174,6 +1183,7 @@ async function loadJobs(){
   if($('f-source').value) p.set('source',$('f-source').value);
   if(_selCountries.size>0) p.set('countries',[..._selCountries].join(','));
   if(S.tabStatus) p.set('status',S.tabStatus);
+  if($('f-include-closed') && $('f-include-closed').checked) p.set('include_closed','1');
   const tbody=$('jobs-body');
   tbody.innerHTML=`<tr><td colspan="6" class="loading">${T('msg.loading')}</td></tr>`;
   try{
@@ -1213,9 +1223,18 @@ function jobRow(j){
   const date=j.posted_at?new Date(j.posted_at).toLocaleDateString('de-DE'):'';
   const dq=j.data_quality||'partial';
   const dqTitle=dq==='full'?'Полное описание доступно':'Описание отсутствует или неполное — оценка приблизительная';
-  return `<tr>
+  // url_status badges. Server hides 'closed' by default; they only appear when
+  // the user ticked "Show closed". 'unreachable' is shown by default — it's a
+  // soft signal, not a confirmed close.
+  const closedBadge = j.url_status === 'closed'
+    ? `<span class="url-badge closed" title="Сайт-источник вернул 404/410 — вакансия снята">🚫 закрыта</span>`
+    : j.url_status === 'unreachable'
+      ? `<span class="url-badge unreachable" title="Сайт-источник не отвечает — статус неизвестен">⚠ недоступна</span>`
+      : '';
+  const rowCls = j.url_status === 'closed' ? ' class="job-closed"' : '';
+  return `<tr${rowCls}>
     <td><span class="score-wrap"><span class="score ${sc}">${j.score!=null?j.score:'—'}</span><span class="dq-dot ${dq}" title="${dqTitle}"></span></span></td>
-    <td><a class="job-title" href="${safeUrl(j.url)}" target="_blank" rel="noopener noreferrer">${esc(j.title)}</a>${date?`<div class="job-meta">${date}</div>`:''}</td>
+    <td><a class="job-title" href="${safeUrl(j.url)}" target="_blank" rel="noopener noreferrer">${esc(j.title)}</a>${closedBadge}${date?`<div class="job-meta">${date}</div>`:''}</td>
     <td class="job-meta">${esc(j.company)}</td>
     <td class="job-meta">${esc(j.location)} (${esc(j.country)})</td>
     <td>${sourceCell(j)}</td>

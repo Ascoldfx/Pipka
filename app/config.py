@@ -28,6 +28,15 @@ class Settings(BaseSettings):
     nvidia_country: str = "de"           # ISO country filter for idle rescore
     nvidia_rescore_stale_days: int = 7   # refresh successful scores older than N days
 
+    # URL liveness checker (daily HEAD-ping to detect closed postings).
+    url_check_enabled: bool = True
+    url_check_per_run: int = 500             # how many jobs to check each tick
+    url_check_concurrency: int = 10          # parallel HEAD requests in flight
+    url_check_per_host_delay: float = 1.5    # min seconds between requests to the same host
+    url_check_recheck_hours: int = 20        # don't recheck within this window (default ~1/day)
+    url_check_timeout_seconds: float = 10.0  # per-request HTTP timeout
+    url_check_max_failures: int = 3          # consecutive transient failures → mark unreachable
+
     # Database
     database_url: str = "sqlite+aiosqlite:///./pipka.db"
 

@@ -15,6 +15,7 @@
 - [[Дедупликация]] — exact (sha256) + fuzzy (title + company subset) + merged_sources
 - [[Скоринг]] — pre-filter rules + 3 AI backend'а (Gemini, Claude, NVIDIA)
 - [[Кэш и инвалидация]] — profile_hash + model_version (Phase 2)
+- [[Проверка ссылок]] — daily HEAD-ping для скрытия закрытых вакансий
 
 ## Интерфейсы
 

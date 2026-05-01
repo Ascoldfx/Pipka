@@ -121,6 +121,16 @@ def start_scheduler(bot_app):
         id="watchlist_scan",
         replace_existing=True,
     )
+    # URL liveness check: daily at 04:00 UTC — HEAD-ping job postings to flag
+    # closed listings. See app/services/url_checker.py.
+    scheduler.add_job(
+        _check_job_urls,
+        "cron",
+        hour=4,
+        minute=0,
+        id="check_job_urls",
+        replace_existing=True,
+    )
     scheduler.start()
     logger.info("Background scanner started (every 3 hours, first scan in 30s)")
 
@@ -552,6 +562,50 @@ async def _nvidia_idle_rescore():
                     "nvidia_rescore", "error", source="nvidia",
                     message=f"user={user.telegram_id} {type(exc).__name__}: {exc}",
                 )
+
+
+async def _check_job_urls():
+    """Daily HEAD-ping liveness check on Job.url. Runs at 04:00 UTC.
+
+    Picks up to ``url_check_per_run`` (default 500) jobs whose ``url_checked_at``
+    is NULL or older than ``url_check_recheck_hours`` and HEAD-pings them in
+    parallel (capped by ``url_check_concurrency``, throttled per host).
+    Updates ``url_status``, ``url_checked_at``, ``url_check_failures`` in place.
+    """
+    if not settings.url_check_enabled:
+        logger.info("URL liveness check disabled (url_check_enabled=False)")
+        return
+
+    logger.info("URL liveness check started")
+    started = time.perf_counter()
+    from app.services.url_checker import run_url_check_pass  # noqa: PLC0415
+
+    async with async_session() as session:
+        try:
+            counts = await run_url_check_pass(session)
+        except Exception as exc:
+            logger.exception("URL check failed: %s", exc)
+            await record_ops_event(
+                "url_check", "error",
+                source="url_checker",
+                message=f"{type(exc).__name__}: {exc}",
+            )
+            return
+
+    elapsed = time.perf_counter() - started
+    logger.info(
+        "URL liveness check finished in %.1fs: %s", elapsed, counts
+    )
+    await record_ops_event(
+        "url_check", "success",
+        source="url_checker",
+        message=(
+            f"checked={counts['checked']} active={counts['active']} "
+            f"closed={counts['closed']} unreachable={counts['unreachable']} "
+            f"elapsed={elapsed:.1f}s"
+        ),
+        payload=counts,
+    )
 
 
 async def _watchlist_scan(bot_app):

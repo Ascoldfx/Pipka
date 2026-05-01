@@ -68,6 +68,7 @@ LIMIT $limit
 | `backup` | `success`/`error` | `_daily_backup` | После cron в 02:30 UTC |
 | `api_error` | `error`/`warn` | `NoCacheAPIMiddleware` | 5xx или необработанная exception на API |
 | `cleanup` | `success`/`error` | `_cleanup_old_jobs` | После daily cleanup в 03:00 UTC |
+| `url_check` | `success`/`error` | `_check_job_urls` | После daily HEAD-пинга в 04:00 UTC. payload: `{checked, active, closed, unreachable, skipped}` |
 
 Подробнее по конкретным событиям — [[Скоринг#надёжность]], [[Observability]].
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from sqlalchemy import and_, asc, desc, func, select
+from sqlalchemy import and_, asc, desc, func, or_, select
 
 from app.api._helpers import VALID_ACTIONS, get_user
 from app.api._ratelimit import check_rate_limit
@@ -55,6 +55,7 @@ async def get_jobs(
     region: str | None = Query(None),
     country: str | None = Query(None),
     countries: str | None = Query(None),  # comma-separated country codes, e.g. "de,pl,cz"
+    include_closed: int = Query(0, ge=0, le=1),  # show jobs with url_status='closed'
 ):
     async with async_session() as session:
         user = await get_user(request, session)
@@ -105,6 +106,12 @@ async def get_jobs(
                 filters.append(func.lower(Job.country).in_(codes))
         elif country:
             filters.append(Job.country.ilike(country))
+
+        # Hide jobs the daily HEAD-ping flagged as closed (404/410/redirect-to-listing).
+        # NULL = never checked yet → treated as still open. ``unreachable`` is also
+        # shown — that's "we genuinely couldn't tell", not a confirmed close.
+        if not include_closed:
+            filters.append(or_(Job.url_status.is_(None), Job.url_status != "closed"))
 
         count_stmt = (
             select(func.count(Job.id))
@@ -163,6 +170,8 @@ async def get_jobs(
                 "score": row[1],
                 "analysis": row[2],
                 "status": row[3],
+                "url_status": job.url_status,
+                "url_checked_at": job.url_checked_at.isoformat() if job.url_checked_at else None,
                 "data_quality": "full" if len(job.description or "") >= 300 else "partial",
             })
 

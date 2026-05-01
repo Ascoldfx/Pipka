@@ -23,6 +23,11 @@ class Job(Base):
         # NVIDIA idle rescorer + dashboard country filters scope by country
         # then by recency in the same WHERE clause.
         Index("ix_jobs_country_scraped", "country", "scraped_at"),
+        # URL-liveness checker picks the oldest-checked job each tick:
+        # ``WHERE url_checked_at < cutoff ORDER BY url_checked_at NULLS FIRST``.
+        # Composite with status lets the dashboard "hide closed" filter run
+        # off the same index.
+        Index("ix_jobs_url_status_checked", "url_status", "url_checked_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -42,6 +47,13 @@ class Job(Base):
     scraped_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     raw_data: Mapped[dict | None] = mapped_column(_JSON)
     dedup_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+
+    # URL-liveness fields. Set by the daily ``_check_job_urls`` scheduler job
+    # via HEAD requests; ``None`` means "never checked yet" (treated as active
+    # by readers). See [[Проверка ссылок]].
+    url_status: Mapped[str | None] = mapped_column(String(20))   # 'active'|'closed'|'unreachable'|None
+    url_checked_at: Mapped[datetime | None] = mapped_column(DateTime)
+    url_check_failures: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     scores: Mapped[list["JobScore"]] = relationship(back_populates="job")
 
