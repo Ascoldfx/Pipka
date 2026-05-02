@@ -30,7 +30,13 @@
 | Метод | Путь | Параметры | Описание |
 |-------|------|-----------|---------|
 | GET | `/api/countries` | — | Список стран с количеством вакансий |
-| GET | `/api/jobs` | `page`, `per_page`, `sort`, `order`, `search`, `country`, `countries`, `source`, `min_score`, `status`, `region` | Список вакансий с пагинацией |
+| GET | `/api/jobs` | `page`, `per_page`, `sort`, `order`, `search`, `country`, `countries`, `source`, `min_score`, `status`, `region`, `include_closed`, `semantic` | Список вакансий с пагинацией |
+
+`include_closed=1` — показывать закрытые ([[Проверка ссылок]]). По умолчанию скрываются.
+
+`semantic=1` — pre-rank через cosine-similarity к embedding профиля ([[Поиск и индексация]]); top-`SEMANTIC_SEARCH_LIMIT` (default 500) кандидатов сортируются по близости. Без флага — обычный SQL-сорт по `sort` колонке.
+
+`search=…` на PostgreSQL использует tsvector + `websearch_to_tsquery`. На SQLite (dev) — fallback `ILIKE`.
 
 > **Значения `source`:** `adzuna`, `linkedin`, `indeed`, `glassdoor`, `arbeitnow`, `remotive`, `arbeitsagentur`, `xing`, `berlinstartupjobs`, `wttj`, `jooble`, `watchlist`
 > **Значения `region`:** `saxony`, `germany`, `dach`, `europe`, `cee`

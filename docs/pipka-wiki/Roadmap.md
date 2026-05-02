@@ -32,6 +32,18 @@
 - [[Кэш и инвалидация|profile_hash + model_version]] на JobScore.
 - UPSERT `WHERE profile_hash != EXCLUDED.profile_hash` — постепенное переоценивание stale-строк, без штормов AI-квоты.
 
+### URL liveness
+- [[Проверка ссылок|Daily HEAD-ping]] (cron 04:00 UTC, drain-loop до пустой очереди).
+- Закрытые скрываются из инбокса по `?include_closed=0` дефолту, бейдж 🚫 в карточке.
+- На первом проходе (1 мая 2026) выявлено ~32% реально снятых вакансий — подтвердило масштаб проблемы.
+
+### Phase 3 — full-text search + embeddings
+- `jobs.search_vector` (generated tsvector + GIN). `?search=` через `websearch_to_tsquery('simple', term)`.
+- `pgvector` extension + `jobs.embedding vector(768)` + `user_profiles.embedding`. HNSW cosine indexes.
+- Gemini Embedding API для индексации (`embed_index` каждые 2ч, `embedding_jobs_per_run=70`, RPD-friendly).
+- `?semantic=1` опция в `/api/jobs` — pre-rank по cosine-similarity к profile-embedding.
+- Подробнее — [[Поиск и индексация]].
+
 ### Refactoring
 - `dashboard.py` (750 строк) → 8 файлов по concern'ам (см. [[API]]).
 - Per-row `flush+IntegrityError` антипаттерн в Claude `_score_batch` → batch UPSERT.
@@ -50,8 +62,9 @@
 
 ### AI оптимизация
 
-- **Phase 3 — embeddings + pgvector** — `sentence-transformers` (multilingual-e5-small, бесплатно, локально) → эмбеддинг резюме и вакансий → pre-rank до Gemini → AI получает только top-N кандидатов. Сэкономит 80% AI-вызовов.
 - **Phase 2c — proactive invalidation** — endpoint "пере-оценить всё для меня прямо сейчас". Сейчас Phase 2b делает это постепенно через 2-часовой backfill.
+- **Soft-404 для Indeed/LinkedIn** — некоторые сайты на снятые вакансии возвращают HTTP 200 с body "this position has been filled" вместо 404. Per-source маркеры в `SOFT_404_MARKERS` + GET-проверка для тех источников где HEAD недостаточен.
+- **Semantic + AI hybrid в backfill** — использовать `embedding`-cosine как pre-filter ДО Gemini-скоринга (а не только как UI-опцию). Если cosine < 0.5 — пропустить AI-вызов, поставить score=0 с `model_version='semantic'`. Сэкономит ещё 50% Gemini RPD.
 - **Per-user AI buckets** — `MAX_JOBS_PER_SCORING_BATCH=8` глобально. При 10+ users в одной транзакции дерутся за квоту. Нужны per-user buckets с приоритезацией (платный → first).
 
 ### Observability

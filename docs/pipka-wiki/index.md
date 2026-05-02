@@ -45,7 +45,8 @@
 
 ## Changelog
 
-- [[Changelog 2026-04]] — последние значимые изменения
+- [[Changelog 2026-05]] — URL liveness, full-text search, pgvector embeddings
+- [[Changelog 2026-04]] — wiki expansion, Phase 2 (profile_hash), CSRF, Sentry, dashboard refactor, JSONB
 
 ## Стек
 
