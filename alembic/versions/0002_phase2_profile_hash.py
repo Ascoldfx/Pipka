@@ -15,7 +15,6 @@ new columns going forward.
 """
 from __future__ import annotations
 
-import sqlalchemy as sa
 from alembic import op
 
 revision = "0002_phase2_profile_hash"
@@ -25,13 +24,13 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("job_scores", sa.Column("profile_hash", sa.String(64), nullable=True))
-    op.add_column("job_scores", sa.Column("model_version", sa.String(64), nullable=True))
-    op.create_index(
-        "ix_job_scores_user_profile_model",
-        "job_scores",
-        ["user_id", "profile_hash", "model_version"],
-        unique=False,
+    op.execute("ALTER TABLE job_scores ADD COLUMN IF NOT EXISTS profile_hash VARCHAR(64)")
+    op.execute("ALTER TABLE job_scores ADD COLUMN IF NOT EXISTS model_version VARCHAR(64)")
+    op.execute(
+        """
+        CREATE INDEX IF NOT EXISTS ix_job_scores_user_profile_model
+        ON job_scores (user_id, profile_hash, model_version)
+        """
     )
 
 

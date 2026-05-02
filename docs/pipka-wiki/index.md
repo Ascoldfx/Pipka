@@ -13,6 +13,7 @@
 
 - [[Источники вакансий]] — 9 источников: Adzuna, JobSpy, Arbeitnow, Remotive, Arbeitsagentur, Xing, BerlinStartupJobs, WTTJ, Jooble + Watchlist
 - [[Дедупликация]] — exact (sha256) + fuzzy (title + company subset) + merged_sources
+- [[Поиск и индексация]] — tsvector + GIN, pgvector + Gemini embeddings
 - [[Скоринг]] — pre-filter rules + 3 AI backend'а (Gemini, Claude, NVIDIA)
 - [[Кэш и инвалидация]] — profile_hash + model_version (Phase 2)
 - [[Проверка ссылок]] — daily HEAD-ping для скрытия закрытых вакансий

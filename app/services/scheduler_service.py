@@ -104,6 +104,21 @@ def start_scheduler(bot_app):
         id="backfill_score",
         replace_existing=True,
     )
+    # Semantic indexer: fills missing job/profile embeddings in small batches.
+    scheduler.add_job(
+        _embed_index,
+        "interval",
+        hours=settings.embedding_index_interval_hours,
+        id="embed_index",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _embed_index,
+        "date",
+        run_date=datetime.now() + timedelta(seconds=90),
+        id="embed_index_startup",
+        replace_existing=True,
+    )
     # NVIDIA idle rescorer: every 30 min — runs only when Gemini queue drained
     scheduler.add_job(
         _nvidia_idle_rescore,
@@ -562,6 +577,38 @@ async def _nvidia_idle_rescore():
                     "nvidia_rescore", "error", source="nvidia",
                     message=f"user={user.telegram_id} {type(exc).__name__}: {exc}",
                 )
+
+
+async def _embed_index():
+    """Backfill pgvector embeddings for jobs and profiles in small batches."""
+    if not settings.embedding_enabled or not settings.gemini_api_key:
+        return
+
+    from app.services.embedding_service import index_missing_embeddings  # noqa: PLC0415
+
+    async with async_session() as session:
+        try:
+            counts = await index_missing_embeddings(session)
+        except Exception as exc:
+            logger.exception("Embedding indexer failed: %s", exc)
+            await record_ops_event(
+                "embedding_index",
+                "error",
+                source="gemini_embedding",
+                message=f"{type(exc).__name__}: {exc}",
+            )
+            return
+
+    if counts.get("skipped"):
+        return
+    logger.info("Embedding indexer finished: %s", counts)
+    await record_ops_event(
+        "embedding_index",
+        "success",
+        source="gemini_embedding",
+        message=f"jobs={counts['jobs']} profiles={counts['profiles']}",
+        payload=counts,
+    )
 
 
 async def _check_job_urls():

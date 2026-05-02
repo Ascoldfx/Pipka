@@ -10,6 +10,7 @@ from app.api._helpers import VALID_WORK_MODES, get_user
 from app.api.stats import invalidate_stats_cache
 from app.database import async_session
 from app.models.user import UserProfile
+from app.services.embedding_service import invalidate_profile_embedding
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +108,8 @@ async def update_profile(
             if target_companies is not None:
                 p.target_companies = [c.strip() for c in target_companies.split(",") if c.strip()]
 
+            await session.flush()
+            await invalidate_profile_embedding(session, p.id)
             await session.commit()
             invalidate_stats_cache(user.id)
             return {"ok": True}
@@ -187,6 +190,8 @@ async def upload_resume(request: Request, file: UploadFile = File(...)):
                 p = UserProfile(user_id=user.id)
                 session.add(p)
             p.resume_text = text
+            await session.flush()
+            await invalidate_profile_embedding(session, p.id)
             await session.commit()
         except HTTPException:
             raise

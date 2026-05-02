@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from sqlalchemy import and_, asc, desc, func, or_, select
+from sqlalchemy import and_, asc, case, desc, func, literal_column, or_, select
 
 from app.api._helpers import VALID_ACTIONS, get_user
 from app.api._ratelimit import check_rate_limit
@@ -56,16 +56,20 @@ async def get_jobs(
     country: str | None = Query(None),
     countries: str | None = Query(None),  # comma-separated country codes, e.g. "de,pl,cz"
     include_closed: int = Query(0, ge=0, le=1),  # show jobs with url_status='closed'
+    semantic: int = Query(0, ge=0, le=1),  # use profile embedding to pre-rank jobs
 ):
     async with async_session() as session:
         user = await get_user(request, session)
         if not user:
             return {"jobs": [], "total": 0, "page": page, "pages": 0}
 
+        is_postgres = session.get_bind().dialect.name == "postgresql"
         score_join = and_(JobScore.job_id == Job.id, JobScore.user_id == user.id)
         app_join = and_(Application.job_id == Job.id, Application.user_id == user.id)
 
         filters = []
+        search_rank = None
+        semantic_ids: list[int] = []
         if min_score > 0:
             filters.append(JobScore.score >= min_score)
         if source:
@@ -73,12 +77,18 @@ async def get_jobs(
         if search:
             term = search.strip()
             if term:
-                # Escape LIKE special chars so they're treated literally
-                escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-                pattern = f"%{escaped}%"
-                filters.append(
-                    Job.title.ilike(pattern, escape="\\") | Job.company_name.ilike(pattern, escape="\\")
-                )
+                if is_postgres:
+                    query = func.websearch_to_tsquery("simple", term)
+                    search_vector = literal_column("jobs.search_vector")
+                    filters.append(search_vector.op("@@")(query))
+                    search_rank = func.ts_rank_cd(search_vector, query)
+                else:
+                    # SQLite/dev fallback — production uses tsvector + GIN.
+                    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                    pattern = f"%{escaped}%"
+                    filters.append(
+                        Job.title.ilike(pattern, escape="\\") | Job.company_name.ilike(pattern, escape="\\")
+                    )
         if status == "new":
             filters.append(Application.status.is_(None))
         elif status:
@@ -113,6 +123,16 @@ async def get_jobs(
         if not include_closed:
             filters.append(or_(Job.url_status.is_(None), Job.url_status != "closed"))
 
+        if semantic:
+            from app.services.embedding_service import semantic_job_ids_for_profile  # noqa: PLC0415
+
+            semantic_ids = await semantic_job_ids_for_profile(
+                session,
+                user_id=user.id,
+                include_closed=bool(include_closed),
+            )
+            filters.append(Job.id.in_(semantic_ids) if semantic_ids else Job.id == -1)
+
         count_stmt = (
             select(func.count(Job.id))
             .select_from(Job)
@@ -131,7 +151,16 @@ async def get_jobs(
             "company": Job.company_name,
         }.get(sort, JobScore.score)
 
-        order_clause = asc(sort_col).nulls_last() if order == "asc" else desc(sort_col).nulls_last()
+        if semantic_ids:
+            order_clause = case(
+                {job_id: idx for idx, job_id in enumerate(semantic_ids)},
+                value=Job.id,
+                else_=len(semantic_ids),
+            )
+        elif search_rank is not None and sort == "relevance":
+            order_clause = desc(search_rank).nulls_last()
+        else:
+            order_clause = asc(sort_col).nulls_last() if order == "asc" else desc(sort_col).nulls_last()
 
         stmt = (
             select(
@@ -176,7 +205,14 @@ async def get_jobs(
             })
 
         pages = (total + per_page - 1) // per_page
-        return {"jobs": jobs, "total": total, "page": page, "pages": pages}
+        return {
+            "jobs": jobs,
+            "total": total,
+            "page": page,
+            "pages": pages,
+            "semantic": bool(semantic),
+            "semantic_ready": bool(semantic_ids),
+        }
 
 
 @router.post("/api/jobs/{job_id}/action")

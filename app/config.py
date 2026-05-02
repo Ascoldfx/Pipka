@@ -37,6 +37,16 @@ class Settings(BaseSettings):
     url_check_timeout_seconds: float = 10.0  # per-request HTTP timeout
     url_check_max_failures: int = 3          # consecutive transient failures → mark unreachable
 
+    # Search / semantic indexing
+    embedding_enabled: bool = True
+    embedding_model: str = "models/gemini-embedding-001"
+    embedding_dimension: int = 768
+    embedding_batch_delay: float = 0.8       # Gemini Embedding free tier is RPM-bound
+    embedding_jobs_per_run: int = 70         # ~840/day when run every 2h, under 1K RPD
+    embedding_profiles_per_run: int = 20
+    embedding_index_interval_hours: int = 2
+    semantic_search_limit: int = 500
+
     # Database
     database_url: str = "sqlite+aiosqlite:///./pipka.db"
 
