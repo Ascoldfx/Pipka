@@ -614,45 +614,73 @@ async def _embed_index():
 async def _check_job_urls():
     """Daily HEAD-ping liveness check on Job.url. Runs at 04:00 UTC.
 
-    Picks up to ``url_check_per_run`` (default 500) jobs whose ``url_checked_at``
-    is NULL or older than ``url_check_recheck_hours`` and HEAD-pings them in
-    parallel (capped by ``url_check_concurrency``, throttled per host).
-    Updates ``url_status``, ``url_checked_at``, ``url_check_failures`` in place.
+    Drains the entire eligible queue: loops ``run_url_check_pass`` until either
+    (a) no more jobs need checking, or (b) the wall-clock budget is exceeded.
+    The budget guarantees we're done before the user's morning rush even if a
+    sudden import added thousands of new jobs overnight.
+
+    Each individual pass picks ``url_check_per_run`` (default 500) oldest-
+    checked jobs, HEAD-pings them concurrently (cap ``url_check_concurrency``,
+    per-host throttle ``url_check_per_host_delay``), and commits results in
+    one transaction.
     """
     if not settings.url_check_enabled:
         logger.info("URL liveness check disabled (url_check_enabled=False)")
         return
 
+    # Wall-clock cap. 04:00 UTC + ≤3h = 07:00 UTC = 09:00 Berlin worst case.
+    # On steady-state queues each pass is short and we exit before then.
+    DRAIN_BUDGET_SECONDS = 3 * 3600
+
     logger.info("URL liveness check started")
     started = time.perf_counter()
     from app.services.url_checker import run_url_check_pass  # noqa: PLC0415
 
-    async with async_session() as session:
-        try:
-            counts = await run_url_check_pass(session)
-        except Exception as exc:
-            logger.exception("URL check failed: %s", exc)
-            await record_ops_event(
-                "url_check", "error",
-                source="url_checker",
-                message=f"{type(exc).__name__}: {exc}",
-            )
-            return
+    total = {"checked": 0, "active": 0, "closed": 0, "unreachable": 0, "skipped": 0, "passes": 0}
+    error_msg: str | None = None
+
+    while True:
+        if time.perf_counter() - started > DRAIN_BUDGET_SECONDS:
+            logger.warning("URL drain time budget exceeded — stopping")
+            break
+
+        async with async_session() as session:
+            try:
+                counts = await run_url_check_pass(session)
+            except Exception as exc:
+                logger.exception("URL check pass failed")
+                error_msg = f"{type(exc).__name__}: {exc}"
+                break
+
+        total["passes"] += 1
+        for k in ("checked", "active", "closed", "unreachable", "skipped"):
+            total[k] += counts.get(k, 0)
+
+        if counts["checked"] == 0:
+            # Queue drained — nothing left to look at.
+            break
 
     elapsed = time.perf_counter() - started
-    logger.info(
-        "URL liveness check finished in %.1fs: %s", elapsed, counts
-    )
-    await record_ops_event(
-        "url_check", "success",
-        source="url_checker",
-        message=(
-            f"checked={counts['checked']} active={counts['active']} "
-            f"closed={counts['closed']} unreachable={counts['unreachable']} "
-            f"elapsed={elapsed:.1f}s"
-        ),
-        payload=counts,
-    )
+    logger.info("URL liveness check finished in %.1fs: %s", elapsed, total)
+
+    if error_msg:
+        await record_ops_event(
+            "url_check", "error",
+            source="url_checker",
+            message=f"after passes={total['passes']} checked={total['checked']}: {error_msg}",
+            payload=total,
+        )
+    else:
+        await record_ops_event(
+            "url_check", "success",
+            source="url_checker",
+            message=(
+                f"passes={total['passes']} checked={total['checked']} "
+                f"active={total['active']} closed={total['closed']} "
+                f"unreachable={total['unreachable']} elapsed={elapsed:.1f}s"
+            ),
+            payload=total,
+        )
 
 
 async def _watchlist_scan(bot_app):
