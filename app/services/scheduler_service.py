@@ -784,7 +784,7 @@ async def _check_job_urls():
     started = time.perf_counter()
     from app.services.url_checker import run_url_check_pass  # noqa: PLC0415
 
-    total = {"checked": 0, "active": 0, "closed": 0, "unreachable": 0, "skipped": 0, "passes": 0}
+    total = {"checked": 0, "active": 0, "closed": 0, "unreachable": 0, "skipped": 0, "soft_404": 0, "passes": 0}
     error_msg: str | None = None
 
     while True:
@@ -801,7 +801,7 @@ async def _check_job_urls():
                 break
 
         total["passes"] += 1
-        for k in ("checked", "active", "closed", "unreachable", "skipped"):
+        for k in ("checked", "active", "closed", "unreachable", "skipped", "soft_404"):
             total[k] += counts.get(k, 0)
 
         if counts["checked"] == 0:
@@ -825,6 +825,7 @@ async def _check_job_urls():
             message=(
                 f"passes={total['passes']} checked={total['checked']} "
                 f"active={total['active']} closed={total['closed']} "
+                f"soft_404={total['soft_404']} "
                 f"unreachable={total['unreachable']} elapsed={elapsed:.1f}s"
             ),
             payload=total,

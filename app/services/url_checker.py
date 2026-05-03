@@ -6,10 +6,12 @@ Why
 its first week sits in the inbox for the rest of those 45 days. This service
 runs an HTTP HEAD against each ``Job.url`` and classifies the response into:
 
-* **active**       — 2xx OK
-* **closed**       — 404, 410, or a 3xx redirect that lands on a generic
-                     listing/search page (typical "this job no longer exists"
-                     pattern across LinkedIn, Indeed, Xing).
+* **active**       — 2xx OK and (if host has soft-404 markers) body doesn't
+                     contain "no longer available"-style text.
+* **closed**       — 404, 410, a 3xx redirect that lands on a generic
+                     listing/search page, OR a 200 OK whose body contains a
+                     known soft-404 marker (e.g. LinkedIn / Xing return 200
+                     with "no longer accepting applications" in HTML).
 * **unreachable**  — set after ``url_check_max_failures`` consecutive
                      transient errors (5xx, network errors, timeouts). Not
                      hidden in UI by default — reserved for "we genuinely
@@ -25,9 +27,6 @@ Concurrency
   between any two requests to the same host. Critical because LinkedIn /
   Indeed actively rate-limit and a 200-job burst against a single host would
   trigger captchas or IP blocks.
-
-Soft-404 detection (e.g. HTTP 200 with body "this position has been filled")
-is intentionally out of scope for the MVP — see [[Roadmap]].
 """
 from __future__ import annotations
 
@@ -57,6 +56,58 @@ USER_AGENT = "Pipka-Liveness/1.0 (+https://pipka.net)"
 # scheduler ticks don't stomp each other (unlikely, but free correctness).
 _host_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 _last_host_request: dict[str, float] = defaultdict(float)
+
+
+# Soft-404 markers per registered domain (case-insensitive substring match
+# against the first ~50 KB of body). Keys are eTLD+1 (or eTLD+2 for sites
+# with locale subdomains like at.indeed.com → indeed.com).
+#
+# Add a host here ONLY if you've confirmed it returns HTTP 200 OK on a closed
+# vacancy and the body reliably contains the marker text. Wrong markers will
+# false-positive close active vacancies — much more painful than missing some.
+SOFT_404_MARKERS: dict[str, list[str]] = {
+    "linkedin.com": [
+        "no longer accepting applications",
+        "this job is no longer available",
+        "diese stelle ist nicht mehr verfügbar",
+    ],
+    "indeed.com": [
+        "this job has expired",
+        "no longer available",
+        "diese stellenanzeige ist abgelaufen",
+    ],
+    "glassdoor.com": [
+        "this job has been removed",
+        "no longer accepting applications",
+    ],
+    "xing.com": [
+        "diese stelle wurde leider zurückgezogen",
+        "stelle nicht mehr verfügbar",
+        "stellenanzeige nicht gefunden",
+    ],
+    "stepstone.de": [
+        "diese stelle ist nicht mehr verfügbar",
+        "anzeige nicht mehr verfügbar",
+    ],
+    "welcometothejungle.com": [
+        "this job offer is no longer available",
+        "cette offre n'est plus disponible",
+    ],
+}
+
+
+def _registered_domain(host: str) -> str:
+    """Strip subdomain — ``at.indeed.com`` → ``indeed.com``.
+
+    Naive eTLD+1 (no PSL parsing). Good enough for the markers dict — all
+    entries are real ``example.tld`` two-label domains.
+    """
+    if not host:
+        return ""
+    parts = host.split(".")
+    if len(parts) >= 2:
+        return ".".join(parts[-2:]).lower()
+    return host.lower()
 
 
 def _classify_redirect(target: str | None) -> str:
@@ -96,6 +147,49 @@ def _classify_redirect(target: str | None) -> str:
     return "active" if has_id_token else "closed"
 
 
+async def _soft_404_body_check(
+    url: str, host: str, client: httpx.AsyncClient
+) -> bool:
+    """Stream first 50 KB of GET body, return True iff a known soft-404
+    marker for ``host``'s registered domain matches.
+
+    Costs an extra GET (~50 KB transfer) per HEAD-200 — only fires for hosts
+    with markers configured. Re-paces against the same per-host lock so we
+    don't burst against rate-limited boards.
+
+    Failures (network, decode, marker mismatch) → return False = trust HEAD's
+    "active". Better to miss a closure than to false-flag an active vacancy.
+    """
+    domain = _registered_domain(host)
+    markers = SOFT_404_MARKERS.get(domain)
+    if not markers:
+        return False
+
+    await _pace_host(host)
+    try:
+        async with client.stream(
+            "GET",
+            url,
+            follow_redirects=True,
+            timeout=settings.url_check_timeout_seconds * 2,  # GET slower than HEAD
+        ) as resp:
+            if resp.status_code != 200:
+                return False
+            body_bytes = bytearray()
+            async for chunk in resp.aiter_bytes(chunk_size=4096):
+                body_bytes.extend(chunk)
+                if len(body_bytes) >= 50_000:
+                    break
+        body = body_bytes.decode("utf-8", errors="ignore").lower()
+    except (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError):
+        return False
+    except Exception as exc:
+        logger.debug("soft-404 GET failed %s: %s", url, exc)
+        return False
+
+    return any(marker in body for marker in markers)
+
+
 async def _pace_host(host: str) -> None:
     """Sleep until ``per_host_delay`` has passed since the last request to ``host``."""
     async with _host_locks[host]:
@@ -105,23 +199,25 @@ async def _pace_host(host: str) -> None:
         _last_host_request[host] = time.monotonic()
 
 
-async def check_url(url: str, client: httpx.AsyncClient) -> tuple[str, bool]:
+async def check_url(url: str, client: httpx.AsyncClient) -> tuple[str, bool, bool]:
     """Probe ``url`` and classify it.
 
-    Returns ``(status, transient)``:
-        * ``status``    — ``'active' | 'closed' | 'unreachable'``.
-        * ``transient`` — ``True`` if the failure was network-level (5xx,
-                          timeout, conn error). Caller should bump the
-                          consecutive-failures counter rather than treating
-                          this as a definitive "gone".
+    Returns ``(status, transient, via_soft_404)``:
+        * ``status``       — ``'active' | 'closed' | 'unreachable'``.
+        * ``transient``    — ``True`` if the failure was network-level (5xx,
+                             timeout, conn error). Caller should bump the
+                             consecutive-failures counter rather than treating
+                             this as a definitive "gone".
+        * ``via_soft_404`` — ``True`` iff a HEAD-200 was overridden to closed
+                             by a body-marker match. For Ops counters only.
     """
     try:
         host = urlparse(url).netloc
     except Exception:
-        return "closed", False  # malformed URL → treat as gone
+        return "closed", False, False  # malformed URL → treat as gone
 
     if not host:
-        return "closed", False
+        return "closed", False, False
 
     await _pace_host(host)
 
@@ -131,48 +227,55 @@ async def check_url(url: str, client: httpx.AsyncClient) -> tuple[str, bool]:
         resp = await client.head(url, follow_redirects=False)
     except (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError) as exc:
         logger.debug("url-check transient failure %s: %s", url, type(exc).__name__)
-        return "unreachable", True
+        return "unreachable", True, False
     except httpx.RequestError as exc:
         # Things like InvalidURL, UnsupportedProtocol — definitively dead.
         logger.debug("url-check hard failure %s: %s", url, exc)
-        return "closed", False
+        return "closed", False, False
 
     status = resp.status_code
 
     if 200 <= status < 300:
-        return "active", False
+        # Soft-404 detection: many job boards return HTTP 200 OK on a removed
+        # vacancy with body "no longer accepting applications". Only fires
+        # for hosts in SOFT_404_MARKERS — others stay free of GET overhead.
+        if await _soft_404_body_check(url, host, client):
+            return "closed", False, True
+        return "active", False, False
     if status in (404, 410):
-        return "closed", False
+        return "closed", False, False
     if 300 <= status < 400:
         # Some sites refuse HEAD with 405 and respond with a 3xx to a login
         # page — distinguishing that from a real "removed" redirect needs
         # GET semantics. Cheap heuristic: classify by Location.
-        return _classify_redirect(resp.headers.get("location")), False
+        return _classify_redirect(resp.headers.get("location")), False, False
     if status in (401, 403):
         # Auth-required page is *probably* still alive (the listing exists,
         # we just can't see it). Don't mark it closed.
-        return "active", False
+        return "active", False, False
     if status == 405:
         # Method Not Allowed → fall back to GET, but only one round to avoid
         # hammering. Treat unknown as active rather than bogus-closing it.
         try:
             resp = await client.get(url, follow_redirects=False)
         except Exception:
-            return "unreachable", True
+            return "unreachable", True, False
         if 200 <= resp.status_code < 300:
-            return "active", False
+            if await _soft_404_body_check(url, host, client):
+                return "closed", False, True
+            return "active", False, False
         if resp.status_code in (404, 410):
-            return "closed", False
+            return "closed", False, False
         if 300 <= resp.status_code < 400:
-            return _classify_redirect(resp.headers.get("location")), False
+            return _classify_redirect(resp.headers.get("location")), False, False
         if resp.status_code >= 500:
-            return "unreachable", True
-        return "active", False
+            return "unreachable", True, False
+        return "active", False, False
     if status >= 500:
-        return "unreachable", True
+        return "unreachable", True, False
 
     # Catch-all: don't false-positive close.
-    return "active", False
+    return "active", False, False
 
 
 async def run_url_check_pass(session: AsyncSession) -> dict[str, int]:
@@ -202,10 +305,10 @@ async def run_url_check_pass(session: AsyncSession) -> dict[str, int]:
     )
     jobs = result.scalars().all()
     if not jobs:
-        return {"checked": 0, "active": 0, "closed": 0, "unreachable": 0, "skipped": 0}
+        return {"checked": 0, "active": 0, "closed": 0, "unreachable": 0, "skipped": 0, "soft_404": 0}
 
     semaphore = asyncio.Semaphore(settings.url_check_concurrency)
-    counts = {"checked": 0, "active": 0, "closed": 0, "unreachable": 0, "skipped": 0}
+    counts = {"checked": 0, "active": 0, "closed": 0, "unreachable": 0, "skipped": 0, "soft_404": 0}
 
     timeout = httpx.Timeout(settings.url_check_timeout_seconds)
     headers = {"User-Agent": USER_AGENT, "Accept": "*/*"}
@@ -214,7 +317,7 @@ async def run_url_check_pass(session: AsyncSession) -> dict[str, int]:
         async def _one(job: Job) -> None:
             async with semaphore:
                 try:
-                    new_status, transient = await check_url(job.url, client)
+                    new_status, transient, via_soft_404 = await check_url(job.url, client)
                 except Exception:
                     logger.exception("url-check unexpected error for job %s", job.id)
                     counts["skipped"] += 1
@@ -233,6 +336,8 @@ async def run_url_check_pass(session: AsyncSession) -> dict[str, int]:
                     job.url_status = new_status
                     job.url_check_failures = 0
                     counts[new_status] = counts.get(new_status, 0) + 1
+                    if via_soft_404:
+                        counts["soft_404"] += 1
 
                 job.url_checked_at = now
                 counts["checked"] += 1
