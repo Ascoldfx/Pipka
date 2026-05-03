@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
 
@@ -377,6 +377,116 @@ def _backfill_score_fn():
     return score_jobs
 
 
+async def _semantic_skip_filter(
+    session,
+    user: User,
+    profile_hash: str | None,
+    candidates: list[Job],
+) -> tuple[list[Job], int]:
+    """Pre-filter candidates by cosine-similarity to user's profile embedding.
+
+    Jobs whose embedding is below ``semantic_skip_threshold`` are marked with
+    ``score=0, model_version="semantic_skip"`` and removed from the AI queue.
+    Saves AI quota — typical Gemini-tier user spends 50%+ of daily RPD on
+    backfill that could be answered by cheap vector math.
+
+    Returns ``(jobs_to_score, skipped_count)``. Falls through (no-op) when:
+    * feature disabled (``semantic_skip_enabled=False``)
+    * user profile has no embedding yet
+    * not on PostgreSQL (no pgvector)
+    * candidate list is empty
+
+    On any error — logs and returns the input unchanged. We never want this
+    optimisation to bring down backfill.
+    """
+    if not settings.semantic_skip_enabled or not candidates:
+        return candidates, 0
+
+    # Profile must have an embedding. Bail fast if not — embed_index will
+    # populate it on its next tick.
+    profile = user.profile
+    if profile is None:
+        return candidates, 0
+    has_profile_emb = await session.execute(
+        text("SELECT 1 FROM user_profiles WHERE id = :pid AND embedding IS NOT NULL"),
+        {"pid": profile.id},
+    )
+    if has_profile_emb.scalar() is None:
+        return candidates, 0
+
+    job_ids = [j.id for j in candidates]
+    threshold = settings.semantic_skip_threshold
+
+    # pgvector cosine distance: ``<=>`` returns 0 for identical, 1 for
+    # orthogonal, 2 for opposite. We want similarity (1 - distance/2 ≈ cosine).
+    # Practically: distance <= 1 - threshold filters jobs that are similar
+    # enough to keep. Below = skip via semantic.
+    try:
+        result = await session.execute(
+            text(
+                """
+                SELECT j.id, 1 - (j.embedding <=> p.embedding) AS similarity
+                FROM jobs j
+                CROSS JOIN user_profiles p
+                WHERE p.id = :pid
+                  AND j.id = ANY(:ids)
+                  AND j.embedding IS NOT NULL
+                """
+            ),
+            {"pid": profile.id, "ids": job_ids},
+        )
+        sims = {row[0]: float(row[1]) for row in result.all()}
+    except Exception as exc:
+        logger.warning("semantic_skip query failed for user %s: %s", user.id, exc)
+        return candidates, 0
+
+    keep: list[Job] = []
+    skip_rows: list[dict] = []
+    for job in candidates:
+        sim = sims.get(job.id)
+        if sim is None:
+            # Job has no embedding yet — let AI score it normally; embed_index
+            # will catch up. Don't false-skip.
+            keep.append(job)
+            continue
+        if sim >= threshold:
+            keep.append(job)
+        else:
+            skip_rows.append({
+                "job_id": job.id,
+                "user_id": user.id,
+                "score": 0,
+                "ai_analysis": f"semantic skip (cosine={sim:.2f})",
+                "profile_hash": profile_hash,
+                "model_version": "semantic_skip",
+            })
+
+    if skip_rows:
+        # Same UPSERT pattern as elsewhere — overwrite stale rows whose
+        # profile_hash differs, leave matching ones alone.
+        stmt = pg_insert(JobScore).values(skip_rows)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["job_id", "user_id"],
+            set_={
+                "score": stmt.excluded.score,
+                "ai_analysis": stmt.excluded.ai_analysis,
+                "scored_at": func.now(),
+                "profile_hash": stmt.excluded.profile_hash,
+                "model_version": stmt.excluded.model_version,
+            },
+            where=JobScore.profile_hash != stmt.excluded.profile_hash,
+        )
+        try:
+            await session.execute(stmt)
+            await session.commit()
+        except Exception as exc:
+            await session.rollback()
+            logger.warning("semantic_skip UPSERT failed for user %s: %s", user.id, exc)
+            return candidates, 0
+
+    return keep, len(skip_rows)
+
+
 async def _backfill_score():
     """Score existing DB jobs that haven't been scored yet for each user.
 
@@ -477,6 +587,21 @@ async def _backfill_score():
                     logger.info(
                         "Backfill: marked %d jobs as rejected (pre-filter) for user %s",
                         len(capped), user.telegram_id,
+                    )
+
+                # Phase 3 hybrid: split off "obviously not a fit" via cosine
+                # similarity to profile-embedding BEFORE the expensive AI call.
+                # See _semantic_skip_filter for details.
+                need_ai_t1, t1_skipped = await _semantic_skip_filter(
+                    session, user, profile_hash, need_ai_t1
+                )
+                need_ai_t2, t2_skipped = await _semantic_skip_filter(
+                    session, user, profile_hash, need_ai_t2
+                )
+                if t1_skipped + t2_skipped:
+                    logger.info(
+                        "Backfill semantic-skip [%s]: %d t1 + %d t2 jobs flagged below cosine %.2f for user %s",
+                        backend, t1_skipped, t2_skipped, settings.semantic_skip_threshold, user.telegram_id,
                     )
 
                 # Tier 1 first: director / head of / VP

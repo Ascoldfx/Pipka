@@ -37,6 +37,14 @@ class Settings(BaseSettings):
     url_check_timeout_seconds: float = 10.0  # per-request HTTP timeout
     url_check_max_failures: int = 3          # consecutive transient failures → mark unreachable
 
+    # Semantic pre-filter for backfill scoring. When enabled and both job +
+    # profile have embeddings, jobs whose cosine-similarity to the user's
+    # profile is below the threshold get a synthetic score=0 with
+    # ``model_version="semantic_skip"`` instead of an AI call. Saves ~50%
+    # of Gemini RPD on the backfill path.
+    semantic_skip_enabled: bool = True
+    semantic_skip_threshold: float = 0.5     # 1.0 = identical, 0.0 = orthogonal, <0 = opposite
+
     # Search / semantic indexing
     embedding_enabled: bool = True
     embedding_model: str = "models/gemini-embedding-001"
