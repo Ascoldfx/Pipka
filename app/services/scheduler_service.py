@@ -298,7 +298,30 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
 
     # Score only new jobs (max 80 per run to control costs/limits)
     to_score = new_jobs[:80]
-    
+
+    # Phase 3 hybrid: same semantic skip path as in _backfill_score. Filters
+    # out clearly-not-a-fit candidates BEFORE the AI call so we don't burn
+    # Gemini RPD on jobs whose embedding cosine to the profile is below
+    # ``semantic_skip_threshold``. Falls through (no skips) when either side
+    # has no embedding yet.
+    to_score, skipped = await _semantic_skip_filter(session, user, profile_hash, to_score)
+    if skipped:
+        logger.info(
+            "Real-time semantic-skip: %d jobs flagged below cosine %.2f for user %s",
+            skipped, settings.semantic_skip_threshold, user.telegram_id,
+        )
+
+    if not to_score:
+        logger.info("All %d candidates short-circuited by semantic_skip for user %s", skipped, user.telegram_id)
+        return {
+            "user_id": user.id,
+            "telegram_id": user.telegram_id,
+            "eligible_jobs": len(new_jobs),
+            "scored_jobs": skipped,
+            "top_results": 0,
+            "pushed": 0,
+        }
+
     if settings.gemini_api_key:
         logger.info("Using Gemini for real-time scoring")
         scores = await score_jobs_gemini(to_score, user, session)
