@@ -275,7 +275,7 @@ class JobAggregator:
                     "title": r.title,
                     "company_name": r.company_name,
                     "location": r.location,
-                    "country": r.country,
+                    "country": _normalise_country(r.country),
                     "description": r.description,
                     "salary_min": r.salary_min,
                     "salary_max": r.salary_max,
@@ -468,6 +468,28 @@ DACH_MARKERS = [
     "финляндия", "хельсинки", "ирландия", "дублин",
     "великобритания", "лондон", "манчестер",
 ]
+
+def _normalise_country(value: str | None) -> str | None:
+    """Coerce ``Job.country`` to a stable ISO-3166 alpha-2 lowercase code.
+
+    Each source records country differently — Adzuna upper-cases ("DE"),
+    Arbeitsagentur lower-cases ("de"), Remotive writes "Remote" (not a
+    country at all), Jooble passes whatever the upstream API returned.
+    Without a single normalisation point ``GROUP BY country`` produces
+    duplicate dropdown rows on the frontend.
+
+    Returns ``None`` for empty/garbage values so non-ISO labels don't leak
+    into the country filter. Out-of-set codes (US/CA picked up via location
+    rather than source tagging) are kept lowercase but not pinned to
+    ALLOWED_COUNTRIES — the wrong-location filter will reject them downstream.
+    """
+    if not value:
+        return None
+    code = value.strip().lower()
+    if len(code) != 2 or not code.isalpha():
+        return None
+    return code
+
 
 # All European country codes we're willing to index jobs for
 ALLOWED_COUNTRIES = {

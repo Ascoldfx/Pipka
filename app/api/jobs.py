@@ -27,18 +27,25 @@ router = APIRouter()
 
 @router.get("/api/countries")
 async def get_countries(request: Request):
-    """Return distinct countries present in the jobs table with job counts."""
+    """Return distinct countries present in the jobs table with job counts.
+
+    Group by LOWER(country) so legacy mixed-case rows ("DE" + "de") collapse
+    into a single row. The aggregator is supposed to normalise on write, but
+    historical data and any source-side regression would otherwise produce
+    duplicate dropdown entries on the frontend.
+    """
     async with async_session() as session:
         user = await get_user(request, session)
         if not user:
             return []
+        code = func.lower(Job.country)
         result = await session.execute(
-            select(Job.country, func.count(Job.id).label("cnt"))
+            select(code.label("code"), func.count(Job.id).label("cnt"))
             .where(Job.country.is_not(None), Job.country != "")
-            .group_by(Job.country)
+            .group_by(code)
             .order_by(func.count(Job.id).desc())
         )
-        return [{"code": row[0].lower(), "count": row[1]} for row in result.all()]
+        return [{"code": row[0], "count": row[1]} for row in result.all()]
 
 
 @router.get("/api/jobs")
