@@ -106,35 +106,49 @@ async def _call_nvidia(prompt: str, batch_size: int) -> str | None:
                 data = resp.json()
                 return data["choices"][0]["message"]["content"]
 
+    # NVIDIA Build's gemma-4-31b-it routinely takes 60-120s and frequently
+    # ReadTimeout's mid-stream. Retries are working as designed but each
+    # attempt used to spam WARNING — we now log at DEBUG and only emit one
+    # WARNING line for the full exhausted-batch event below. 429s still go
+    # to OpsEvent because they're rare and quota-meaningful.
+    last_status: str = "?"
+    last_exc_name: str = ""
+    attempt_n: int = 0
     try:
         async for attempt in AsyncRetrying(
-            stop=stop_after_attempt(5),
+            stop=stop_after_attempt(3),
             wait=wait_exponential(multiplier=3, min=3, max=60),
             retry=retry_if_exception(_is_retryable),
             reraise=True,
         ):
             with attempt:
+                attempt_n += 1
                 try:
                     return await _once()
                 except Exception as exc:
                     if _is_retryable(exc):
                         await asyncio.sleep(random.uniform(0, 1.5))
-                        status = getattr(getattr(exc, "response", None), "status_code", "?")
-                        logger.warning(
-                            "NVIDIA transient error (batch=%d status=%s): %s",
-                            batch_size, status, type(exc).__name__,
+                        last_status = str(getattr(getattr(exc, "response", None), "status_code", "?"))
+                        last_exc_name = type(exc).__name__
+                        logger.debug(
+                            "NVIDIA transient (attempt=%d batch=%d status=%s): %s",
+                            attempt_n, batch_size, last_status, last_exc_name,
                         )
-                        if status == 429:
+                        if last_status == "429":
                             await record_ops_event(
                                 "nvidia_429", "retry", source="nvidia",
                                 message=f"batch={batch_size}",
                             )
                     raise
     except RetryError as exc:
-        logger.error("NVIDIA retries exhausted (batch=%d): %s", batch_size, exc.last_attempt.exception())
+        # Single summary at WARNING for the whole batch — visible but quiet.
+        logger.warning(
+            "NVIDIA exhausted after %d retries (batch=%d last_status=%s): %s",
+            attempt_n, batch_size, last_status, last_exc_name,
+        )
         await record_ops_event(
             "nvidia_exhausted", "error", source="nvidia",
-            message=f"batch={batch_size}",
+            message=f"batch={batch_size} attempts={attempt_n} last_status={last_status} {last_exc_name}",
         )
         return None
     except Exception as exc:
