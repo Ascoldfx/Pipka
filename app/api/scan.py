@@ -4,9 +4,9 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 
-from app.api._helpers import get_role
+from app.api._helpers import require_admin_async
 from app.services.scheduler_service import is_scan_running
 
 logger = logging.getLogger(__name__)
@@ -17,8 +17,7 @@ router = APIRouter()
 @router.post("/api/scan")
 async def trigger_scan(request: Request):
     """Kick off a one-shot background scan. Admin-only — scrapes are expensive."""
-    if get_role(request, None) != "admin":
-        raise HTTPException(status_code=403, detail="Admin only")
+    await require_admin_async(request)
 
     # Imported lazily to avoid a circular import via scheduler -> api.
     from app.services.scheduler_service import _background_scan, scheduler

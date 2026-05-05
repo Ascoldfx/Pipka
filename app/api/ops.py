@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
 from sqlalchemy import func, select
 
-from app.api._helpers import get_role, get_user
+from app.api._helpers import get_user, require_admin_async
 from app.database import async_session
 from app.models.job import Job
 from app.services.ops_service import build_ops_overview
@@ -19,8 +19,7 @@ router = APIRouter()
 
 @router.get("/api/ops/overview")
 async def get_ops_overview(request: Request, window_hours: int = Query(24, ge=6, le=168)):
-    if get_role(request, None) != "admin":
-        raise HTTPException(status_code=403, detail="Admin only")
+    await require_admin_async(request)
 
     from app.services.scheduler_service import scheduler
 
@@ -43,8 +42,7 @@ async def get_ops_overview(request: Request, window_hours: int = Query(24, ge=6,
 @router.get("/api/ops/dedup")
 async def get_dedup_jobs(request: Request, limit: int = Query(200, ge=10, le=500)):
     """Return jobs that were fuzzy-merged from multiple sources."""
-    if get_role(request, None) != "admin":
-        raise HTTPException(status_code=403, detail="Admin only")
+    await require_admin_async(request)
 
     async with async_session() as session:
         # raw_data is jsonb on prod; jsonb_array_length is the matching function.

@@ -124,9 +124,25 @@ async def update_profile(
 @router.post("/api/profile/resume")
 async def upload_resume(request: Request, file: UploadFile = File(...)):
     """Upload resume file and extract text (PDF, DOCX, TXT)."""
-    content = await file.read()
-    if len(content) > MAX_RESUME_UPLOAD_BYTES:
+    # Stream the upload chunk-by-chunk so a 1 GB blob doesn't OOM the
+    # container before the size check fires. ``await file.read()`` would
+    # buffer the whole body first — bad on 5k-user prod where someone WILL
+    # try a "stresser" upload sooner or later.
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > MAX_RESUME_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="File too large (>10MB)")
+
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(64 * 1024)  # 64 KB
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_RESUME_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="File too large (>10MB)")
+        chunks.append(chunk)
+    content = b"".join(chunks)
 
     filename = (file.filename or "").lower()
     text = ""
@@ -156,6 +172,20 @@ async def upload_resume(request: Request, file: UploadFile = File(...)):
             import zipfile
             import xml.etree.ElementTree as ET
             zf = zipfile.ZipFile(io.BytesIO(content))
+            # Zip-bomb defense: a 50 KB DOCX can declare a 5 GB document.xml.
+            # Refuse to extract anything where ``file_size`` (uncompressed)
+            # blows past 5× our text limit. 5 × 100 000 chars × ~5 bytes/char
+            # for UTF-8 + XML markup = roughly 2.5 MB; cap at 8 MB to give
+            # legitimate large CVs headroom.
+            try:
+                info = zf.getinfo("word/document.xml")
+            except KeyError:
+                raise HTTPException(status_code=400, detail="DOCX missing document.xml")
+            if info.file_size > 8 * 1024 * 1024:
+                raise HTTPException(
+                    status_code=400,
+                    detail="DOCX content too large (decompressed > 8 MB) — possible zip bomb"
+                )
             xml_content = zf.read("word/document.xml")
             tree = ET.fromstring(xml_content)
             paragraphs = []
@@ -164,6 +194,8 @@ async def upload_resume(request: Request, file: UploadFile = File(...)):
                 if texts:
                     paragraphs.append("".join(texts))
             text = "\n".join(paragraphs)
+        except HTTPException:
+            raise
         except Exception:
             logger.exception("DOCX parse failed: filename=%s", filename)
             raise HTTPException(status_code=400, detail="Could not parse DOCX")

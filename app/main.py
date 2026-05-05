@@ -46,9 +46,13 @@ if settings.sentry_dsn:
 # Methods that mutate server state and therefore require a CSRF token.
 _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
-# Endpoints that are exempt from CSRF (no session cookie present, or external
-# redirect target). The OAuth callback is hit by Google as a top-level GET.
-_CSRF_EXEMPT_PREFIXES = ("/auth/", "/health")
+# Endpoints that are exempt from CSRF.
+# /auth/google/* — OAuth flow uses Google-supplied ``state`` for CSRF;
+#                  redirects from Google land here as top-level GETs.
+# /health        — public probe, no state mutation.
+# /auth/logout   — POST, MUST require CSRF (was GET, exploitable via
+#                  forced-logout images). Not in this list.
+_CSRF_EXEMPT_PREFIXES = ("/auth/google/", "/health")
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
@@ -111,6 +115,54 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                 path="/",
             )
 
+        return response
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Best-practice security headers on every response.
+
+    Each header maps to a known attack class:
+
+    * ``Strict-Transport-Security`` — locks the browser to HTTPS for 1 year
+      (incl. subdomains, eligible for HSTS preload list submission).
+    * ``Content-Security-Policy`` — neutralises XSS even if `innerHTML`
+      escaping slips. Permissive enough that current SPA still works
+      (`'unsafe-inline'` for inline ``<style>`` and event handlers; we
+      should narrow this once we move inline JS out of dashboard.html).
+    * ``X-Frame-Options: DENY`` + ``frame-ancestors 'none'`` — clickjacking.
+    * ``X-Content-Type-Options: nosniff`` — MIME sniffing.
+    * ``Referrer-Policy: strict-origin-when-cross-origin`` — don't leak
+      query strings (incl. search terms, IDs) to outbound clicks.
+    * ``Permissions-Policy`` — drops the ambient permission to the camera,
+      microphone, geolocation; we don't use them.
+    """
+
+    CSP = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "font-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'; "
+        "form-action 'self' https://accounts.google.com; "
+        "base-uri 'self'; "
+        "object-src 'none'"
+    )
+
+    HEADERS = {
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+        "X-Frame-Options": "DENY",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+        "Content-Security-Policy": CSP,
+    }
+
+    async def dispatch(self, request: Request, call_next):
+        response: Response = await call_next(request)
+        for k, v in self.HEADERS.items():
+            response.headers.setdefault(k, v)
         return response
 
 
@@ -190,10 +242,14 @@ app.add_middleware(
     https_only=True,
 )
 # Starlette wraps middleware so the FIRST one added is outermost (runs first
-# on incoming requests). We need: Session → CSRF → NoCache → routes, so
-# Session was added above, CSRF here, NoCache last.
+# on incoming requests). Order: Session → CSRF → NoCache → SecurityHeaders → routes.
+# SecurityHeaders is innermost so it runs LAST on response, after NoCache has
+# already stamped its Cache-Control — the headers don't conflict, but keeping
+# SecurityHeaders innermost guarantees its values land on every response,
+# including ones that bypass NoCache (e.g. /static).
 app.add_middleware(CSRFMiddleware)
 app.add_middleware(NoCacheAPIMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(auth_router)
 app.include_router(health_router, tags=["health"])

@@ -543,7 +543,12 @@ function toggleLogin() {
     if(!S.authenticated) {
         window.location.href = '/auth/google/login';
     } else {
-        if(confirm('Log out?')) window.location.href = '/auth/logout';
+        if(confirm('Log out?')) {
+          // POST so CSRFMiddleware validates the token. The fetch wrapper
+          // injects X-CSRF-Token automatically. Navigate after success so a
+          // failed logout doesn't drop the user on a logged-out shell.
+          fetch('/auth/logout', { method: 'POST' }).finally(() => { window.location.href = '/'; });
+        }
     }
 }
 

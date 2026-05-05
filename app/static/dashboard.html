@@ -1876,7 +1876,9 @@ function toggleLogin() {
     if(!S.authenticated) {
         window.location.href = '/auth/google/login';
     } else {
-        if(confirm('Log out?')) window.location.href = '/auth/logout';
+        if(confirm('Log out?')) {
+          fetch('/auth/logout', { method: 'POST' }).finally(() => { window.location.href = '/'; });
+        }
     }
 }
 

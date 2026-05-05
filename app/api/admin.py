@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.api._helpers import require_admin
+from app.api._helpers import _drop_role_cache, require_admin_async
 from app.database import async_session
 from app.models.user import User
 
@@ -19,7 +19,7 @@ router = APIRouter()
 @router.get("/api/admin/user/{user_id}/profile")
 async def admin_get_user_profile(request: Request, user_id: int):
     """Admin only: fetch full profile and user info for a specific user ID."""
-    require_admin(request)
+    await require_admin_async(request)
     async with async_session() as session:
         result = await session.execute(
             select(User).options(selectinload(User.profile)).where(User.id == user_id)
@@ -54,7 +54,7 @@ async def admin_get_user_profile(request: Request, user_id: int):
 @router.delete("/api/admin/user/{user_id}")
 async def admin_delete_user(request: Request, user_id: int):
     """Admin only: soft-delete a user (sets ``is_active=False``)."""
-    require_admin(request)
+    await require_admin_async(request)
     async with async_session() as session:
         result = await session.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
@@ -62,4 +62,7 @@ async def admin_delete_user(request: Request, user_id: int):
             raise HTTPException(status_code=404, detail="User not found")
         user.is_active = False
         await session.commit()
+        # Drop the cached role for the deactivated user so a stale "admin"
+        # entry doesn't survive in another worker's _ROLE_CACHE.
+        _drop_role_cache(user_id)
         return {"ok": True}

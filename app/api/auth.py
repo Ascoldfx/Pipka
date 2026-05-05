@@ -56,7 +56,15 @@ async def google_callback(request: Request):
     async with async_session() as session:
         user = await get_or_create_google_user(google_sub, email, name, avatar, session)
 
-        # Store user in session cookie
+        # Session-fixation defense: clear ANY pre-login state before writing
+        # the authenticated identity. If an attacker pre-set ``pipka_session``
+        # on the victim's browser (subdomain XSS, MITM on plain HTTP, etc.),
+        # the cookie they planted now carries no privileges.
+        request.session.clear()
+
+        # Store user in session cookie. CSRF token is intentionally rotated
+        # by clear() — CSRFMiddleware will mint a fresh one on the next
+        # response.
         request.session["user_id"] = user.id
         request.session["user_email"] = user.email
         request.session["user_name"] = user.name or ""
@@ -66,11 +74,15 @@ async def google_callback(request: Request):
     return RedirectResponse(url="/")
 
 
-@router.get("/auth/logout")
+@router.post("/auth/logout")
 async def logout(request: Request):
-    """Clear session and redirect to login."""
+    """Clear session. POST + CSRF-protected — a GET logout was vulnerable
+    to forced-logout via ``<img src="/auth/logout">`` embedded in any page
+    a logged-in user happened to visit. Returns JSON; the SPA navigates
+    on success.
+    """
     request.session.clear()
-    return RedirectResponse(url="/")
+    return {"ok": True}
 
 
 @router.get("/api/me")
