@@ -170,7 +170,16 @@ def _build_jobs_text(jobs: list[Job]) -> str:
 
 async def _generate_with_retry(prompt: str, batch_size: int):
     """Call Gemini with pacing, single-flight serialisation, and tenacity retry
-    on 429/503/timeouts. Exp backoff 5→10→20→40→80s + ±25% jitter, 5 attempts."""
+    on 429/503/timeouts. Exp backoff 5→10→20→40→80s + ±25% jitter, 5 attempts.
+
+    NOTE: ``reraise=False`` is intentional. With ``reraise=True``, tenacity
+    re-raises the original ``ResourceExhausted`` after the last attempt —
+    which would slip past the ``except RetryError`` handler in
+    ``_call_gemini_raw`` and never trigger the circuit breaker. Production
+    confirmed this: 82 ``gemini_429`` retries with zero ``gemini_exhausted``
+    events in a 2-hour window. Letting tenacity wrap into ``RetryError``
+    routes exhaustion through the proper handler.
+    """
     model = _get_model()
     attempt_counter = {"n": 0}
 
@@ -178,7 +187,7 @@ async def _generate_with_retry(prompt: str, batch_size: int):
         stop=stop_after_attempt(5),
         wait=wait_exponential(multiplier=5, min=5, max=80),
         retry=retry_if_exception(_is_retryable),
-        reraise=True,
+        reraise=False,
     ):
         with attempt:
             attempt_counter["n"] += 1
@@ -253,6 +262,12 @@ async def _call_gemini_raw(
         return []
     except Exception as exc:
         logger.error("Gemini API call failed (batch_size=%d): %s", len(jobs), exc)
+        # Safety net: any retryable error that escapes tenacity (e.g. due to
+        # a future ``reraise=True`` regression) still feeds the breaker so we
+        # don't sit in a tight 429 loop forever. The dedicated
+        # ``except RetryError`` above is the primary path.
+        if _is_retryable(exc):
+            await _record_exhaust(type(exc).__name__)
         return []
 
     output: list[tuple[Job, int, str]] = []
