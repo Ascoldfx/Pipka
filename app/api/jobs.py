@@ -57,7 +57,10 @@ async def get_jobs(
     order: str = Query("desc"),
     min_score: int = Query(0, ge=0, le=100),
     source: str | None = Query(None),
-    search: str | None = Query(None),
+    # Cap length to defend against a 1 MB ``search=`` payload that would
+    # otherwise force PostgreSQL into a full-table substring scan with a
+    # giant pattern under a 30s statement_timeout — pinning a connection.
+    search: str | None = Query(None, max_length=200),
     status: str | None = Query(None),
     region: str | None = Query(None),
     country: str | None = Query(None),

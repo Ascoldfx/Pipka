@@ -116,4 +116,54 @@ content-security-policy: default-src 'self'; ...
 
 ---
 
-→ [[Changelog 2026-04]] → [[Roadmap]] → [[Архитектура]] → [[Безопасность]] → [[Auth]] → [[API]]
+## 6 мая 2026
+
+### Day-2 security hardening
+
+Пять high-severity пунктов аудита (severity 6-7), пакетом перед запуском.
+
+**1. TrustedHostMiddleware** — добавлен outermost (первым в `add_middleware`, что у Starlette = wraps last = outermost). Allowed: `pipka.net`, `*.pipka.net`, `localhost`, `127.0.0.1`. Forged `Host:` отбивается до того как `SessionMiddleware` тратит ресурсы на парсинг cookie.
+
+**2. Global per-IP rate-limit** (`RateLimitMiddleware` в `app/api/_ratelimit.py`).
+
+Sliding-window per-IP в том же модуле что и существующий per-user limiter — общая deque-структура и lock. Three buckets:
+
+| Префикс | key | limit | window |
+|---------|-----|-------|--------|
+| `/auth/google/login`, `/auth/logout` | `auth-write` | 10 | 60s |
+| `/api/profile`, `/api/profile/resume` | `profile-write` | 20 | 60s |
+| `/api/*` (catch-all) | `api-global` | 300 | 60s |
+
+First-match-wins. Exempt: `/static/*`, `/health`, `/auth/google/callback` (Google повторяет после reCAPTCHA, нельзя rate-limit'ить).
+
+Client IP резолвится через цепочку: `CF-Connecting-IP` → `X-Forwarded-For[0]` → socket-host. Cloudflare перед nginx — это эталонный setup для прода. Mounted между TrustedHost и Session так что bot'ы получают 429 до парсинга cookie.
+
+**3. `?search=` length cap.** В `/api/jobs?search=…` через `Query(None, max_length=200)`. Защита от 1MB substring-attack под `statement_timeout=30s` — pgvector tsvector match быстр, но ILIKE-fallback на sqlite разнёс бы pool.
+
+**4. Profile-list size limits в `/api/profile`:**
+
+| Поле | Max entries | Max chars/entry |
+|------|------------|-----------------|
+| `target_titles` | 50 | 200 |
+| `preferred_countries` | 50 | 200 |
+| `excluded_keywords` | 50 | 200 |
+| `target_companies` | 50 | 200 |
+| `languages` (dict) | 20 keys | 50 key + 50 value |
+
+Защита от `compute_profile_hash` blow-up'а (sha256 поверх 10K entries), `pre_filter` O(jobs × keywords) loop'а, watchlist scanner'а O(companies × countries). Также проверка `isinstance(parsed, dict)` для languages — JSON-bomb path закрыт.
+
+**5. Sentry PII filter.** В `app/main.py:_sentry_before_send`. До этого `attach_stacktrace=True` + `logger.exception("update_profile failed")` отгружал в Sentry весь resume_text как local var в stack frame. `send_default_pii=False` filter'ит только Sentry-auto-PII (cookies, IP), но не frame-locals и breadcrumbs.
+
+Скрабит 13 ключей (`resume_text`, `target_companies`, `excluded_keywords`, `email`, `user_email`, `name`, `user_name`, `avatar_url`, `user_avatar`, `telegram_id`, `google_sub`, `csrf_token`, `session_secret`, `Authorization`, `Cookie`) из:
+- `event["exception"]["values"][*]["stacktrace"]["frames"][*]["vars"]`
+- `event["breadcrumbs"]["values"][*]["data"]`
+- `event["request"]["headers"]` + `["data"]`
+- `event["extra"]`
+
+Recursive walk с depth-limit 6. Список PII-ключей в `_SENTRY_PII_KEYS` frozenset'е.
+
+См. [[Безопасность#day-2-фиксы]], [[Rate limiting#per-ip-middleware]].
+
+---
+
+→ [[Changelog 2026-04]] → [[Roadmap]] → [[Архитектура]] → [[Безопасность]] → [[Auth]] → [[API]] → [[Rate limiting]]

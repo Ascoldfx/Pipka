@@ -30,9 +30,23 @@ State: `dict[(user_id, key), deque[float]]` под `threading.Lock`. Ключ �
 
 ## Где используется
 
+### Per-user (endpoint-level)
+
 | Эндпоинт | key | limit | window |
 |----------|-----|-------|--------|
 | `GET /api/jobs/{id}/analyze` | `"analyze"` | 30 | 3600s (1 час) |
+
+### Per-IP middleware (`RateLimitMiddleware`)
+
+Day-2 фикс (май 2026). Глобальный sliding-window-per-IP в `_ratelimit.py`. Применяется как middleware — не нужно встраивать чек в каждый router. Client IP резолвится через `CF-Connecting-IP` → `X-Forwarded-For[0]` → socket-host fallback.
+
+| Префикс | key | limit | window |
+|---------|-----|-------|--------|
+| `/auth/google/login`, `/auth/logout` | `auth-write` | **10** | 60s |
+| `/api/profile`, `/api/profile/resume` | `profile-write` | **20** | 60s |
+| `/api/*` (catch-all) | `api-global` | **300** | 60s |
+
+First-match wins (tightest first). Exempt: `/static/*`, `/health`, `/auth/google/callback` (Google retry'ит после reCAPTCHA, нельзя rate-limit'ить).
 
 Каждый клик на "🤖 AI Анализ" в UI → один запрос к Gemini/Claude. Без cap'а юзер мог за 30 сек продёрнуть 100 запросов и потратить 100/500 RPD дневной квоты.
 

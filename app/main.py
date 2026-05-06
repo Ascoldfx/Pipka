@@ -8,7 +8,9 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from app.api._ratelimit import RateLimitMiddleware
 from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
 from app.api.health import router as health_router
@@ -30,6 +32,74 @@ if settings.sentry_dsn:
     from sentry_sdk.integrations.asyncio import AsyncioIntegration
     from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
+    # PII keys to scrub from any event reaching Sentry. ``send_default_pii=False``
+    # filters Sentry's auto-captured PII (cookies, IP, request bodies) but does
+    # NOT touch local-variable snapshots in stack frames or breadcrumb data.
+    # We log resume_text + email through Python ``logger.exception`` in several
+    # places — without this filter, a 500 in update_profile would ship the
+    # entire resume to Sentry's servers.
+    _SENTRY_PII_KEYS = frozenset({
+        "resume_text",
+        "target_companies",
+        "excluded_keywords",
+        "email",
+        "user_email",
+        "name",
+        "user_name",
+        "avatar_url",
+        "user_avatar",
+        "telegram_id",
+        "google_sub",
+        "csrf_token",
+        "session_secret",
+        "Authorization",
+        "Cookie",
+    })
+
+    def _scrub(obj):
+        """Recursively replace PII values with '[redacted]'.
+
+        Walks dict/list/tuple structures depth-first. Strings, ints, etc.
+        pass through. Bound at depth 6 to avoid pathological structures.
+        """
+        return _scrub_inner(obj, 0)
+
+    def _scrub_inner(obj, depth: int):
+        if depth > 6:
+            return "[depth-limit]"
+        if isinstance(obj, dict):
+            return {
+                k: ("[redacted]" if (isinstance(k, str) and k in _SENTRY_PII_KEYS) else _scrub_inner(v, depth + 1))
+                for k, v in obj.items()
+            }
+        if isinstance(obj, (list, tuple)):
+            return type(obj)(_scrub_inner(x, depth + 1) for x in obj)
+        return obj
+
+    def _sentry_before_send(event, hint):
+        """Strip PII from stack-frame locals, breadcrumb data, and request
+        context before the event leaves the process."""
+        # 1. Stack frame locals (this is where resume_text would leak)
+        for exc in event.get("exception", {}).get("values", []) or []:
+            for frame in exc.get("stacktrace", {}).get("frames", []) or []:
+                if "vars" in frame:
+                    frame["vars"] = _scrub(frame["vars"])
+        # 2. Breadcrumbs — Sentry auto-collects log calls + HTTP requests
+        for crumb in event.get("breadcrumbs", {}).get("values", []) or []:
+            if "data" in crumb:
+                crumb["data"] = _scrub(crumb["data"])
+        # 3. Request context (headers, query params)
+        if "request" in event:
+            req = event["request"]
+            if "headers" in req:
+                req["headers"] = _scrub(req["headers"])
+            if "data" in req:
+                req["data"] = _scrub(req["data"])
+        # 4. Extra context
+        if "extra" in event:
+            event["extra"] = _scrub(event["extra"])
+        return event
+
     sentry_sdk.init(
         dsn=settings.sentry_dsn,
         environment=settings.sentry_environment,
@@ -38,6 +108,7 @@ if settings.sentry_dsn:
         # Attach context: which logger emitted the event, last 100 breadcrumbs.
         attach_stacktrace=True,
         send_default_pii=False,  # don't ship session cookies / IPs
+        before_send=_sentry_before_send,
         integrations=[AsyncioIntegration(), SqlalchemyIntegration()],
         # FastAPI integration is auto-loaded by sentry-sdk[fastapi].
     )
@@ -233,6 +304,19 @@ app = FastAPI(title="Pipka API", version="0.1.0", lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
+# TrustedHost — added FIRST so it ends up OUTERMOST (Starlette wraps in
+# reverse-add-order). Rejects requests with a forged/unexpected ``Host``
+# header before SessionMiddleware allocates any state. Without this,
+# host-header injection can poison session-cookie cache layers and
+# password-reset URLs. Cloudflare sets Host=pipka.net for us.
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["pipka.net", "*.pipka.net", "localhost", "127.0.0.1"],
+)
+# Per-IP rate limit — second-outermost so a botnet hammering /api/* with
+# fake X-CSRF-Token gets 429'd before we burn cycles parsing session
+# cookies and validating CSRF.
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret,

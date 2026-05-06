@@ -55,6 +55,16 @@ Pre-launch блокеры из глубокого аудита:
 - **DOCX zip-bomb** — `ZipInfo.file_size` проверка до `read()`, лимит 8 MB uncompressed.
 - **Session fixation** — `request.session.clear()` перед записью identity в OAuth callback.
 
+### Day-2 security hardening (6 мая 2026)
+
+High-severity пункты из аудита (severity 6-7):
+
+- **TrustedHostMiddleware** outermost — отбивает forged `Host:` headers до session-state allocation. Allowed: `pipka.net`, `*.pipka.net`, `localhost`, `127.0.0.1`.
+- **Per-IP rate-limit middleware** — sliding-window per IP, three buckets: `auth-write 10/min`, `profile-write 20/min`, `api-global 300/min`. Client IP через `CF-Connecting-IP` → `X-Forwarded-For[0]` → socket. См. [[Rate limiting#per-ip-middleware]].
+- **`?search=` length cap** — `Query(None, max_length=200)` против 1MB substring-attack под `statement_timeout=30s`.
+- **Profile-list size limits** — 50 entries × 200 chars per list (`target_titles`/`preferred_countries`/`excluded_keywords`/`target_companies`); 20-key dict с 50-char key/value для `languages`. JSON-bomb path закрыт.
+- **Sentry PII filter** — `_sentry_before_send` рекурсивно scrub'ит 13 ключей (resume_text, email, telegram_id, google_sub, csrf_token, ...) из stack-frame locals, breadcrumb data, request headers/body, extra context. См. [[Observability#3-sentry]] и [[Безопасность#day-2-фиксы]].
+
 ### Refactoring
 - `dashboard.py` (750 строк) → 8 файлов по concern'ам (см. [[API]]).
 - Per-row `flush+IntegrityError` антипаттерн в Claude `_score_batch` → batch UPSERT.

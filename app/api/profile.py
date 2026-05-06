@@ -19,6 +19,15 @@ router = APIRouter()
 MAX_RESUME_CHARS = 100_000
 MAX_RESUME_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
+# Bounds for list/dict-shaped profile fields. Without these, a malicious or
+# accidentally-large profile (10 000 ``excluded_keywords``) blows up
+# ``compute_profile_hash`` (sha256 over JSON of every entry), the per-job
+# pre_filter loop (O(jobs × keywords)), and the watchlist scanner
+# (Adzuna call per company × per country).
+MAX_PROFILE_LIST = 50          # target_titles, preferred_countries, excluded_keywords, target_companies
+MAX_PROFILE_LANGUAGES = 20     # languages dict
+MAX_PROFILE_FIELD_LEN = 200    # one entry's max length
+
 
 @router.get("/api/profile")
 async def get_profile(request: Request):
@@ -81,32 +90,52 @@ async def update_profile(
             if resume_text is not None:
                 p.resume_text = resume_text
             if target_titles is not None:
-                p.target_titles = [t.strip() for t in target_titles.split(",") if t.strip()]
+                items = [t.strip()[:MAX_PROFILE_FIELD_LEN] for t in target_titles.split(",") if t.strip()]
+                if len(items) > MAX_PROFILE_LIST:
+                    raise HTTPException(status_code=400, detail=f"target_titles: max {MAX_PROFILE_LIST} entries")
+                p.target_titles = items
             if min_salary is not None:
                 p.min_salary = min_salary
             if languages is not None:
                 # Accept either JSON ({"en":"C1","de":"B1"}) or shorthand "en:C1,de:B1".
                 try:
-                    p.languages = json.loads(languages)
+                    parsed = json.loads(languages)
+                    if not isinstance(parsed, dict):
+                        raise HTTPException(status_code=400, detail="languages must be a JSON object")
                 except json.JSONDecodeError:
-                    langs: dict[str, str] = {}
+                    parsed = {}
                     for part in languages.split(","):
                         if ":" in part:
                             k, v = part.split(":", 1)
-                            langs[k.strip()] = v.strip()
-                    p.languages = langs
+                            parsed[k.strip()] = v.strip()
+                if len(parsed) > MAX_PROFILE_LANGUAGES:
+                    raise HTTPException(status_code=400, detail=f"languages: max {MAX_PROFILE_LANGUAGES} entries")
+                # Cap individual key/value lengths so the JSON-bomb path is closed.
+                p.languages = {
+                    str(k)[:50]: str(v)[:50]
+                    for k, v in parsed.items()
+                }
             if experience_years is not None:
                 p.experience_years = experience_years
             if work_mode is not None:
                 p.work_mode = work_mode
             if preferred_countries is not None:
-                p.preferred_countries = [c.strip().lower() for c in preferred_countries.split(",") if c.strip()]
+                items = [c.strip().lower()[:MAX_PROFILE_FIELD_LEN] for c in preferred_countries.split(",") if c.strip()]
+                if len(items) > MAX_PROFILE_LIST:
+                    raise HTTPException(status_code=400, detail=f"preferred_countries: max {MAX_PROFILE_LIST} entries")
+                p.preferred_countries = items
             if excluded_keywords is not None:
-                p.excluded_keywords = [k.strip() for k in excluded_keywords.split(",") if k.strip()]
+                items = [k.strip()[:MAX_PROFILE_FIELD_LEN] for k in excluded_keywords.split(",") if k.strip()]
+                if len(items) > MAX_PROFILE_LIST:
+                    raise HTTPException(status_code=400, detail=f"excluded_keywords: max {MAX_PROFILE_LIST} entries")
+                p.excluded_keywords = items
             if english_only is not None:
                 p.english_only = english_only in ("1", "true", "True", "yes", "on")
             if target_companies is not None:
-                p.target_companies = [c.strip() for c in target_companies.split(",") if c.strip()]
+                items = [c.strip()[:MAX_PROFILE_FIELD_LEN] for c in target_companies.split(",") if c.strip()]
+                if len(items) > MAX_PROFILE_LIST:
+                    raise HTTPException(status_code=400, detail=f"target_companies: max {MAX_PROFILE_LIST} entries")
+                p.target_companies = items
 
             await session.flush()
             await invalidate_profile_embedding(session, p.id)
