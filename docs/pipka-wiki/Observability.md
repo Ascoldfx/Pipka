@@ -72,6 +72,19 @@ if settings.sentry_dsn:
 1. **Cache-Control: no-store** на всё, что отдают `/`, `/api/*`, `/auth/*`. Браузеры не кэшируют — JSON всегда свежий.
 2. **OpsEvent на 4xx/5xx** — успешные POST не пишутся (шум), но любая ошибка попадает в `ops_events` с типом `api_error`. Скрипт-сканеры на `/api/.env`, `/api/config`, `/api/vendor/...` фильтруются (`is_probe = 404 + GET`) — не засоряют ops.
 
+## SecurityHeadersMiddleware
+
+`app/main.py:SecurityHeadersMiddleware` (Day-1 фикс, май 2026) — добавляет на каждый ответ:
+
+- `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`
+- `Content-Security-Policy` — neutralises XSS даже если `innerHTML`-escape пропущен
+- `X-Frame-Options: DENY` — clickjacking
+- `X-Content-Type-Options: nosniff`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()`
+
+Mounted innermost — заголовки попадают и на `/static/*` тоже. Подробнее — [[Безопасность#day-1-фиксы-перед-prod-релизом]].
+
 ## Метрики, которых пока нет
 
 - **Prometheus `/metrics`** — пункт [[Roadmap]]. Базовый набор `http_requests_total{path,status}`, `gemini_calls_total{result}`, `scan_duration_seconds`.

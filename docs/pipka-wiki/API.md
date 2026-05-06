@@ -10,7 +10,7 @@
 |-------|------|---------|
 | GET | `/auth/google/login` | Редирект на Google OAuth |
 | GET | `/auth/google/callback` | Callback от Google, создаёт сессию |
-| GET | `/auth/logout` | Очищает сессию, редирект `/` |
+| POST | `/auth/logout` | Очищает сессию (`session.clear()`), возвращает `{"ok": true}`. **Требует CSRF-токен** — был GET, эксплоился через `<img src="/auth/logout">`. |
 | GET | `/api/me` | `{authenticated, role, name, email, avatar, csrf_token}` |
 
 Подробнее — [[Auth]].

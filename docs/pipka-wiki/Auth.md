@@ -29,6 +29,8 @@ RedirectResponse("/")
 
 В проде `redirect_uri` принудительно переписывается с `http://` на `https://` — иначе Cloudflare-proxy за ним сломает callback.
 
+**Session fixation defense (Day-1 фикс, май 2026):** в callback'е до записи `user_id` вызывается `request.session.clear()`. Если атакующий до login'а подсунул жертве `pipka_session` cookie (через subdomain XSS / MITM), его plant'нутая сессия теряет identity на login.
+
 ## get_or_create_google_user
 
 Файл: `app/services/user_service.py`. Алгоритм:
@@ -57,9 +59,12 @@ RedirectResponse("/")
 `app/api/_helpers.py`:
 
 - `get_user(request, session)` — ORM-объект `User` с eager-loaded `profile`, или `None`. Используется в каждом эндпоинте, где нужен текущий пользователь.
-- `get_role(request, user)` — `"admin" | "user" | "guest"`. Сначала смотрит `session["user_role"]`, потом `user.role`, fallback `"guest"`.
+- `get_role(request, user)` — `"admin" | "user" | "guest"`. Sync, читает session-cookie. Используется только для UI-cosmetics (показать ли admin-вкладку); может отдавать stale-роль до 30 дней. **Не использовать для авторизации.**
 - `require_authenticated(request)` → 401 если нет `user_id` в сессии.
-- `require_admin(request)` → 403 если роль не `admin`.
+- `require_admin_async(request)` → читает `User.role` из БД с per-user TTL-cache 60s (`_ROLE_CACHE` в `_helpers.py`). Если admin revoked в БД — теряет доступ за ≤60s. Это правильный путь для всех protected admin endpoint'ов.
+- `require_admin(request)` (sync, **deprecated**) — берёт роль из session, та же 30-day stale-проблема. Оставлен для совместимости.
+
+**Cache invalidation:** `admin_delete_user` явно вызывает `_drop_role_cache(user_id)` сразу после revoke — на multi-replica один воркер не должен держать stale-роль удалённого user'а.
 
 ## Гостевой режим
 
@@ -67,7 +72,7 @@ RedirectResponse("/")
 
 ## Logout
 
-`GET /auth/logout` → `request.session.clear()` → редирект `/`. Cookie остаётся (с пустым payload), но user_id оттуда стёрт.
+`POST /auth/logout` → `request.session.clear()` → JSON `{"ok": true}`. Frontend (`app.js`) отправляет через `fetch('POST')` чтобы прошёл CSRF-чек, затем navigate'ит на `/`. Раньше был GET — эксплоился через `<img src="/auth/logout">` в любой странице которую посещал залогиненный user.
 
 ## Safety / связи
 

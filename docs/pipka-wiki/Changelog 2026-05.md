@@ -62,4 +62,58 @@ OpsEvent payload теперь включает `passes` count.
 
 ---
 
-→ [[Changelog 2026-04]] → [[Roadmap]] → [[Архитектура]] → [[Скоринг]] → [[Поиск и индексация]] → [[Проверка ссылок]]
+## 5 мая 2026
+
+### Day-1 security hardening (pre-launch)
+
+Перед prod-релизом для аудитории 5к закрыты 6 блокеров из глубокого аудита (severity 7-9). Все в одном коммите `8bc2093`.
+
+**1. Stale admin role.** `require_admin_async` + `_ROLE_CACHE` (TTL 60s/user) в `app/api/_helpers.py`. Перед фиксом роль читалась только из session-cookie (30 дней stale). Теперь — DB read с кешем, revoked admin теряет доступ за ≤60s. `admin_delete_user` явно дропает кеш через `_drop_role_cache(user_id)`. Sync `require_admin` оставлен deprecated для UI cosmetics.
+
+Wired: `admin.py`, `scan.py`, `ops.py`.
+
+**2. Logout CSRF.** Был `GET /auth/logout`, эксплоится через `<img src=/auth/logout>` в любой странице где залогинен user. Перевели на `POST` + CSRF-токен. `_CSRF_EXEMPT_PREFIXES` сужен с `/auth/` до `/auth/google/` (только OAuth flow). Frontend `app.js` + inline в `dashboard.html` — `fetch('POST').finally(navigate)`.
+
+**3. SecurityHeadersMiddleware.** Новый middleware в `app/main.py`. Заголовки на каждом ответе:
+
+- `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`
+- `Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; ...; frame-ancestors 'none'`
+- `X-Frame-Options: DENY`
+- `X-Content-Type-Options: nosniff`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()`
+
+Mounted innermost — заголовки попадают на все ответы включая `/static/*`. См. [[Безопасность#day-1-фиксы-перед-prod-релизом]].
+
+**4. Resume upload OOM.** Был `content = await file.read()` — буферилось ВСЁ тело до проверки 10MB. Атакующий шлёт 1GB → OOM контейнера. Теперь:
+
+- Pre-check `request.headers["content-length"]` ≤ `MAX_RESUME_UPLOAD_BYTES`.
+- Стрим 64KB-чанками через `file.read(64*1024)` с running total. На превышении — 413 в момент пересечения лимита.
+
+**5. ZIP-bomb defense на DOCX.** 50KB DOCX может декларировать 5GB document.xml. Добавлена проверка `zf.getinfo("word/document.xml").file_size` до `read()`, лимит 8MB uncompressed → 400.
+
+**6. Session fixation.** В `/auth/google/callback` перед записью identity вызывается `request.session.clear()`. Если атакующий до login'а подсунул жертве cookie через subdomain XSS / MITM, plant'нутая сессия теряет identity.
+
+**Verification на проде** (после деплоя):
+```
+$ curl -sI https://pipka.net/api/me | grep -iE 'hsts|csp|x-frame|x-content|referrer|permissions'
+strict-transport-security: max-age=31536000; includeSubDomains; preload
+x-frame-options: DENY
+x-content-type-options: nosniff
+referrer-policy: strict-origin-when-cross-origin
+permissions-policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
+content-security-policy: default-src 'self'; ...
+```
+
+`GET /auth/logout` → 405 Method Not Allowed (только POST).
+
+**Что осталось** (Day-2 + Day-3 из плана аудита):
+
+- Day-2 (high): TrustedHostMiddleware, global per-IP rate-limit, `?search=` length cap, profile-list size limits, Sentry PII filter.
+- Day-3 (medium): jsq → htmlEscape combo, PDF/DOCX parse timeout, Telegram Forbidden auto-deactivate, ON DELETE CASCADE на FK, validate job_id existence в actions.
+
+См. [[Roadmap#day-1-security-hardening]] и [[Безопасность#day-1-фиксы-перед-prod-релизом]].
+
+---
+
+→ [[Changelog 2026-04]] → [[Roadmap]] → [[Архитектура]] → [[Безопасность]] → [[Auth]] → [[API]]

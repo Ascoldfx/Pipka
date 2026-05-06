@@ -44,6 +44,17 @@
 - `?semantic=1` опция в `/api/jobs` — pre-rank по cosine-similarity к profile-embedding.
 - Подробнее — [[Поиск и индексация]].
 
+### Day-1 security hardening (5 мая 2026, перед prod-релизом)
+
+Pre-launch блокеры из глубокого аудита:
+
+- **Stale admin role** — `require_admin_async` + per-user TTL-cache 60s проверяет роль в БД. Sync-вариант помечен deprecated.
+- **Logout CSRF** — `GET /auth/logout` → `POST /auth/logout`, требует X-CSRF-Token. Frontend через `fetch('POST')`.
+- **Security headers** — HSTS, CSP, X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy, Permissions-Policy. См. [[Безопасность#day-1-фиксы]].
+- **Resume upload OOM** — buffered `await file.read()` → стрим 64KB-чанками с running counter и Content-Length pre-check. 1GB upload больше не сажает контейнер.
+- **DOCX zip-bomb** — `ZipInfo.file_size` проверка до `read()`, лимит 8 MB uncompressed.
+- **Session fixation** — `request.session.clear()` перед записью identity в OAuth callback.
+
 ### Refactoring
 - `dashboard.py` (750 строк) → 8 файлов по concern'ам (см. [[API]]).
 - Per-row `flush+IntegrityError` антипаттерн в Claude `_score_batch` → batch UPSERT.
