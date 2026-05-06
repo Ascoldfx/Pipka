@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy import and_, asc, case, desc, func, literal_column, or_, select
@@ -23,6 +24,43 @@ from app.services.tracker_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# Tokens that have meaning in to_tsquery syntax — must be stripped from
+# user input before we splice it into a prefix query, otherwise a search
+# for "C++" or "AT&T" or "(Senior)" would either raise a parse error in
+# Postgres or, worse, become a different query than the user typed.
+_TSQUERY_RESERVED = re.compile(r"[:&|!()<>*]")
+
+
+def _build_prefix_tsquery(term: str) -> str:
+    """Convert a user search string into a ``to_tsquery``-compatible
+    AND-of-prefix-tokens expression.
+
+    Example: ``"Heraeus Quarz"`` → ``"heraeus:* & quarz:*"``.
+
+    Why not ``websearch_to_tsquery`` like before: that function matches
+    whole tokens after the dictionary normalises them, so ``"Hera"`` does
+    NOT match a vector built from ``"Heraeus Quarzglas GmbH"``. Users
+    expect substring-style behaviour ("type a few letters of a company,
+    see hits"). The standard idiom in PostgreSQL is appending ``:*`` to
+    each token of a ``to_tsquery`` call — that does prefix matching
+    against the lexeme tree, indexed by the same GIN as before.
+
+    Returns ``""`` if the input has no usable tokens (whitespace,
+    punctuation only) — caller should skip the filter.
+    """
+    if not term:
+        return ""
+    # Strip tsquery operators so "C++" doesn't become a syntax error.
+    cleaned = _TSQUERY_RESERVED.sub(" ", term.lower())
+    # \w in re.UNICODE captures cyrillic / umlaut letters too.
+    tokens = re.findall(r"\w+", cleaned, flags=re.UNICODE)
+    if not tokens:
+        return ""
+    # Cap token count — paranoid bound on top of the 200-char ?search= cap
+    # so a "a b c d e ..." flood doesn't explode the query plan.
+    return " & ".join(f"{t}:*" for t in tokens[:8])
 
 
 @router.get("/api/countries")
@@ -88,10 +126,15 @@ async def get_jobs(
             term = search.strip()
             if term:
                 if is_postgres:
-                    query = func.websearch_to_tsquery("simple", term)
-                    search_vector = literal_column("jobs.search_vector")
-                    filters.append(search_vector.op("@@")(query))
-                    search_rank = func.ts_rank_cd(search_vector, query)
+                    # Prefix-match per token so "Hera" finds "Heraeus" — the
+                    # default websearch_to_tsquery only matched whole lexemes
+                    # and gave zero hits on partial inputs.
+                    tsq_str = _build_prefix_tsquery(term)
+                    if tsq_str:
+                        query = func.to_tsquery("simple", tsq_str)
+                        search_vector = literal_column("jobs.search_vector")
+                        filters.append(search_vector.op("@@")(query))
+                        search_rank = func.ts_rank_cd(search_vector, query)
                 else:
                     # SQLite/dev fallback — production uses tsvector + GIN.
                     escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
