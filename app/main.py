@@ -189,6 +189,41 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class MaxBodySizeMiddleware(BaseHTTPMiddleware):
+    """Reject mutating requests whose declared body is bigger than we can
+    safely buffer.
+
+    Day-1 fixed the file-upload OOM by streaming, but that only covered
+    the dedicated multipart endpoint. ``POST /api/profile`` accepts
+    ``resume_text`` as a Form field — Starlette's form parser reads the
+    whole body into memory before any application code runs, so a 500 MB
+    POST blows the container regardless of our ``len(resume_text) >
+    100_000`` check.
+
+    This middleware reads ``Content-Length`` upfront. If it's missing
+    (chunked transfer) we let it through, but uvicorn's
+    ``--limit-request-line`` plus the per-bucket rate limiter blunt the
+    practical exploit. The hard ceiling matches our largest legitimate
+    upload (10 MB resume + headroom).
+    """
+
+    MAX_BYTES = 12 * 1024 * 1024  # 12 MB
+    UNSAFE_METHODS = {"POST", "PUT", "PATCH"}
+    EXEMPT_PREFIXES = ("/auth/google/",)
+
+    async def dispatch(self, request: Request, call_next):
+        if request.method in self.UNSAFE_METHODS and not any(
+            request.url.path.startswith(p) for p in self.EXEMPT_PREFIXES
+        ):
+            cl = request.headers.get("content-length")
+            if cl and cl.isdigit() and int(cl) > self.MAX_BYTES:
+                return JSONResponse(
+                    {"detail": f"Request body too large (>{self.MAX_BYTES // (1024 * 1024)} MB)"},
+                    status_code=413,
+                )
+        return await call_next(request)
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Best-practice security headers on every response.
 
@@ -317,6 +352,10 @@ app.add_middleware(
 # fake X-CSRF-Token gets 429'd before we burn cycles parsing session
 # cookies and validating CSRF.
 app.add_middleware(RateLimitMiddleware)
+# Body-size cap — checked from Content-Length header before Starlette's
+# form/JSON parsers buffer the body into memory. Rejects 500 MB POSTs
+# regardless of which endpoint they target.
+app.add_middleware(MaxBodySizeMiddleware)
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret,

@@ -128,11 +128,32 @@ async def get_hidden_dedup_hashes(user_id: int, session: AsyncSession) -> set[st
     return {row[0] for row in result.fetchall()}
 
 
-async def update_status(app_id: int, new_status: str, note: str | None, session: AsyncSession) -> Application | None:
+async def update_status(
+    user_id: int,
+    app_id: int,
+    new_status: str,
+    note: str | None,
+    session: AsyncSession,
+) -> Application | None:
+    """Update an Application's status. Caller MUST pass their own ``user_id``
+    so we can scope the row by ownership — a Telegram callback handler
+    receives ``app_id`` straight from ``callback_data`` and that value is
+    not authenticated, only the user is. Without the WHERE-clause filter
+    a user could craft ``status_<other-user-app-id>_rejected`` and mutate
+    someone else's pipeline.
+
+    Returns ``None`` if the row is not owned by ``user_id`` or the status
+    is not in ``VALID_STATUSES`` — caller should treat that as a 403/404.
+    """
     if new_status not in VALID_STATUSES:
         return None
 
-    result = await session.execute(select(Application).where(Application.id == app_id))
+    result = await session.execute(
+        select(Application).where(
+            Application.id == app_id,
+            Application.user_id == user_id,
+        )
+    )
     app = result.scalar_one_or_none()
     if not app:
         return None

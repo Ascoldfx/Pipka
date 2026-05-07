@@ -58,13 +58,24 @@ async def status_update_handler(update: Update, context: ContextTypes.DEFAULT_TY
     if len(parts) < 3:
         return
 
-    app_id = int(parts[1])
+    try:
+        app_id = int(parts[1])
+    except ValueError:
+        await query.answer("Неверный запрос", show_alert=True)
+        return
     new_status = parts[2]
 
     async with async_session() as session:
-        app = await update_status(app_id, new_status, None, session)
+        # Resolve the calling Telegram user → User.id, then pass that into
+        # update_status so it scopes the Application row by ownership.
+        # callback_data is not authenticated — without the user-id filter
+        # a crafted "status_<other-user-app-id>_rejected" callback would
+        # mutate someone else's pipeline.
+        user = await get_or_create_user(query.from_user.id, query.from_user.full_name, session)
+        await session.commit()
+        app = await update_status(user.id, app_id, new_status, None, session)
 
     if app:
         await query.answer(f"Статус обновлён: {new_status}", show_alert=True)
     else:
-        await query.answer("Ошибка обновления", show_alert=True)
+        await query.answer("Ошибка обновления (или вакансия не ваша)", show_alert=True)
