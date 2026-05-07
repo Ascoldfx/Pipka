@@ -580,6 +580,16 @@ async function initApp() {
       if (me.avatar) { avatar.src = me.avatar; avatar.style.display = 'inline'; }
       if (me.name) { uname.textContent = me.name; uname.style.display = 'inline'; }
 
+      // Surface the Telegram-unlinked banner. /api/me returns
+      // telegram_linked=false when the scheduler's Forbidden handler
+      // cleared User.telegram_id (user blocked the bot). Without this
+      // banner, push notifications silently disappear and the user has
+      // no idea why.
+      if (me.telegram_linked === false) {
+        const banner = document.getElementById('tg-unlinked-banner');
+        if (banner) banner.style.display = 'flex';
+      }
+
       if (S.role === 'admin') {
         if (rb) { rb.textContent = 'Admin'; rb.style.background = 'var(--green)'; rb.style.color = '#fff'; }
         if (scanBtn) scanBtn.style.display = 'inline-block';

@@ -104,6 +104,11 @@
   .url-badge { display:inline-block; padding:1px 6px; margin-left:6px; border-radius:3px; font-size:10px; font-weight:600; vertical-align:middle; cursor:default; }
   .url-badge.closed { background:#ffe5e5; color:#8b1a1a; border:1px solid #f5b3b3; }
   .url-badge.unreachable { background:#fff3cd; color:#7c5400; border:1px solid #ffd96b; }
+  .banner { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 16px; font-size:13px; border-bottom:1px solid var(--fg-muted, #ddd); }
+  .banner-warning { background:#fff3cd; color:#7c5400; border-bottom-color:#ffd96b; }
+  .banner code { background:rgba(0,0,0,0.06); padding:1px 5px; border-radius:3px; font-size:12px; }
+  .banner-x { background:transparent; border:0; font-size:18px; line-height:1; cursor:pointer; color:inherit; opacity:0.6; }
+  .banner-x:hover { opacity:1; }
   tr.job-closed { opacity:0.55; }
   tr.job-closed .job-title { text-decoration:line-through; }
   .source-merged-tip { font-size:8px; color:var(--muted); display:block; margin-top:2px; letter-spacing:.3px; }
@@ -412,7 +417,7 @@ const TRANSLATIONS = {
     'nav.jobs':'All Jobs','nav.inbox':'Inbox','nav.applied':'Applied','nav.rejected':'Rejected','nav.settings':'Profile',
     
     'filter.search':'Search title or company...','filter.score':'Score','filter.country':'Country',
-    'filter.allCountries':'All Countries','filter.source':'Source','filter.all':'All','filter.includeClosed':'Show closed',
+    'filter.allCountries':'All Countries','filter.source':'Source','filter.all':'All','filter.includeClosed':'Show closed','banner.tgUnlinked':'⚠️ Telegram notifications are off — you blocked the bot. Send <code>/start</code> to @pipka_bot to re-enable.',
     
     
     
@@ -439,7 +444,7 @@ const TRANSLATIONS = {
     'nav.jobs':'Все вакансии','nav.inbox':'Входящие','nav.applied':'Отклики','nav.rejected':'Отклонённые','nav.settings':'Профиль',
     
     'filter.search':'Поиск по названию или компании...','filter.score':'Оценка','filter.country':'Страна',
-    'filter.allCountries':'Все страны','filter.source':'Источник','filter.all':'Все','filter.includeClosed':'Показывать закрытые',
+    'filter.allCountries':'Все страны','filter.source':'Источник','filter.all':'Все','filter.includeClosed':'Показывать закрытые','banner.tgUnlinked':'⚠️ Telegram-уведомления отключены — вы заблокировали бота. Чтобы возобновить, отправьте <code>/start</code> в @pipka_bot.',
     
     
     
@@ -466,7 +471,7 @@ const TRANSLATIONS = {
     'nav.jobs':'Alle Stellen','nav.inbox':'Eingang','nav.applied':'Bewerbungen','nav.rejected':'Abgelehnt','nav.settings':'Profil',
     
     'filter.search':'Titel oder Firma suchen...','filter.score':'Bewertung','filter.country':'Land',
-    'filter.allCountries':'Alle Länder','filter.source':'Quelle','filter.all':'Alle','filter.includeClosed':'Geschlossene zeigen',
+    'filter.allCountries':'Alle Länder','filter.source':'Quelle','filter.all':'Alle','filter.includeClosed':'Geschlossene zeigen','banner.tgUnlinked':'⚠️ Telegram-Benachrichtigungen sind aus — du hast den Bot blockiert. Sende <code>/start</code> an @pipka_bot zum Reaktivieren.',
     
     
     
@@ -493,7 +498,7 @@ const TRANSLATIONS = {
     'nav.jobs':'Todos los trabajos','nav.inbox':'Bandeja','nav.applied':'Aplicados','nav.rejected':'Rechazados','nav.settings':'Perfil',
     
     'filter.search':'Buscar título o empresa...','filter.score':'Puntuación','filter.country':'País',
-    'filter.allCountries':'Todos los países','filter.source':'Fuente','filter.all':'Todos','filter.includeClosed':'Mostrar cerradas',
+    'filter.allCountries':'Todos los países','filter.source':'Fuente','filter.all':'Todos','filter.includeClosed':'Mostrar cerradas','banner.tgUnlinked':'⚠️ Las notificaciones de Telegram están desactivadas — bloqueaste el bot. Envía <code>/start</code> a @pipka_bot para reactivar.',
     
     
     
@@ -565,6 +570,14 @@ function applyLang() {
     </button>
   </div>
 </header>
+
+<!-- Surfaces when /api/me returns telegram_linked=false (scheduler cleared
+     User.telegram_id after a Forbidden — the user blocked the bot, so push
+     notifications stopped silently). Hidden by default; initApp() shows it. -->
+<div id="tg-unlinked-banner" class="banner banner-warning" style="display:none">
+  <span data-i18n="banner.tgUnlinked">⚠️ Telegram-уведомления отключены — вы заблокировали бота. Чтобы возобновить, отправьте <code>/start</code> в @pipka_bot.</span>
+  <button type="button" class="banner-x" onclick="document.getElementById('tg-unlinked-banner').style.display='none'" aria-label="dismiss">×</button>
+</div>
 
 <div class="tabs" id="stats">
   <div class="tabs-left">

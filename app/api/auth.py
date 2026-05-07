@@ -92,11 +92,26 @@ async def get_me(request: Request):
     Includes the CSRF token so the SPA can echo it back via the
     ``X-CSRF-Token`` header on unsafe requests. The token is also delivered
     as a JS-readable cookie by ``CSRFMiddleware`` — either source works.
+
+    Also surfaces ``telegram_linked: bool`` — drops to ``False`` when the
+    scheduler's ``Forbidden`` handler has cleared ``User.telegram_id``
+    (the user blocked the bot). Frontend uses it to show a "re-link via
+    /start" banner so Telegram pushes don't silently disappear.
     """
     user_id = request.session.get("user_id")
     csrf_token = request.session.get("csrf_token", "")
     if not user_id:
         return {"authenticated": False, "role": "guest", "csrf_token": csrf_token}
+
+    # One short query for the live telegram_id — session has it from login,
+    # but the scheduler's Forbidden handler updates the DB row only.
+    telegram_linked = False
+    async with async_session() as session:
+        from sqlalchemy import select  # noqa: PLC0415
+        from app.models.user import User  # noqa: PLC0415
+        result = await session.execute(select(User.telegram_id).where(User.id == user_id))
+        row = result.scalar_one_or_none()
+        telegram_linked = row is not None
 
     return {
         "authenticated": True,
@@ -106,4 +121,5 @@ async def get_me(request: Request):
         "avatar": request.session.get("user_avatar", ""),
         "role": request.session.get("user_role", "user"),
         "csrf_token": csrf_token,
+        "telegram_linked": telegram_linked,
     }
