@@ -34,7 +34,14 @@ def _drop_role_cache(user_id: int) -> None:
 
 async def get_session_user(request: Request, session) -> User | None:
     """Fetch the logged-in User (with profile eager-loaded) from the session
-    cookie, or ``None`` if not authenticated / inactive."""
+    cookie, or ``None`` if not authenticated / inactive.
+
+    If the cookie names a user that has since been deactivated or deleted,
+    we proactively ``request.session.clear()`` so the now-stale cookie
+    stops shipping with every request. Without this the user kept a
+    valid-looking session cookie for the full 30-day max-age, even after
+    admin_delete_user revoked them.
+    """
     user_id = request.session.get("user_id")
     if not user_id:
         return None
@@ -43,7 +50,13 @@ async def get_session_user(request: Request, session) -> User | None:
         .options(selectinload(User.profile))
         .where(User.id == user_id, User.is_active == True)  # noqa: E712
     )
-    return result.scalar_one_or_none()
+    user = result.scalar_one_or_none()
+    if user is None and user_id is not None:
+        # Cookie pointed at a user who was deleted / deactivated mid-session.
+        # Drop the stale identity so subsequent requests look anonymous.
+        request.session.clear()
+        _drop_role_cache(user_id)
+    return user
 
 
 # Alias kept for symmetry with old dashboard.py — both names referenced in

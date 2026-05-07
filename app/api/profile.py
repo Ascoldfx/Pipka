@@ -1,6 +1,7 @@
 """User profile + resume upload endpoints."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
@@ -27,6 +28,12 @@ MAX_RESUME_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 MAX_PROFILE_LIST = 50          # target_titles, preferred_countries, excluded_keywords, target_companies
 MAX_PROFILE_LANGUAGES = 20     # languages dict
 MAX_PROFILE_FIELD_LEN = 200    # one entry's max length
+
+# Hard wall on parse time. pdfminer can spin forever on a maliciously-crafted
+# font-metrics table; XML parsing on a deeply-nested document.xml the same.
+# We run the parser in a thread so the asyncio loop stays responsive, and
+# kill the request after this many seconds.
+RESUME_PARSE_TIMEOUT_SECONDS = 30
 
 
 @router.get("/api/profile")
@@ -190,7 +197,17 @@ async def upload_resume(request: Request, file: UploadFile = File(...)):
         try:
             import io
             from pdfminer.high_level import extract_text as pdf_extract
-            text = pdf_extract(io.BytesIO(content))
+
+            def _parse_pdf() -> str:
+                return pdf_extract(io.BytesIO(content))
+
+            text = await asyncio.wait_for(
+                asyncio.to_thread(_parse_pdf),
+                timeout=RESUME_PARSE_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("PDF parse timeout (>%ds): filename=%s", RESUME_PARSE_TIMEOUT_SECONDS, filename)
+            raise HTTPException(status_code=400, detail=f"PDF parsing exceeded {RESUME_PARSE_TIMEOUT_SECONDS}s — file too complex")
         except Exception:
             logger.exception("PDF parse failed: filename=%s", filename)
             raise HTTPException(status_code=400, detail="Could not parse PDF")
@@ -215,14 +232,24 @@ async def upload_resume(request: Request, file: UploadFile = File(...)):
                     status_code=400,
                     detail="DOCX content too large (decompressed > 8 MB) — possible zip bomb"
                 )
-            xml_content = zf.read("word/document.xml")
-            tree = ET.fromstring(xml_content)
-            paragraphs = []
-            for p in tree.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p"):
-                texts = [t.text for t in p.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t") if t.text]
-                if texts:
-                    paragraphs.append("".join(texts))
-            text = "\n".join(paragraphs)
+
+            def _parse_docx() -> str:
+                xml_content = zf.read("word/document.xml")
+                tree = ET.fromstring(xml_content)
+                paragraphs = []
+                for p in tree.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p"):
+                    texts = [t.text for t in p.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t") if t.text]
+                    if texts:
+                        paragraphs.append("".join(texts))
+                return "\n".join(paragraphs)
+
+            text = await asyncio.wait_for(
+                asyncio.to_thread(_parse_docx),
+                timeout=RESUME_PARSE_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("DOCX parse timeout (>%ds): filename=%s", RESUME_PARSE_TIMEOUT_SECONDS, filename)
+            raise HTTPException(status_code=400, detail=f"DOCX parsing exceeded {RESUME_PARSE_TIMEOUT_SECONDS}s")
         except HTTPException:
             raise
         except Exception:

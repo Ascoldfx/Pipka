@@ -31,7 +31,7 @@ class UserProfile(Base):
     __tablename__ = "user_profiles"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
     resume_text: Mapped[str | None] = mapped_column(Text)
     target_titles: Mapped[list | None] = mapped_column(JSON)  # ["Supply Chain Manager", "Procurement Lead"]
     min_salary: Mapped[int | None] = mapped_column(Integer)

@@ -65,6 +65,17 @@ High-severity пункты из аудита (severity 6-7):
 - **Profile-list size limits** — 50 entries × 200 chars per list (`target_titles`/`preferred_countries`/`excluded_keywords`/`target_companies`); 20-key dict с 50-char key/value для `languages`. JSON-bomb path закрыт.
 - **Sentry PII filter** — `_sentry_before_send` рекурсивно scrub'ит 13 ключей (resume_text, email, telegram_id, google_sub, csrf_token, ...) из stack-frame locals, breadcrumb data, request headers/body, extra context. См. [[Observability#3-sentry]] и [[Безопасность#day-2-фиксы]].
 
+### Day-3 security hardening (7 мая 2026)
+
+Medium-severity (4-5):
+
+- **jsq HTML-escape combo** — `"`, `&`, `<`, `>` плюс старые `\` и `'`. Admin-таблица с именами не XSS-вектор.
+- **PDF/DOCX parse timeout 30s** — `asyncio.wait_for(asyncio.to_thread(...), timeout=30)`. Inf-loop'ы в font metrics / XML-bomb отбиваются.
+- **Telegram Forbidden auto-deactivate** — блокировка user'а → `telegram_id=None` + OpsEvent. Одна блокировка не роняет весь push-цикл.
+- **Inactive user session clear** — `get_session_user` дропает stale cookie если user удалён.
+- **ON DELETE CASCADE** на 7 FK (миграция `0005_cascade_fks.py`). Cleanup-job'ы больше не зависят от ручного порядка delete'ов.
+- **Validate job_id** в `/api/jobs/{id}/action` — 404 вместо FK-500.
+
 ### Refactoring
 - `dashboard.py` (750 строк) → 8 файлов по concern'ам (см. [[API]]).
 - Per-row `flush+IntegrityError` антипаттерн в Claude `_score_batch` → batch UPSERT.

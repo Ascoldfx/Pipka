@@ -74,8 +74,8 @@ class JobScore(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"))
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     score: Mapped[int] = mapped_column(Integer)  # 0-100
     ai_analysis: Mapped[str | None] = mapped_column(Text)
     breakdown: Mapped[dict | None] = mapped_column(JSON)  # {"relevance": 85, "language_fit": 70, ...}

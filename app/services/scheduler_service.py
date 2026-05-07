@@ -350,29 +350,54 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
     # Sort by score desc
     top_results.sort(key=lambda x: x[1].score, reverse=True)
 
-    # Push to Telegram
+    # Push to Telegram. ``Forbidden`` from python-telegram-bot means the
+    # user blocked the bot or deleted the chat — there's no point retrying
+    # for the next 6 weeks of scans. Detach by clearing telegram_id and
+    # bail; the scoring rows we already wrote stay intact, the user can
+    # re-link via /start later.
+    from telegram.error import Forbidden  # noqa: PLC0415
+
     count = len(top_results)
     header = f"🔥 Найдено {count} {'новая топ-вакансия' if count == 1 else 'новых топ-вакансий'}!\n\nАвтоматический скан — только лучшие совпадения (score {TOP_SCORE_THRESHOLD}+)"
-    await bot_app.bot.send_message(chat_id=user.telegram_id, text=header)
-
-    for job, score_obj in top_results[:10]:  # Max 10 push notifications
-        card = format_job_card(job, score=score_obj.score)
-        if score_obj.ai_analysis:
-            card += f"\n\n💬 {score_obj.ai_analysis}"
-        await bot_app.bot.send_message(
-            chat_id=user.telegram_id,
-            text=card,
-            reply_markup=job_actions(job.id),
+    pushed = 0
+    try:
+        await bot_app.bot.send_message(chat_id=user.telegram_id, text=header)
+        for job, score_obj in top_results[:10]:  # Max 10 push notifications
+            card = format_job_card(job, score=score_obj.score)
+            if score_obj.ai_analysis:
+                card += f"\n\n💬 {score_obj.ai_analysis}"
+            await bot_app.bot.send_message(
+                chat_id=user.telegram_id,
+                text=card,
+                reply_markup=job_actions(job.id),
+            )
+            pushed += 1
+    except Forbidden:
+        logger.warning(
+            "Telegram Forbidden for user %s (id=%s) — clearing telegram_id",
+            user.telegram_id, user.id,
         )
+        user.telegram_id = None
+        await session.commit()
+        await record_ops_event(
+            "telegram_forbidden", "warn",
+            source="scheduler",
+            message=f"user_id={user.id} cleared telegram_id (user blocked bot)",
+        )
+        return {
+            "user_id": user.id, "telegram_id": None,
+            "eligible_jobs": len(new_jobs), "scored_jobs": len(scores),
+            "top_results": len(top_results), "pushed": pushed,
+        }
 
-    logger.info("Pushed %d top jobs to user %s", min(count, 10), user.telegram_id)
+    logger.info("Pushed %d top jobs to user %s", pushed, user.telegram_id)
     return {
         "user_id": user.id,
         "telegram_id": user.telegram_id,
         "eligible_jobs": len(new_jobs),
         "scored_jobs": len(scores),
         "top_results": len(top_results),
-        "pushed": min(count, 10),
+        "pushed": pushed,
     }
 
 

@@ -16,8 +16,8 @@ class Application(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"))
     status: Mapped[str] = mapped_column(String(30), default="saved")  # saved/applied/interviewing/offer/rejected/withdrawn
     notes: Mapped[str | None] = mapped_column(Text)
     applied_at: Mapped[datetime | None] = mapped_column(DateTime)
@@ -32,7 +32,7 @@ class ApplicationHistory(Base):
     __tablename__ = "application_history"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id"))
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"))
     old_status: Mapped[str | None] = mapped_column(String(30))
     new_status: Mapped[str] = mapped_column(String(30))
     note: Mapped[str | None] = mapped_column(Text)
@@ -45,7 +45,7 @@ class SearchSubscription(Base):
     __tablename__ = "search_subscriptions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     name: Mapped[str] = mapped_column(String(255))
     query_params: Mapped[dict] = mapped_column(JSON)  # {"queries": [...], "countries": [...], "locations": [...]}
     cron_expression: Mapped[str] = mapped_column(String(50), default="0 9 * * *")  # daily 9am

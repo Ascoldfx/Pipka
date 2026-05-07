@@ -1389,7 +1389,27 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
 
 function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 function safeUrl(u){if(!u)return'#';try{const p=new URL(u);if(p.protocol==='https:'||p.protocol==='http:')return u;}catch(e){}return'#';}
-function jsq(s){return String(s ?? '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+
+// jsq — used inside an HTML attribute value (single-quoted) that's then
+// re-parsed as a JS string by the browser when the user clicks. The
+// surrounding context is `onclick="... '${jsq(name)}' ..."`. To be safe
+// across BOTH parsing layers we have to neutralise:
+//   * JS-string breakers: backslash and single-quote
+//   * HTML-attribute breakers: double-quote (closes the onclick="..."),
+//     ampersand (entity expansion), and angle brackets (script-inject
+//     on quirky parsers / older sanitisers).
+// Without escaping double-quotes a name like `o" onclick="alert(1)"` would
+// break out of the attribute. A bare-bones jsq that handled only \ and '
+// missed all of those.
+function jsq(s){
+  return String(s ?? '')
+    .replace(/\\/g,  '\\\\')
+    .replace(/'/g,   "\\'")
+    .replace(/"/g,   '&quot;')
+    .replace(/&/g,   '&amp;')
+    .replace(/</g,   '&lt;')
+    .replace(/>/g,   '&gt;');
+}
 
 /* Interactivity */
 document.querySelectorAll('.country-item').forEach(el => {

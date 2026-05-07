@@ -278,6 +278,12 @@ async def job_action(job_id: int, request: Request, action: str = Query(...)):
             user = await get_user(request, session)
             if not user:
                 raise HTTPException(status_code=401, detail="Login required")
+            # Validate job exists before mutating Application — without this
+            # an arbitrary job_id (deleted by cleanup, never existed,
+            # enumeration probe) raises FK-constraint 500 from
+            # tracker_service. 404 is the honest answer.
+            if (await session.get(Job, job_id)) is None:
+                raise HTTPException(status_code=404, detail="Job not found")
             auto_excluded: str | None = None
             if action == "save":
                 await save_job(user.id, job_id, session)
