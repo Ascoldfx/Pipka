@@ -243,6 +243,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
       microphone, geolocation; we don't use them.
     """
 
+    # CSP currently includes ``'unsafe-inline'`` for both script-src and
+    # style-src — required because dashboard.html has 1.2k lines of inline
+    # ``<script>`` plus 53 inline ``onclick=`` attrs. Tightening this
+    # (audit #A6) is post-launch work: needs a 4-8h refactor to extract
+    # the inline JS into static files and convert onclick= attrs to
+    # event delegation, with a UI regression pass. Risk too high for a
+    # 1-day-pre-launch change.
     CSP = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline'; "
