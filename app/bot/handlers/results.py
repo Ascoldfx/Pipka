@@ -18,7 +18,11 @@ async def ai_analysis_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query
     await query.answer()
 
-    job_id = int(query.data.replace("ai_", ""))
+    try:
+        job_id = int(query.data.replace("ai_", ""))
+    except (ValueError, TypeError):
+        await query.answer("Неверный запрос", show_alert=True)
+        return
     original_text = query.message.text or ""
     await query.edit_message_text(text=f"{original_text}\n\n⏳ Анализирую...")
 
@@ -51,7 +55,11 @@ async def save_job_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    job_id = int(query.data.replace("save_", ""))
+    try:
+        job_id = int(query.data.replace("save_", ""))
+    except (ValueError, TypeError):
+        await query.answer("Неверный запрос", show_alert=True)
+        return
 
     async with async_session() as session:
         user = await get_or_create_user(query.from_user.id, query.from_user.full_name, session)
@@ -65,7 +73,11 @@ async def applied_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    job_id = int(query.data.replace("applied_", ""))
+    try:
+        job_id = int(query.data.replace("applied_", ""))
+    except (ValueError, TypeError):
+        await query.answer("Неверный запрос", show_alert=True)
+        return
 
     async with async_session() as session:
         user = await get_or_create_user(query.from_user.id, query.from_user.full_name, session)
@@ -80,7 +92,11 @@ async def reject_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    job_id = int(query.data.replace("reject_", ""))
+    try:
+        job_id = int(query.data.replace("reject_", ""))
+    except (ValueError, TypeError):
+        await query.answer("Неверный запрос", show_alert=True)
+        return
 
     async with async_session() as session:
         user = await get_or_create_user(query.from_user.id, query.from_user.full_name, session)

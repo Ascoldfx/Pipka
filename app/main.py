@@ -10,7 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.api._ratelimit import RateLimitMiddleware
+from app.api._ratelimit import RateLimitMiddleware, start_bucket_cleanup_task
 from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
 from app.api.health import router as health_router
@@ -332,7 +332,13 @@ class NoCacheAPIMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    yield
+    # Spawn the rate-limit bucket cleanup loop. Held in app.state so the
+    # task object isn't GC'd while the loop is sleeping.
+    app.state.ratelimit_cleanup_task = start_bucket_cleanup_task()
+    try:
+        yield
+    finally:
+        app.state.ratelimit_cleanup_task.cancel()
 
 
 app = FastAPI(title="Pipka API", version="0.1.0", lifespan=lifespan)
