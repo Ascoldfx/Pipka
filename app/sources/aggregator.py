@@ -117,8 +117,10 @@ class JobAggregator:
         self.last_stats: dict = {}
 
     SOURCE_TIMEOUT = 120   # default timeout per source
-    # JobSpy scrapes LinkedIn + Indeed sequentially; needs more time for many queries
-    SOURCE_TIMEOUT_OVERRIDES: dict[str, int] = {"jobspy": 240}
+    # JobSpy scrapes LinkedIn + Indeed sequentially; needs more time for many queries.
+    # Adzuna: 40 combos × 2 pages with concurrency 4 + 0.4s pacing ≈ 20-40s, but
+    # give headroom for slow API responses under load.
+    SOURCE_TIMEOUT_OVERRIDES: dict[str, int] = {"jobspy": 240, "adzuna": 180}
 
     async def _search_source(self, source: JobSource, params: SearchParams):
         """Run one source with a hard timeout so a hung source can't block the scan."""
