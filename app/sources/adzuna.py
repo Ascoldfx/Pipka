@@ -20,8 +20,9 @@ ADZUNA_BASE = "https://api.adzuna.com/v1/api/jobs"
 # Cartesian product and run requests with bounded concurrency + pacing.
 ADZUNA_MAX_COMBOS = 40        # query × country pairs per scan (most-relevant first)
 ADZUNA_MAX_PAGES = 2          # pages per combo (was 3)
-ADZUNA_CONCURRENCY = 4        # parallel in-flight requests
+ADZUNA_CONCURRENCY = 6        # parallel in-flight requests
 ADZUNA_PACE_SECONDS = 0.4     # min gap between request starts (≈150/min ceiling)
+ADZUNA_REQUEST_TIMEOUT = 8    # per-page HTTP timeout (was 15) — fail fast on Adzuna 500s/slow pages
 
 
 class AdzunaSource:
@@ -102,7 +103,7 @@ class AdzunaSource:
             request_params["where"] = location
 
         try:
-            async with session.get(url, params=request_params, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+            async with session.get(url, params=request_params, timeout=aiohttp.ClientTimeout(total=ADZUNA_REQUEST_TIMEOUT)) as resp:
                 if resp.status != 200:
                     logger.warning("Adzuna %s/%s p%d returned %s", country, query, page, resp.status)
                     return []
