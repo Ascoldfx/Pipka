@@ -45,6 +45,16 @@ class Settings(BaseSettings):
     semantic_skip_enabled: bool = True
     semantic_skip_threshold: float = 0.5     # 1.0 = identical, 0.0 = orthogonal, <0 = opposite
 
+    # Source toggles (comma-separated, env-overridable).
+    # disabled_sources — JobAggregator skips any source whose source_name is
+    #   listed here. ``arbeitsagentur`` off by default: returns only
+    #   German-language listings, which don't fit the English-first audience.
+    # jobspy_sites — which JobSpy sub-sites to scrape. ``linkedin`` dropped by
+    #   default because it ignores the country filter and floods US jobs.
+    #   Re-enable with JOBSPY_SITES="indeed,linkedin".
+    disabled_sources: str = "arbeitsagentur"
+    jobspy_sites: str = "indeed"
+
     # Search / semantic indexing
     embedding_enabled: bool = True
     embedding_model: str = "models/gemini-embedding-001"

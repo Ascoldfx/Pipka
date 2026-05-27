@@ -133,13 +133,21 @@ class JobAggregator:
             )
 
     async def search(self, params: SearchParams, session: AsyncSession) -> list[Job]:
-        tasks = [self._search_source(source, params) for source in self.sources]
+        # Filter out admin-disabled sources (env DISABLED_SOURCES, comma-sep
+        # source_name values). Lets us turn off e.g. arbeitsagentur without
+        # touching the scheduler's source list.
+        disabled = {s.strip().lower() for s in settings.disabled_sources.split(",") if s.strip()}
+        active_sources = [s for s in self.sources if s.source_name.lower() not in disabled]
+        if disabled:
+            logger.info("Aggregator: %d source(s) disabled via config: %s", len(self.sources) - len(active_sources), ", ".join(sorted(disabled)))
+
+        tasks = [self._search_source(source, params) for source in active_sources]
         all_results = await asyncio.gather(*tasks, return_exceptions=True)
 
         raw_jobs: list[RawJob] = []
         source_stats: list[dict] = []
         for i, result in enumerate(all_results):
-            source_name = self.sources[i].source_name
+            source_name = active_sources[i].source_name
             if isinstance(result, Exception):
                 logger.error("Source %s failed: %s", source_name, result)
                 source_stats.append(
@@ -157,13 +165,13 @@ class JobAggregator:
                 "raw_count": len(result),
             }
             # Include API request count if the source tracked it (e.g. Jooble budget)
-            src_obj = self.sources[i]
+            src_obj = active_sources[i]
             if hasattr(src_obj, "_last_request_count"):
                 stat["api_requests"] = src_obj._last_request_count
             source_stats.append(stat)
             raw_jobs.extend(result)
 
-        logger.info("Aggregated %d raw jobs from %d sources", len(raw_jobs), len(self.sources))
+        logger.info("Aggregated %d raw jobs from %d sources", len(raw_jobs), len(active_sources))
 
         # Pass 1 — exact dedup by SHA-256(title+company)
         seen_hashes: set[str] = set()

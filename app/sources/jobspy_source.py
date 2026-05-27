@@ -62,8 +62,16 @@ class JobSpySource:
         # Cap queries — LinkedIn/Indeed scraping is slow; too many sequential calls → timeout
         queries = params.queries[:JOBSPY_MAX_QUERIES]
 
+        # Which sub-sites are allowed this run (env-configurable). LinkedIn is
+        # off by default — it ignores the country filter and floods US jobs.
+        from app.config import settings  # noqa: PLC0415
+        allowed = {s.strip().lower() for s in settings.jobspy_sites.split(",") if s.strip()}
+
         for country in params.countries:
             sites = SITE_MAP.get(country, ["indeed", "linkedin", "google"])
+            sites = [s for s in sites if s in allowed]
+            if not sites:
+                continue  # nothing enabled for this country
             location = ", ".join(params.locations) if params.locations else None
             limit = min(params.results_per_query, 25)
 
