@@ -404,22 +404,28 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
 def _backfill_score_fn():
     """Return the appropriate scoring function for backfill.
 
+    NVIDIA-first (changed 27.05.2026): Gemini's free tier (500 RPD) is chronically
+    exhausted by the real-time push path, so its breaker is open most of the day.
+    Picking Gemini first for backfill wasted whole 2h cycles on 429 retries before
+    falling through. NVIDIA Build (separate free quota) is the reliable bulk drainer;
+    Gemini stays dedicated to the real-time ``_score_and_notify`` push.
+
     Priority:
-      1. Gemini Flash (free) — if key set AND circuit breaker is closed.
-      2. NVIDIA Build (free) — if Gemini is exhausted/disabled and NVIDIA key is set.
+      1. NVIDIA Build (free, separate quota) — primary backfill drainer.
+      2. Gemini Flash (free) — only if NVIDIA key absent AND breaker closed.
       3. Claude (paid)       — last resort.
     """
+    if settings.nvidia_api_key:
+        from app.scoring.nvidia_matcher import score_jobs_nvidia  # noqa: PLC0415
+        logger.debug("Backfill scorer: using NVIDIA Build (%s)", settings.nvidia_model)
+        return score_jobs_nvidia
+
     if settings.gemini_api_key:
         from app.scoring.gemini_matcher import is_gemini_available, score_jobs_gemini  # noqa: PLC0415
         if is_gemini_available():
             logger.debug("Backfill scorer: using Gemini Flash (%s)", settings.gemini_model)
             return score_jobs_gemini
-        logger.warning("Backfill scorer: Gemini breaker open — falling back")
-
-    if settings.nvidia_api_key:
-        from app.scoring.nvidia_matcher import score_jobs_nvidia  # noqa: PLC0415
-        logger.info("Backfill scorer: using NVIDIA Build (%s)", settings.nvidia_model)
-        return score_jobs_nvidia
+        logger.warning("Backfill scorer: Gemini breaker open — falling back to Claude")
 
     logger.debug("Backfill scorer: using Claude (%s)", settings.claude_model)
     return score_jobs

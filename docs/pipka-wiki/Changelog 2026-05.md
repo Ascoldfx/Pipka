@@ -222,9 +222,20 @@ Recursive walk с depth-limit 6. Список PII-ключей в `_SENTRY_PII_K
   - Перебор кандидатов: `meta/llama-3.3-70b-instruct` ✅ 200/29s на 8 вакансий, чистый JSON + русские verdict'ы. `nemotron-super-49b-v1.5` — reasoning-модель, вылетает за 120s на строгом scoring-промпте. `nemotron-51b-instruct` — 404. `nemotron-mini-4b` — быстрая, но болтает преамбулу и слаба для скоринга.
 - `app/scoring/nvidia_matcher.py` — `_once()` теперь `.get("content")` (защита от `content=None` у reasoning-вариантов, чтобы батч пропускался, а не падал). `max_tokens` 8000, комментарии обновлены под новую модель.
 
-**Архитектурный вывод:** backfill выбирает скорер один раз за прогон (раз в 2ч). Когда Gemini исчерпан, единственный фолбэк — NVIDIA; если он мёртв, очередь стоит до следующего тика без сигнала. Кандидат на будущее — NVIDIA-first backfill + per-batch фолбэк (обсуждалось).
+**Архитектурный вывод:** backfill выбирает скорер один раз за прогон (раз в 2ч). Когда Gemini исчерпан, единственный фолбэк — NVIDIA; если он мёртв, очередь стоит до следующего тика без сигнала. → реализовано NVIDIA-first (ниже).
 
 См. [[Настройки#nvidia-build-idle-rescorer-для-de]], [[Скоринг]].
+
+### Backfill стал NVIDIA-first + ротация NVIDIA-ключа
+
+Дашборд Google AI Studio подтвердил: Gemini 3.1 Flash Lite упирается в `RPM 17/15` и `RPD 501/500` — free-tier выжжен real-time push'ем почти весь день, брейкер открыт. При Gemini-first backfill терял целые 2ч-циклы на холостые 429-ретраи перед фолбэком.
+
+- `app/services/scheduler_service.py` — `_backfill_score_fn()` теперь **NVIDIA-first**: NVIDIA Build → Gemini (только если NVIDIA-ключа нет и брейкер закрыт) → Claude. Gemini остаётся выделен под real-time `_score_and_notify` push.
+- Ротация утёкшего NVIDIA-ключа на свежий (в `/opt/pipka/.env`, не в репо).
+- Второй Gemini-ключ НЕ добавлен: лимиты free-tier считаются на проект, а доступный ключ — из того же проекта (квоту не удвоит).
+- 🚩 Замечен рост `404 NotFound` на Gemini-дашборде — возможный признак депрекейта `gemini-3.1-flash-lite-preview`. Под наблюдением (real-time push path).
+
+См. [[Скоринг#текущий-backend]], [[Настройки#nvidia-build-idle-rescorer-для-de]].
 
 ---
 
