@@ -164,6 +164,56 @@ Recursive walk с depth-limit 6. Список PII-ключей в `_SENTRY_PII_K
 
 См. [[Безопасность#day-2-фиксы]], [[Rate limiting#per-ip-middleware]].
 
+## 27 мая 2026
+
+### Упрощение профиля: убраны salary / languages / experience
+
+`min_salary`, `languages`, `experience_years` удалены из профиля — не учитывались осмысленно (зарплата отсутствует в большинстве листингов, lang/experience-подсказки в промпте добавляли шум без сигнала).
+
+- `app/api/profile.py` — убраны Form-параметры, GET-поля, POST-обработка, валидация, `MAX_PROFILE_LANGUAGES`.
+- `app/scoring/profile_hash.py` — `_PROFILE_FIELDS` сокращён до 7 полей.
+- `app/scoring/matcher.py` — `build_profile_text()` без salary/lang/experience-строк.
+- `app/static/dashboard.html` + `js/app.js` — убраны UI-поля и i18n-ключи (EN/RU/DE/ES).
+- Колонки БД (`min_salary`, `languages`, `experience_years`) остаются orphaned (без миграции на удаление).
+
+См. [[Настройки#настройки-профиля-пользователя-ui]], [[API#профиль]].
+
+### Тоглы источников: LinkedIn + Arbeitsagentur off
+
+Добавлены env-переключатели для отключения шумных источников без правки кода.
+
+- `DISABLED_SOURCES=arbeitsagentur` — агрегатор пропускает источник по `source_name`. Arbeitsagentur off: только немецкоязычные листинги.
+- `JOBSPY_SITES=indeed` — LinkedIn off: игнорирует country-фильтр, заваливает US-вакансиями.
+- `app/sources/aggregator.py` — `active_sources` фильтр по `disabled_sources`.
+- `app/sources/jobspy_source.py` — sites фильтруются по `jobspy_sites`.
+
+См. [[Настройки#источники]], [[Источники вакансий]].
+
+### Adzuna: фикс таймаута (concurrency)
+
+Последовательные 13×30×3=1170 вызовов → таймаут 120s. Переписано на ограниченный concurrency.
+
+- `app/sources/adzuna.py` — `ADZUNA_MAX_COMBOS=40`, `MAX_PAGES=2`, `CONCURRENCY=6`, `PACE=0.4s`, `REQUEST_TIMEOUT=8s`. Semaphore + global pacer через `asyncio.as_completed`.
+- Результат: 103 вакансии / 42s (было 0 / timeout).
+
+### Gemini circuit breaker: фикс срабатывания
+
+82 `gemini_429` за 2ч, но брейкер не падал. Причина: `AsyncRetrying(reraise=True)` пробрасывал исходный `ResourceExhausted` мимо `except RetryError`.
+
+- `app/scoring/gemini_matcher.py` — `reraise=False` + defence-in-depth в `except Exception` (вызов `_record_exhaust` если `_is_retryable`).
+
+См. [[Скоринг#circuit-breaker]].
+
+### Ускорение скоринга: батч 8 → 15
+
+Диагностика очереди (401 без оценки, 2.5%) показала исчерпание Gemini free-tier (0 gemini-оценок/24ч, брейкер падал 2×/сутки) — нагрузку тащил только NVIDIA (~336/день).
+
+- `app/config.py` — `MAX_JOBS_PER_SCORING_BATCH` 8 → 15: ~2x вакансий за AI-запрос на ту же квоту RPD.
+- `CLAUDE_SCORING_MAX_TOKENS` 5000 → 8000 — запас под больший батч (Claude — fallback-путь).
+- NVIDIA (`max_tokens=8000`) и Gemini (дефолт 8192) уже вмещают 15. Авто-починка обрезанного JSON gracefully отбрасывает хвост при переполнении.
+
+См. [[Настройки#скоринг-scoring]], [[Скоринг]].
+
 ---
 
 → [[Changelog 2026-04]] → [[Roadmap]] → [[Архитектура]] → [[Безопасность]] → [[Auth]] → [[API]] → [[Rate limiting]]

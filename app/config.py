@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     jooble_api_key: str = ""
 
     # Scoring
-    max_jobs_per_scoring_batch: int = 8
+    max_jobs_per_scoring_batch: int = 15
     max_scored_per_search: int = 30
     score_cache_hours: int = 168  # 7 days
     claude_timeout_seconds: float = 60.0
@@ -83,7 +83,7 @@ class Settings(BaseSettings):
 
     # Claude model/token knobs (overridable via .env without redeploy)
     claude_model: str = "claude-sonnet-4-20250514"
-    claude_scoring_max_tokens: int = 5000     # batch scoring response budget
+    claude_scoring_max_tokens: int = 8000     # batch scoring response budget (sized for batch=15)
     claude_analysis_max_tokens: int = 1500    # single-job detailed analysis budget
 
     # Dashboard Authentication (legacy Basic Auth — kept for backward compat)
