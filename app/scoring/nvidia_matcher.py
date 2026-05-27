@@ -97,19 +97,21 @@ async def _call_nvidia(prompt: str, batch_size: int) -> str | None:
         "stream": False,
     }
 
-    async def _once() -> str:
+    async def _once() -> str | None:
         async with _nvidia_semaphore:
             await _pace()
             async with httpx.AsyncClient(timeout=120.0) as client:
                 resp = await client.post(url, headers=headers, json=payload)
                 resp.raise_for_status()
                 data = resp.json()
-                return data["choices"][0]["message"]["content"]
+                # Defensive: some models can return content=None (e.g. reasoning
+                # variants that exhaust the budget on chain-of-thought). Use .get
+                # so the batch is skipped cleanly rather than crashing downstream.
+                return data["choices"][0]["message"].get("content")
 
-    # NVIDIA Build's gemma-4-31b-it routinely takes 60-120s and frequently
-    # ReadTimeout's mid-stream. Retries are working as designed but each
-    # attempt used to spam WARNING — we now log at DEBUG and only emit one
-    # WARNING line for the full exhausted-batch event below. 429s still go
+    # llama-3.3-70b-instruct typically responds in ~30s for a batch of 8.
+    # Retries handle transient ReadTimeouts (cold starts). Per-attempt noise is
+    # logged at DEBUG; one WARNING summarises an exhausted batch below. 429s go
     # to OpsEvent because they're rare and quota-meaningful.
     last_status: str = "?"
     last_exc_name: str = ""

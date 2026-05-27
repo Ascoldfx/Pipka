@@ -214,6 +214,18 @@ Recursive walk с depth-limit 6. Список PII-ключей в `_SENTRY_PII_K
 
 См. [[Настройки#скоринг-scoring]], [[Скоринг]].
 
+### Очередь застряла: мёртвый NVIDIA-fallback (decommissioned model)
+
+После батч-фикса очередь упала 401 → 265 и встала. Диагностика: **оба AI-бэкенда легли одновременно** — Gemini исчерпал дневную квоту (брейкер открыт), а NVIDIA-fallback указывал на `google/gemma-4-31b-it`, которую **NVIDIA Build декоммишена** (chat-запрос виснет 45-120s → ReadTimeout, 0 оценок). tier1/tier2 вакансии не получали оценку ни от кого.
+
+- `app/config.py` — `NVIDIA_MODEL`: `google/gemma-4-31b-it` → `meta/llama-3.3-70b-instruct`.
+  - Перебор кандидатов: `meta/llama-3.3-70b-instruct` ✅ 200/29s на 8 вакансий, чистый JSON + русские verdict'ы. `nemotron-super-49b-v1.5` — reasoning-модель, вылетает за 120s на строгом scoring-промпте. `nemotron-51b-instruct` — 404. `nemotron-mini-4b` — быстрая, но болтает преамбулу и слаба для скоринга.
+- `app/scoring/nvidia_matcher.py` — `_once()` теперь `.get("content")` (защита от `content=None` у reasoning-вариантов, чтобы батч пропускался, а не падал). `max_tokens` 8000, комментарии обновлены под новую модель.
+
+**Архитектурный вывод:** backfill выбирает скорер один раз за прогон (раз в 2ч). Когда Gemini исчерпан, единственный фолбэк — NVIDIA; если он мёртв, очередь стоит до следующего тика без сигнала. Кандидат на будущее — NVIDIA-first backfill + per-batch фолбэк (обсуждалось).
+
+См. [[Настройки#nvidia-build-idle-rescorer-для-de]], [[Скоринг]].
+
 ---
 
 → [[Changelog 2026-04]] → [[Roadmap]] → [[Архитектура]] → [[Безопасность]] → [[Auth]] → [[API]] → [[Rate limiting]]

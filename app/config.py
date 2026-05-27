@@ -21,7 +21,11 @@ class Settings(BaseSettings):
     # NVIDIA Build (optional — idle rescorer, runs only when Gemini queue drained)
     # Get key at https://build.nvidia.com → set NVIDIA_API_KEY in .env to enable.
     nvidia_api_key: str = ""
-    nvidia_model: str = "google/gemma-4-31b-it"
+    # google/gemma-4-31b-it was decommissioned from NVIDIA Build (404 / hangs).
+    # llama-3.3-70b-instruct is live, free, non-reasoning, fast (~30s/8 jobs) and
+    # returns clean JSON. (Avoid nemotron reasoning models here: they blow past
+    # the 120s timeout on the strict multi-job scoring prompt.)
+    nvidia_model: str = "meta/llama-3.3-70b-instruct"
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
     nvidia_batch_delay: float = 2.0      # seconds between batches (conservative)
     nvidia_max_per_run: int = 300        # hard cap per scheduler tick
