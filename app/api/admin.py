@@ -39,9 +39,6 @@ async def admin_get_user_profile(request: Request, user_id: int):
             "profile": {
                 "resume_text": p.resume_text if p else None,
                 "target_titles": p.target_titles if p else [],
-                "min_salary": p.min_salary if p else None,
-                "languages": p.languages if p else {},
-                "experience_years": p.experience_years if p else None,
                 "work_mode": p.work_mode if p else "any",
                 "preferred_countries": p.preferred_countries if p else [],
                 "excluded_keywords": p.excluded_keywords if p else [],

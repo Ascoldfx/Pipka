@@ -434,8 +434,7 @@ const TRANSLATIONS = {
     'settings.exclusions':'Exclusions & Negative Keywords','settings.excludedLabel':'Do not show jobs requiring (comma-separated)',
     
     'settings.englishOnly':'English Only — prioritise jobs with English as working language; skip positions posted entirely in German / French / Dutch',
-    'settings.prefs':'Preferences','settings.salary':'Min salary (EUR/year)','settings.experience':'Experience (years)',
-    'settings.languages':'Languages','settings.workMode':'Work mode',
+    'settings.prefs':'Preferences','settings.workMode':'Work mode',
     'settings.workAny':'Any','settings.workRemote':'Remote','settings.workHybrid':'Hybrid','settings.workOnsite':'On-site',
     'settings.countries':'Active Target Countries',
     'msg.loading':'Loading...','msg.noJobs':'No jobs found.',
@@ -461,8 +460,7 @@ const TRANSLATIONS = {
     'settings.exclusions':'Исключения и стоп-слова','settings.excludedLabel':'Не показывать вакансии с требованиями (через запятую)',
     
     'settings.englishOnly':'Только английский — приоритет вакансиям с английским рабочим языком; пропускать позиции полностью на немецком / французском / голландском',
-    'settings.prefs':'Предпочтения','settings.salary':'Мин. зарплата (EUR/год)','settings.experience':'Опыт работы (лет)',
-    'settings.languages':'Языки','settings.workMode':'Режим работы',
+    'settings.prefs':'Предпочтения','settings.workMode':'Режим работы',
     'settings.workAny':'Любой','settings.workRemote':'Удалённо','settings.workHybrid':'Гибрид','settings.workOnsite':'В офисе',
     'settings.countries':'Целевые страны поиска',
     'msg.loading':'Загрузка...','msg.noJobs':'Вакансии не найдены.',
@@ -488,8 +486,7 @@ const TRANSLATIONS = {
     'settings.exclusions':'Ausschlüsse & Negativwörter','settings.excludedLabel':'Jobs mit diesen Anforderungen ausblenden (kommagetrennt)',
     
     'settings.englishOnly':'Nur Englisch — Priorität für englischsprachige Stellen; deutschsprachige / französische / niederländische Inserate überspringen',
-    'settings.prefs':'Einstellungen','settings.salary':'Mindestgehalt (EUR/Jahr)','settings.experience':'Erfahrung (Jahre)',
-    'settings.languages':'Sprachen','settings.workMode':'Arbeitsmodell',
+    'settings.prefs':'Einstellungen','settings.workMode':'Arbeitsmodell',
     'settings.workAny':'Beliebig','settings.workRemote':'Remote','settings.workHybrid':'Hybrid','settings.workOnsite':'Vor Ort',
     'settings.countries':'Aktive Zielländer',
     'msg.loading':'Wird geladen...','msg.noJobs':'Keine Stellen gefunden.',
@@ -515,8 +512,7 @@ const TRANSLATIONS = {
     'settings.exclusions':'Exclusiones y palabras negativas','settings.excludedLabel':'No mostrar trabajos que requieren (separados por coma)',
     
     'settings.englishOnly':'Solo inglés — priorizar trabajos con inglés como idioma de trabajo; omitir posiciones publicadas en alemán / francés / neerlandés',
-    'settings.prefs':'Preferencias','settings.salary':'Salario mínimo (EUR/año)','settings.experience':'Experiencia (años)',
-    'settings.languages':'Idiomas','settings.workMode':'Modo de trabajo',
+    'settings.prefs':'Preferencias','settings.workMode':'Modo de trabajo',
     'settings.workAny':'Cualquiera','settings.workRemote':'Remoto','settings.workHybrid':'Híbrido','settings.workOnsite':'Presencial',
     'settings.countries':'Países objetivo activos',
     'msg.loading':'Cargando...','msg.noJobs':'No se encontraron trabajos.',
@@ -723,14 +719,8 @@ function applyLang() {
     <h3 data-i18n="settings.prefs">Preferences</h3>
     <div class="settings-2col">
 
-      <!-- Col 1: Salary -->
-      <div class="field">
-        <label data-i18n="settings.salary">Min salary (EUR/year)</label>
-        <input type="number" id="s-salary" placeholder="100000">
-      </div>
-
-      <!-- Col 2: Work mode -->
-      <div class="field">
+      <!-- Work mode -->
+      <div class="field span2">
         <label data-i18n="settings.workMode">Work mode</label>
         <div class="wm-wrap" id="wm-wrap">
           <button class="wm-pill" id="wm-pill-btn" onclick="toggleWMDrop(event)">
@@ -745,24 +735,6 @@ function applyLang() {
             <div class="wm-di" data-mode="remote" onclick="setWorkMode('remote');closeWMDrop()"><span class="wm-di-icon">🏠</span><span data-i18n="settings.workRemote">Remote</span><span class="wm-di-chk">✓</span></div>
           </div>
         </div>
-      </div>
-
-      <!-- Col 1: Experience -->
-      <div class="field">
-        <label data-i18n="settings.experience">Experience</label>
-        <div class="exp-pills" id="s-exp-pills">
-          <span class="exp-pill" data-val="2"  onclick="setExp(2)">0–2 yrs</span>
-          <span class="exp-pill" data-val="5"  onclick="setExp(5)">2–5 yrs</span>
-          <span class="exp-pill" data-val="8"  onclick="setExp(8)">5–8 yrs</span>
-          <span class="exp-pill" data-val="10" onclick="setExp(10)">8–10 yrs</span>
-          <span class="exp-pill" data-val="15" onclick="setExp(15)">10+ yrs</span>
-        </div>
-      </div>
-
-      <!-- Col 2: Languages -->
-      <div class="field">
-        <label data-i18n="settings.languages">Languages</label>
-        <div class="lang-picker" id="lang-picker"></div>
       </div>
 
       <!-- Full width: Countries -->
@@ -1289,9 +1261,6 @@ async function loadProfile(){
     _excludedKws = p.excluded_keywords||[]; _renderExcludedChips();
     if($('s-english-only')) $('s-english-only').checked=!!p.english_only;
     if($('s-companies')) $('s-companies').value=(p.target_companies||[]).join(', ');
-    $('s-salary').value=p.min_salary||'';
-    setExp(_expFromYears(p.experience_years));
-    _langs=p.languages||{}; renderLangPicker();
     setWorkMode(p.work_mode||'any');
     const pc = p.preferred_countries||[];
     document.querySelectorAll('#s-countries-grid .country-item').forEach(el => {
@@ -1307,9 +1276,6 @@ async function saveProfile(){
   fd.append('excluded_keywords', _excludedKws.join(', '));
   fd.append('english_only', $('s-english-only') && $('s-english-only').checked ? '1' : '0');
   if($('s-companies')) fd.append('target_companies',$('s-companies').value);
-  fd.append('min_salary',$('s-salary').value||0);
-  fd.append('experience_years',_expLevel||0);
-  fd.append('languages',JSON.stringify(_langs));
   fd.append('work_mode',_workMode);
   const activeCountries = Array.from(document.querySelectorAll('#s-countries-grid .country-item.active')).map(el => el.dataset.code);
   fd.append('preferred_countries', activeCountries.join(','));
@@ -1870,9 +1836,7 @@ async function viewAdminUserProfile(userId) {
         <div class="mini-list">
           <span>🎯 Titles: ${esc((p.target_titles||[]).join(', ') || '—')}</span>
           <span>📍 Countries: ${esc((p.preferred_countries||[]).join(', ').toUpperCase() || '—')}</span>
-          <span>💰 Salary: ${p.min_salary ? fmtNumber(p.min_salary) + ' EUR' : '—'}</span>
           <span>🏢 Mode: ${esc(p.work_mode || 'any')}</span>
-          <span>🗣️ Lang: ${esc(Object.entries(p.languages||{}).map(([k,v])=>k+': '+v).join(', ') || '—')}</span>
           <span>🚫 Excluded: ${esc((p.excluded_keywords||[]).join(', ') || '—')}</span>
           <span>⭐ Companies: ${esc((p.target_companies||[]).join(', ') || '—')}</span>
           <span>🇬🇧 English Only: ${p.english_only ? 'Yes' : 'No'}</span>

@@ -73,17 +73,10 @@ with Session(engine) as session:
         "Director Logistics", "Head of Operations", "COO",
         "VP Operations", "Chief Operating Officer", "Global Supply Chain Director",
     ]
-    profile.min_salary = 100000
-    profile.max_commute_km = 100
-    profile.languages = {"en": "C1", "de": "B1", "uk": "Native", "ru": "Native"}
-    profile.experience_years = 16
     profile.work_mode = "any"
     profile.preferred_countries = ["de", "at", "nl"]
-    profile.base_location = "Leipzig"
 
     session.commit()
     print("Profile filled!")
     print(f"Titles: {profile.target_titles}")
-    print(f"Languages: {profile.languages}")
-    print(f"Location: {profile.base_location}")
     print("Done! Now run: python run.py")

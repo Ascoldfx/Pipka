@@ -30,17 +30,19 @@ MODEL_NVIDIA = lambda: f"nvidia:{settings.nvidia_model}"           # noqa: E731
 
 # The set of profile attributes that influence scoring. Order is fixed so
 # the resulting JSON serialisation is deterministic across runs.
+# languages / min_salary / experience_years removed (May 2026) — no longer
+# part of the scoring prompt, so they must not affect the cache key either.
+# (Changing this set re-hashes every profile once → a one-time gradual
+# re-score via the Phase 2b backfill path, which is correct: the prompt
+# genuinely changed.)
 _PROFILE_FIELDS: tuple[str, ...] = (
     "resume_text",
     "target_titles",
-    "languages",
     "work_mode",
     "preferred_countries",
     "excluded_keywords",
     "english_only",
     "target_companies",
-    "min_salary",
-    "experience_years",
 )
 
 

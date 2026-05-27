@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
@@ -26,7 +25,6 @@ MAX_RESUME_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 # pre_filter loop (O(jobs × keywords)), and the watchlist scanner
 # (Adzuna call per company × per country).
 MAX_PROFILE_LIST = 50          # target_titles, preferred_countries, excluded_keywords, target_companies
-MAX_PROFILE_LANGUAGES = 20     # languages dict
 MAX_PROFILE_FIELD_LEN = 200    # one entry's max length
 
 # Hard wall on parse time. pdfminer can spin forever on a maliciously-crafted
@@ -48,10 +46,6 @@ async def get_profile(request: Request):
         return {"profile": {
             "resume_text": p.resume_text or "",
             "target_titles": p.target_titles or [],
-            "min_salary": p.min_salary,
-            "max_commute_km": p.max_commute_km,
-            "languages": p.languages or {},
-            "experience_years": p.experience_years,
             "work_mode": p.work_mode or "any",
             "preferred_countries": p.preferred_countries or [],
             "excluded_keywords": p.excluded_keywords or [],
@@ -65,21 +59,18 @@ async def update_profile(
     request: Request,
     resume_text: str = Form(None),
     target_titles: str = Form(None),
-    min_salary: int = Form(None),
-    languages: str = Form(None),
-    experience_years: int = Form(None),
     work_mode: str = Form(None),
     preferred_countries: str = Form(None),
     excluded_keywords: str = Form(None),
     english_only: str = Form(None),
     target_companies: str = Form(None),
 ):
+    # min_salary / experience_years / languages removed (May 2026) — they
+    # were collected but never meaningfully used: salary is absent from most
+    # listings, and the scoring prompt's lang/experience hints added noise
+    # without signal. Columns remain in the DB (orphaned) for now.
     if resume_text is not None and len(resume_text) > MAX_RESUME_CHARS:
         raise HTTPException(status_code=400, detail=f"Resume too long (>{MAX_RESUME_CHARS} chars)")
-    if min_salary is not None and not (0 <= min_salary <= 1_000_000):
-        raise HTTPException(status_code=400, detail="min_salary out of range")
-    if experience_years is not None and not (0 <= experience_years <= 80):
-        raise HTTPException(status_code=400, detail="experience_years out of range")
     if work_mode is not None and work_mode not in VALID_WORK_MODES:
         raise HTTPException(status_code=400, detail=f"Invalid work_mode. Must be one of: {', '.join(VALID_WORK_MODES)}")
 
@@ -101,29 +92,6 @@ async def update_profile(
                 if len(items) > MAX_PROFILE_LIST:
                     raise HTTPException(status_code=400, detail=f"target_titles: max {MAX_PROFILE_LIST} entries")
                 p.target_titles = items
-            if min_salary is not None:
-                p.min_salary = min_salary
-            if languages is not None:
-                # Accept either JSON ({"en":"C1","de":"B1"}) or shorthand "en:C1,de:B1".
-                try:
-                    parsed = json.loads(languages)
-                    if not isinstance(parsed, dict):
-                        raise HTTPException(status_code=400, detail="languages must be a JSON object")
-                except json.JSONDecodeError:
-                    parsed = {}
-                    for part in languages.split(","):
-                        if ":" in part:
-                            k, v = part.split(":", 1)
-                            parsed[k.strip()] = v.strip()
-                if len(parsed) > MAX_PROFILE_LANGUAGES:
-                    raise HTTPException(status_code=400, detail=f"languages: max {MAX_PROFILE_LANGUAGES} entries")
-                # Cap individual key/value lengths so the JSON-bomb path is closed.
-                p.languages = {
-                    str(k)[:50]: str(v)[:50]
-                    for k, v in parsed.items()
-                }
-            if experience_years is not None:
-                p.experience_years = experience_years
             if work_mode is not None:
                 p.work_mode = work_mode
             if preferred_countries is not None:

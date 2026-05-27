@@ -97,20 +97,16 @@ def build_profile_text(profile: UserProfile) -> str:
         parts.append(f"### Candidate Resume / Background\n{resume}")
 
     # --- Preferences ---
+    # min_salary / experience_years / languages dropped (May 2026): salary is
+    # absent from most listings, and the lang/experience hints added prompt
+    # noise without measurably improving scores.
     prefs: list[str] = []
     if profile.target_titles:
         prefs.append(f"Target roles: {', '.join(profile.target_titles)}")
-    if profile.experience_years:
-        prefs.append(f"Experience: {profile.experience_years}+ years")
-    if profile.languages:
-        lang_str = ", ".join(f"{k.upper()}: {v}" for k, v in profile.languages.items())
-        prefs.append(f"Languages: {lang_str}")
     if profile.work_mode:
         prefs.append(f"Work mode: {profile.work_mode}")
     if profile.preferred_countries:
         prefs.append(f"Countries: {', '.join(profile.preferred_countries)}")
-    if profile.min_salary:
-        prefs.append(f"Target salary: {profile.min_salary}+ EUR (note: many listings omit salary — do not penalise if absent)")
     if prefs:
         parts.append("### Preferences\n" + "\n".join(prefs))
 

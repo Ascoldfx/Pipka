@@ -71,10 +71,11 @@ POST требует CSRF-заголовок — [[Безопасность#3-csr
 ### Поля POST /api/profile
 
 ```
-resume_text, target_titles, min_salary, languages,
-experience_years, work_mode, preferred_countries,
+resume_text, target_titles, work_mode, preferred_countries,
 excluded_keywords, english_only (0/1), target_companies
 ```
+
+> `min_salary` / `languages` / `experience_years` удалены 27 мая 2026 — не учитывались осмысленно. Колонки БД orphaned.
 
 Валидация — [[Безопасность#4-input-validation]].
 
