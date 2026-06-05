@@ -213,7 +213,10 @@ class JobAggregator:
             logger.info("After fuzzy dedup: %d jobs (removed %d near-duplicates)", len(fuzzy_deduped), removed)
         unique = fuzzy_deduped
 
-        # Filter with stats
+        # Filter with stats. cutoff is naive (server-local UTC); some sources
+        # (jobspy, jooble, wttj) leak tz-aware datetimes from upstream ISO strings,
+        # which crashes the comparison below. Normalise to naive at the compare site
+        # so we don't have to chase every source individually.
         cutoff = datetime.now() - timedelta(days=params.max_age_days)
         filtered: list[RawJob] = []
         rejected_negative = 0
@@ -223,7 +226,10 @@ class JobAggregator:
             if _is_negative(job):
                 rejected_negative += 1
                 continue
-            if job.posted_at and job.posted_at < cutoff:
+            posted = job.posted_at
+            if posted is not None and posted.tzinfo is not None:
+                posted = posted.replace(tzinfo=None)
+            if posted is not None and posted < cutoff:
                 rejected_old += 1
                 continue
             if _is_wrong_location(job):
