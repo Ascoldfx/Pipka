@@ -37,8 +37,8 @@ COUNTRY_LOCATIONS: dict[str, tuple[str, str]] = {
     "cz": ("Czech Republic", "CZ"),
 }
 
-# Key queries sent to Jooble — representative sample, not all user queries
-# (Jooble is slow-ish, keep to ~8 queries × 3 countries × 2 pages = 48 requests max)
+# FALLBACK queries for Jooble — used only when no profile titles are available.
+# Normal scans search the user's top-priority profile titles instead (see search()).
 JOOBLE_QUERIES = [
     "Director Supply Chain",
     "Head of Procurement",
@@ -94,8 +94,13 @@ class JoobleSource(JobSource):
         seen: set[str] = set()
         request_count = 0
 
+        # Search the user's actual top-priority titles (profile order), not the
+        # static fallback list — otherwise profile titles outside the hardcoded
+        # sample (interim/crisis/AI roles) were never searched on Jooble.
+        queries = params.queries[: self.REQUESTS_PER_SCAN] if params.queries else JOOBLE_QUERIES
+
         async with aiohttp.ClientSession() as http:
-            for query in JOOBLE_QUERIES:  # 8 queries × 1 page = 8 requests/scan
+            for query in queries:  # 8 queries × 1 page = 8 requests/scan
                 batch = await self._fetch(
                     http, api_url, query, location_str, country_upper, page=1
                 )

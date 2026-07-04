@@ -59,8 +59,17 @@ class JobSpySource:
         results: list[RawJob] = []
         seen: set[str] = set()
 
-        # Cap queries — LinkedIn/Indeed scraping is slow; too many sequential calls → timeout
-        queries = params.queries[:JOBSPY_MAX_QUERIES]
+        # Cap queries — LinkedIn/Indeed scraping is slow; too many sequential calls → timeout.
+        # Rotate the window by 3h scan slot so EVERY profile title gets scraped over a
+        # day (8 scans × 8 queries = 64 slots ≥ any realistic title list) instead of
+        # only ever the same first 8.
+        n = len(params.queries)
+        if n > JOBSPY_MAX_QUERIES:
+            slot = datetime.now().hour // 3  # 0..7, stable within one scan interval
+            start = (slot * JOBSPY_MAX_QUERIES) % n
+            queries = [params.queries[(start + i) % n] for i in range(JOBSPY_MAX_QUERIES)]
+        else:
+            queries = params.queries
 
         # Which sub-sites are allowed this run (env-configurable). LinkedIn is
         # off by default — it ignores the country filter and floods US jobs.

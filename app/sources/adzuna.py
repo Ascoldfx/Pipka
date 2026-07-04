@@ -18,7 +18,7 @@ ADZUNA_BASE = "https://api.adzuna.com/v1/api/jobs"
 # for 30 queries × 13 countries — a fully sequential 1000+ request crawl that
 # blows past the aggregator's 120s timeout AND the daily quota. We cap the
 # Cartesian product and run requests with bounded concurrency + pacing.
-ADZUNA_MAX_COMBOS = 40        # query × country pairs per scan (most-relevant first)
+ADZUNA_MAX_COMBOS = 80        # query × country pairs per scan (most-relevant first)
 ADZUNA_MAX_PAGES = 2          # pages per combo (was 3)
 ADZUNA_CONCURRENCY = 6        # parallel in-flight requests
 ADZUNA_PACE_SECONDS = 0.4     # min gap between request starts (≈150/min ceiling)
@@ -36,13 +36,14 @@ class AdzunaSource:
 
         locations = params.locations or [""]
         # Build the (country, location, query) work list, capped so we don't
-        # explode into a 1000-request sequential crawl. Order matters: nest
-        # query inside country so the cap keeps broad coverage across
-        # countries rather than exhausting on one country's queries.
+        # explode into a 1000-request sequential crawl. Order matters: query is
+        # the OUTER loop so the cap keeps the top-priority titles covered across
+        # ALL countries. (The old country-outer nesting burned the whole cap on
+        # the first country's query list — 7 of 9 countries were never searched.)
         combos: list[tuple[str, str, str]] = []
-        for country in params.countries:
-            for location in locations:
-                for query in params.queries:
+        for query in params.queries:
+            for country in params.countries:
+                for location in locations:
                     combos.append((country, location, query))
         if len(combos) > ADZUNA_MAX_COMBOS:
             logger.info(

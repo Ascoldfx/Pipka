@@ -173,19 +173,31 @@ async def _background_scan(bot_app, trigger: str = "scheduled"):
                 )
                 users = users_result.scalars().all()
 
-                dynamic_queries = set()
-                dynamic_countries = set()
-                
+                # Ordered dedupe, NOT a set: profile order = user's priority ranking.
+                # Sources cap their query lists (JobSpy top-N, Adzuna combo cap), so
+                # with a set the "lucky" titles were arbitrary and reshuffled on every
+                # container restart — most titles were never searched at all.
+                dynamic_queries: list[str] = []
+                dynamic_countries: list[str] = []
+                seen_q: set[str] = set()
+                seen_c: set[str] = set()
+
                 for user in users:
                     if user.profile:
-                        if user.profile.target_titles:
-                            dynamic_queries.update(user.profile.target_titles)
-                        if user.profile.preferred_countries:
-                            dynamic_countries.update(user.profile.preferred_countries)
-                        
+                        for title in (user.profile.target_titles or []):
+                            norm = " ".join(title.split())  # collapse stray double spaces
+                            if norm and norm.lower() not in seen_q:
+                                seen_q.add(norm.lower())
+                                dynamic_queries.append(norm)
+                        for c in (user.profile.preferred_countries or []):
+                            code = c.strip().lower()
+                            if code and code not in seen_c:
+                                seen_c.add(code)
+                                dynamic_countries.append(code)
+
                 # Fallbacks to defaults if nothing found in profiles
-                final_queries = list(dynamic_queries) if dynamic_queries else SCAN_QUERIES
-                final_countries = list(dynamic_countries) if dynamic_countries else ["de", "at", "nl", "ch", "be", "si", "sk", "ro", "hu"]
+                final_queries = dynamic_queries if dynamic_queries else SCAN_QUERIES
+                final_countries = dynamic_countries if dynamic_countries else ["de", "at", "nl", "ch", "be", "si", "sk", "ro", "hu"]
 
                 params = SearchParams(
                     queries=final_queries,
