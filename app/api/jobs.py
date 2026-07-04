@@ -146,6 +146,12 @@ async def get_jobs(
             filters.append(Application.status.is_(None))
         elif status:
             filters.append(Application.status == status)
+        else:
+            # Default view (no status filter): hide rejected jobs. Otherwise a
+            # reject click leaves the row in place after loadJobs() re-renders —
+            # users read that as "rejected jobs keep coming back". Rejected
+            # jobs remain reachable via the dedicated Rejected tab.
+            filters.append(or_(Application.status.is_(None), Application.status != "rejected"))
 
         if region == "saxony":
             filters.append(

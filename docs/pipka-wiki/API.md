@@ -34,6 +34,8 @@
 
 `include_closed=1` — показывать закрытые ([[Проверка ссылок]]). По умолчанию скрываются.
 
+Без параметра `status` (вкладка «Все вакансии») **отклонённые скрываются** (с 04.07.2026) — раньше reject-клик оставлял строку в списке после перерисовки, что выглядело как «вакансия вернулась». Отклонённые доступны на вкладке Rejected (`status=rejected`).
+
 `semantic=1` — pre-rank через cosine-similarity к embedding профиля ([[Поиск и индексация]]); top-`SEMANTIC_SEARCH_LIMIT` (default 500) кандидатов сортируются по близости. Без флага — обычный SQL-сорт по `sort` колонке.
 
 `search=…` на PostgreSQL использует tsvector + `websearch_to_tsquery`. На SQLite (dev) — fallback `ILIKE`.

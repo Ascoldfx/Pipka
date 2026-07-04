@@ -117,11 +117,16 @@ async def _call_nvidia(prompt: str, batch_size: int) -> str | None:
     last_exc_name: str = ""
     attempt_n: int = 0
     try:
+        # reraise=False is load-bearing: with reraise=True tenacity re-raises the
+        # original exception (e.g. httpx.ReadTimeout, whose str() is empty) instead
+        # of RetryError, so the ``except RetryError`` below never fired and
+        # nvidia_exhausted OpsEvents were silently lost. Same bug class as the
+        # Gemini breaker fix (27.05.2026).
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(3),
             wait=wait_exponential(multiplier=3, min=3, max=60),
             retry=retry_if_exception(_is_retryable),
-            reraise=True,
+            reraise=False,
         ):
             with attempt:
                 attempt_n += 1
@@ -154,7 +159,8 @@ async def _call_nvidia(prompt: str, batch_size: int) -> str | None:
         )
         return None
     except Exception as exc:
-        logger.error("NVIDIA call failed (batch=%d): %s", batch_size, exc)
+        # Include the type name — httpx timeout exceptions stringify to "".
+        logger.error("NVIDIA call failed (batch=%d): %s %s", batch_size, type(exc).__name__, exc)
         return None
     return None
 
