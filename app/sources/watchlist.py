@@ -46,9 +46,14 @@ class WatchlistSource:
         results: list[RawJob] = []
         seen: set[str] = set()
 
+        # Watchlist queries Adzuna directly — skip countries Adzuna doesn't
+        # operate in (ae, id, …) instead of wasting a 404 per company × country.
+        from app.sources.adzuna import ADZUNA_SUPPORTED  # noqa: PLC0415
+        countries = [c for c in params.countries if c.lower() in ADZUNA_SUPPORTED]
+
         async with aiohttp.ClientSession() as session:
             for company in companies:
-                for country in params.countries:
+                for country in countries:
                     jobs = await self._search_company(session, company, country)
                     for job in jobs:
                         if job.external_id not in seen:

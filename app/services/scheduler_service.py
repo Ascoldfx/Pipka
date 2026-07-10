@@ -473,9 +473,17 @@ async def _semantic_skip_filter(
     profile = user.profile
     if profile is None:
         return candidates, 0
+    # The embedding must also be FRESH (built from the current profile).
+    # A stale vector — e.g. countries changed but embed_index hasn't re-run —
+    # would wrongly zero-out jobs from newly added regions. Better to send
+    # everything to AI for one cycle than to skip on outdated similarity.
     has_profile_emb = await session.execute(
-        text("SELECT 1 FROM user_profiles WHERE id = :pid AND embedding IS NOT NULL"),
-        {"pid": profile.id},
+        text(
+            "SELECT 1 FROM user_profiles"
+            " WHERE id = :pid AND embedding IS NOT NULL"
+            " AND embedding_profile_hash = :ph"
+        ),
+        {"pid": profile.id, "ph": profile_hash},
     )
     if has_profile_emb.scalar() is None:
         return candidates, 0
