@@ -218,6 +218,11 @@ class JobAggregator:
         # which crashes the comparison below. Normalise to naive at the compare site
         # so we don't have to chase every source individually.
         cutoff = datetime.now() - timedelta(days=params.max_age_days)
+        # Non-European regions the users explicitly opted into via profile
+        # countries — activates their markers in the location filter.
+        extra_countries = frozenset(
+            c.lower() for c in params.countries if c.lower() in REGION_MARKERS
+        )
         filtered: list[RawJob] = []
         rejected_negative = 0
         rejected_old = 0
@@ -232,7 +237,7 @@ class JobAggregator:
             if posted is not None and posted < cutoff:
                 rejected_old += 1
                 continue
-            if _is_wrong_location(job):
+            if _is_wrong_location(job, extra_countries):
                 rejected_location += 1
                 continue
             filtered.append(job)
@@ -518,16 +523,35 @@ ALLOWED_COUNTRIES = {
     "lu",                                    # Luxembourg
 }
 
+# Opt-in non-European regions (Gulf / Oceania / SEA). A country here is only
+# active when it appears in a user's preferred_countries — then its markers
+# work like DACH_MARKERS (location match → allow) and its cities are excused
+# from the NON_DACH_CITIES blacklist. Europe-only users keep the old strict
+# filter unchanged.
+REGION_MARKERS: dict[str, list[str]] = {
+    "ae": ["united arab emirates", "uae", "dubai", "abu dhabi", "sharjah", "emirates"],
+    "sa": ["saudi arabia", "riyadh", "jeddah", "neom"],
+    "qa": ["qatar", "doha"],
+    "au": ["australia", "sydney", "melbourne", "brisbane", "perth", "adelaide", "canberra"],
+    "nz": ["new zealand", "auckland", "wellington", "christchurch"],
+    "id": ["indonesia", "jakarta", "surabaya", "bandung", "bali"],
+    "sg": ["singapore"],
+}
 
-def _is_wrong_location(job: RawJob) -> bool:
-    """Filter out jobs that are clearly outside European target region.
+
+def _is_wrong_location(job: RawJob, extra_countries: frozenset[str] = frozenset()) -> bool:
+    """Filter out jobs outside the target region (Europe + opted-in extras).
 
     Key insight: LinkedIn via JobSpy often returns location=None and country="DE"
     (search param, not actual country). So we MUST check description text and
-    REQUIRE a European marker if location is empty.
+    REQUIRE a region marker if location is empty.
+
+    ``extra_countries`` — non-European codes from users' preferred_countries
+    (subset of REGION_MARKERS keys). Their markers act like DACH_MARKERS and
+    their cities are excluded from the blacklist for this run.
     """
-    # If the source tagged the job with a known European country code → allow immediately
-    if job.country and job.country.lower() in ALLOWED_COUNTRIES:
+    # If the source tagged the job with an allowed country code → allow immediately
+    if job.country and job.country.lower() in ALLOWED_COUNTRIES | extra_countries:
         return False
 
     # Hard block: if the source explicitly tagged the job as US or CA country,
@@ -535,16 +559,26 @@ def _is_wrong_location(job: RawJob) -> bool:
     if job.country and job.country.lower() in {"us", "ca"}:
         return True
 
+    extra_markers = [m for c in extra_countries for m in REGION_MARKERS.get(c, [])]
+    extra_marker_set = set(extra_markers)
+    # Cities of opted-in regions must not count against the job.
+    blocked_cities = [c for c in NON_DACH_CITIES if c not in extra_marker_set]
+
     location_lower = (job.location or "").lower()
     title_lower = job.title.lower()
     desc_lower = (job.description or "").lower()
     url_lower = (job.url or "").lower()
     all_text = f"{location_lower} {title_lower} {desc_lower} {url_lower}"
 
-    has_dach = any(m in all_text for m in DACH_MARKERS)
+    has_region = any(m in all_text for m in DACH_MARKERS) or any(
+        m in all_text for m in extra_markers
+    )
 
-    # If location explicitly mentions DACH → allow
-    if location_lower and any(m in location_lower for m in DACH_MARKERS):
+    # If location explicitly mentions an allowed region → allow
+    if location_lower and (
+        any(m in location_lower for m in DACH_MARKERS)
+        or any(m in location_lower for m in extra_markers)
+    ):
         return False
 
     # --- Blacklist checks (location field) ---
@@ -555,23 +589,23 @@ def _is_wrong_location(job: RawJob) -> bool:
             return True
         if any(kw in location_lower for kw in US_KEYWORDS):
             return True
-        if any(city in location_lower for city in NON_DACH_CITIES):
+        if any(city in location_lower for city in blocked_cities):
             return True
         if any(city in location_lower for city in NON_DACH_RUSSIAN):
             return True
 
     # --- Blacklist checks (description + title) ---
     if any(kw in all_text for kw in US_KEYWORDS):
-        if not has_dach:
+        if not has_region:
             return True
     if any(state in desc_lower for state in US_STATE_NAMES):
-        if not has_dach:
+        if not has_region:
             return True
-    if any(city in desc_lower for city in NON_DACH_CITIES):
-        if not has_dach:
+    if any(city in desc_lower for city in blocked_cities):
+        if not has_region:
             return True
     if any(city in all_text for city in NON_DACH_RUSSIAN):
-        if not has_dach:
+        if not has_region:
             return True
 
     # Relaxed location check: if no location provided, we pass it to AI

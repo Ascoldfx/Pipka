@@ -45,10 +45,21 @@ COUNTRY_NAME = {
     "se": "sweden",
     "no": "norway",
     "fi": "finland",
+    # Gulf / Oceania / SEA (opt-in via profile countries; Indeed operates in all)
+    "ae": "united arab emirates",
+    "sa": "saudi arabia",
+    "qa": "qatar",
+    "au": "australia",
+    "nz": "new zealand",
+    "id": "indonesia",
+    "sg": "singapore",
 }
 
 
-JOBSPY_MAX_QUERIES = 8  # cap to avoid timeout; top-ranked queries are most valuable
+JOBSPY_MAX_QUERIES = 8    # cap to avoid timeout; top-ranked queries are most valuable
+JOBSPY_MAX_COUNTRIES = 3  # countries per scan; rotated by 3h slot like queries —
+                          # 6+ countries sequentially would blow the 240s source
+                          # timeout and lose the WHOLE jobspy result set
 
 class JobSpySource:
     @property
@@ -64,19 +75,28 @@ class JobSpySource:
         # day (8 scans × 8 queries = 64 slots ≥ any realistic title list) instead of
         # only ever the same first 8.
         n = len(params.queries)
+        slot = datetime.now().hour // 3  # 0..7, stable within one scan interval
         if n > JOBSPY_MAX_QUERIES:
-            slot = datetime.now().hour // 3  # 0..7, stable within one scan interval
             start = (slot * JOBSPY_MAX_QUERIES) % n
             queries = [params.queries[(start + i) % n] for i in range(JOBSPY_MAX_QUERIES)]
         else:
             queries = params.queries
+
+        # Same rotation for countries: with Gulf/APAC opted in there are 6+, and
+        # scraping them all sequentially would exceed the source timeout.
+        nc = len(params.countries)
+        if nc > JOBSPY_MAX_COUNTRIES:
+            c_start = (slot * JOBSPY_MAX_COUNTRIES) % nc
+            countries = [params.countries[(c_start + i) % nc] for i in range(JOBSPY_MAX_COUNTRIES)]
+        else:
+            countries = params.countries
 
         # Which sub-sites are allowed this run (env-configurable). LinkedIn is
         # off by default — it ignores the country filter and floods US jobs.
         from app.config import settings  # noqa: PLC0415
         allowed = {s.strip().lower() for s in settings.jobspy_sites.split(",") if s.strip()}
 
-        for country in params.countries:
+        for country in countries:
             sites = SITE_MAP.get(country, ["indeed", "linkedin", "google"])
             sites = [s for s in sites if s in allowed]
             if not sites:

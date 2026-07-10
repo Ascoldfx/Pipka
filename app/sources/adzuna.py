@@ -14,6 +14,13 @@ logger = logging.getLogger(__name__)
 
 ADZUNA_BASE = "https://api.adzuna.com/v1/api/jobs"
 
+# Country endpoints Adzuna actually operates (their API 404s on anything else).
+# Notably ABSENT: ae, id — Gulf/Indonesia coverage comes from Indeed/Jooble.
+ADZUNA_SUPPORTED = {
+    "gb", "us", "at", "au", "be", "br", "ca", "ch", "de", "es", "fr",
+    "in", "it", "mx", "nl", "nz", "pl", "sg", "za",
+}
+
 # Adzuna free tier rate-limits aggressively (≈25 hits/min). The scan can ask
 # for 30 queries × 13 countries — a fully sequential 1000+ request crawl that
 # blows past the aggregator's 120s timeout AND the daily quota. We cap the
@@ -40,9 +47,14 @@ class AdzunaSource:
         # the OUTER loop so the cap keeps the top-priority titles covered across
         # ALL countries. (The old country-outer nesting burned the whole cap on
         # the first country's query list — 7 of 9 countries were never searched.)
+        countries = [c for c in params.countries if c.lower() in ADZUNA_SUPPORTED]
+        skipped = set(params.countries) - set(countries)
+        if skipped:
+            logger.debug("Adzuna: skipping unsupported countries %s", sorted(skipped))
+
         combos: list[tuple[str, str, str]] = []
         for query in params.queries:
-            for country in params.countries:
+            for country in countries:
                 for location in locations:
                     combos.append((country, location, query))
         if len(combos) > ADZUNA_MAX_COMBOS:

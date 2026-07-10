@@ -35,6 +35,14 @@ COUNTRY_LOCATIONS: dict[str, tuple[str, str]] = {
     "be": ("Belgium", "BE"),
     "pl": ("Poland", "PL"),
     "cz": ("Czech Republic", "CZ"),
+    # Gulf / Oceania / SEA (opt-in via profile countries)
+    "ae": ("United Arab Emirates", "AE"),
+    "sa": ("Saudi Arabia", "SA"),
+    "qa": ("Qatar", "QA"),
+    "au": ("Australia", "AU"),
+    "nz": ("New Zealand", "NZ"),
+    "id": ("Indonesia", "ID"),
+    "sg": ("Singapore", "SG"),
 }
 
 # FALLBACK queries for Jooble — used only when no profile titles are available.
@@ -85,9 +93,16 @@ class JoobleSource(JobSource):
 
         api_url = JOOBLE_API_URL.format(api_key=settings.jooble_api_key)
 
-        # Primary country only (DE or first preferred DACH country) — 1 request per query
-        dach_preferred = [c for c in params.countries if c in COUNTRY_LOCATIONS]
-        primary_country = dach_preferred[0] if dach_preferred else "de"
+        # One country per scan (8 requests), rotated by 3h slot so every
+        # preferred country gets Jooble coverage over the day while staying
+        # far under the 500 req/day key budget.
+        supported = [c for c in params.countries if c in COUNTRY_LOCATIONS]
+        if supported:
+            from datetime import datetime  # noqa: PLC0415
+            slot = datetime.now().hour // 3
+            primary_country = supported[slot % len(supported)]
+        else:
+            primary_country = "de"
         location_str, country_upper = COUNTRY_LOCATIONS[primary_country]
 
         results: list[RawJob] = []
