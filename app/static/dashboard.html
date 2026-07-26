@@ -435,7 +435,7 @@ const TRANSLATIONS = {
     'settings.watchlistHint':'Jobs from these companies will be highlighted and tracked separately.',
     'settings.exclusions':'Exclusions & Negative Keywords','settings.excludedLabel':'Do not show jobs requiring (comma-separated)',
     
-    'settings.englishOnly':'English Only — prioritise jobs with English as working language; skip positions posted entirely in German / French / Dutch',
+    'settings.englishOnly':'English Only — reject clearly German job titles and jobs with no sign of English as a working language',
     'settings.prefs':'Preferences','settings.workMode':'Work mode',
     'settings.workAny':'Any','settings.workRemote':'Remote','settings.workHybrid':'Hybrid','settings.workOnsite':'On-site',
     'settings.countries':'Active Target Countries',
@@ -463,7 +463,7 @@ const TRANSLATIONS = {
     'settings.watchlistHint':'Вакансии от этих компаний будут выделены и отслеживаться отдельно.',
     'settings.exclusions':'Исключения и стоп-слова','settings.excludedLabel':'Не показывать вакансии с требованиями (через запятую)',
     
-    'settings.englishOnly':'Только английский — приоритет вакансиям с английским рабочим языком; пропускать позиции полностью на немецком / французском / голландском',
+    'settings.englishOnly':'Только английский — скрывать явно немецкие названия и вакансии без признаков английского рабочего языка',
     'settings.prefs':'Предпочтения','settings.workMode':'Режим работы',
     'settings.workAny':'Любой','settings.workRemote':'Удалённо','settings.workHybrid':'Гибрид','settings.workOnsite':'В офисе',
     'settings.countries':'Целевые страны поиска',
@@ -491,7 +491,7 @@ const TRANSLATIONS = {
     'settings.watchlistHint':'Stellen dieser Unternehmen werden hervorgehoben und separat verfolgt.',
     'settings.exclusions':'Ausschlüsse & Negativwörter','settings.excludedLabel':'Jobs mit diesen Anforderungen ausblenden (kommagetrennt)',
     
-    'settings.englishOnly':'Nur Englisch — Priorität für englischsprachige Stellen; deutschsprachige / französische / niederländische Inserate überspringen',
+    'settings.englishOnly':'Nur Englisch — eindeutig deutsche Stellentitel und Stellen ohne Hinweis auf Englisch als Arbeitssprache ausblenden',
     'settings.prefs':'Einstellungen','settings.workMode':'Arbeitsmodell',
     'settings.workAny':'Beliebig','settings.workRemote':'Remote','settings.workHybrid':'Hybrid','settings.workOnsite':'Vor Ort',
     'settings.countries':'Aktive Zielländer',
@@ -519,7 +519,7 @@ const TRANSLATIONS = {
     'settings.watchlistHint':'Los trabajos de estas empresas serán destacados y rastreados por separado.',
     'settings.exclusions':'Exclusiones y palabras negativas','settings.excludedLabel':'No mostrar trabajos que requieren (separados por coma)',
     
-    'settings.englishOnly':'Solo inglés — priorizar trabajos con inglés como idioma de trabajo; omitir posiciones publicadas en alemán / francés / neerlandés',
+    'settings.englishOnly':'Solo inglés — ocultar títulos claramente alemanes y puestos sin indicios de inglés como idioma de trabajo',
     'settings.prefs':'Preferencias','settings.workMode':'Modo de trabajo',
     'settings.workAny':'Cualquiera','settings.workRemote':'Remoto','settings.workHybrid':'Híbrido','settings.workOnsite':'Presencial',
     'settings.countries':'Países objetivo activos',
@@ -722,7 +722,7 @@ function applyLang() {
     <div class="field" style="margin-bottom:24px;">
       <label class="toggle-label">
         <input type="checkbox" id="s-english-only">
-        <span class="toggle-text" data-i18n="settings.englishOnly"><strong>English Only</strong> — prioritise jobs with English as working language; skip positions posted entirely in German / French / Dutch</span>
+        <span class="toggle-text" data-i18n="settings.englishOnly"><strong>English Only</strong> — reject clearly German job titles and jobs with no sign of English as a working language</span>
       </label>
     </div>
 

@@ -45,7 +45,10 @@ Crisis-related: `crisis management`, `turnaround`, `transformation`, `restructur
 1. **Junior/wrong function** — `REJECT_TITLE_KEYWORDS` в title → `low`
 2. **Foreign language required** — `FOREIGN_LANGUAGE_REQUIRED` в description → `low`
 3. **User exclusions** — `profile.excluded_keywords` в title+description → `low`. Триггерит [[Трекер#auto-exclude]] косвенно: компании с >5 reject'ами пользователя автоматически добавляются сюда.
-4. **English-only filter** — если `profile.english_only=True` И нет ни одного из `ENGLISH_FRIENDLY_SIGNALS` → `low`
+4. **English-only filter** — если `profile.english_only=True`:
+   - явно немецкое название должности (`Geschäftsführer`, `Einkaufsleiter`, `Leiter Logistik`, `Bereichsleiter`, `Produktmanager`, `Krisenmanager` и близкие формы) → `low`, даже если в тексте есть общий маркер `remote`, `global` или `international`;
+   - нет ни одного из `ENGLISH_FRIENDLY_SIGNALS` → `low`.
+   Суффикс `(m/w/d)`, немецкий город и страна сами по себе не считаются немецким названием. Двуязычные названия вроде `Einkaufsleiter / Head of Procurement` передаются на проверку описания.
 5. **Domain check** — нет `DOMAIN_KEYWORDS` в title или description → `low` (вакансия не из нашей области)
 6. **Work mode filter** — соответствие `profile.work_mode` (`remote`/`onsite`/`hybrid`/`any`) и `Job.is_remote` + ключевых слов
 7. **Country check** — `Job.country` должен быть в `profile.preferred_countries`

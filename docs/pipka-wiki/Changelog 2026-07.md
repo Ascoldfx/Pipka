@@ -102,6 +102,13 @@
 - Закрыт старый ruff backlog (19 замечаний); полный `ruff check .` проходит.
 - `.gitignore` скрывает AppleDouble `._*`, `graphify-out/` и `.env.*` (кроме tracked `.env.example`), чтобы generated/backup-файлы сервера не засоряли deploy-status.
 
+### English-only проверяет название вакансии
+
+- При `english_only=True` pre-filter теперь отдельно распознаёт явно немецкие названия должностей: `Geschäftsführer`, `Einkaufsleiter`, `Leiter Logistik`, `Bereichsleiter`, `Produktmanager`, `Krisenmanager` и близкие формы.
+- Явно немецкое название получает hard reject до AI, даже если описание содержит ложноположительный маркер `remote`, `global`, `international` или англоязычный footer job-board.
+- `(m/w/d)`, немецкий город и страна сами по себе не являются причиной reject. Двуязычное название передаётся на существующую проверку описания.
+- Подсказка настройки обновлена на EN/RU/DE/ES; добавлены регрессии на реальные заголовки из ленты.
+
 См. [[Скоринг]], [[Настройки]], [[API]], [[Frontend]], [[Миграции]], [[База данных]].
 
 ---

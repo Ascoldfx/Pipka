@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import html
+import re
+
 from app.models.job import Job
 from app.models.user import UserProfile
 
@@ -70,6 +73,33 @@ ENGLISH_FRIENDLY_SIGNALS = [
     "startup", "remote",
 ]
 
+# Strong German role words in a job title.  Short titles are a poor fit for
+# statistical language detection, so keep this deliberately deterministic.
+# German locations, company names and the common "(m/w/d)" suffix are not
+# signals by themselves.
+GERMAN_TITLE_PATTERNS = [
+    re.compile(r"\bgeschäftsführ\w*\b"),
+    re.compile(r"\bgeschaeftsfuehr\w*\b"),
+    re.compile(
+        r"\b(?:einkaufs|bereichs|abteilungs|standort|werks|betriebs|"
+        r"niederlassungs|produktions|logistik)leiter(?:in)?\b"
+    ),
+    re.compile(r"\b(?:kaufmännische\w*|kaufmaennische\w*|technische\w*)\s+leiter(?:in)?\b"),
+    re.compile(r"\bleiter(?:in)?\b"),
+    re.compile(r"\bleitung\b"),
+    re.compile(r"\bdirektor(?:in)?\b"),
+    re.compile(r"\b(?:produkt|projekt|krisen)manager(?:in)?\b"),
+    re.compile(r"\bvorstand\b"),
+]
+
+# A bilingual title such as "Einkaufsleiter / Head of Procurement" is not
+# rejected from the title alone.  Its description must still satisfy the
+# existing English-working-language gate.
+ENGLISH_ROLE_PATTERN = re.compile(
+    r"\b(?:director|head|chief|officer|manager|lead|president)\b|"
+    r"\bvice president\b|\bvp\b"
+)
+
 # Non-English/non-German language requirements → reject
 FOREIGN_LANGUAGE_REQUIRED = [
     # French
@@ -88,6 +118,25 @@ FOREIGN_LANGUAGE_REQUIRED = [
     "polski wymagany", "polish required",
     "čeština", "czech required",
 ]
+
+
+def _normalise_title(title: str) -> str:
+    """Return title text suitable for deterministic language checks."""
+    value = html.unescape(title or "").replace("\\-", "-")
+    value = re.sub(r"<[^>]+>", " ", value)
+    value = re.sub(r"[^\wäöüß]+", " ", value.casefold(), flags=re.UNICODE)
+    return " ".join(value.split())
+
+
+def is_clearly_german_title(title: str) -> bool:
+    """Detect an explicitly German role title without guessing from location."""
+    normalised = _normalise_title(title)
+    has_german_role = any(pattern.search(normalised) for pattern in GERMAN_TITLE_PATTERNS)
+    if not has_german_role:
+        return False
+
+    # Let the description decide genuinely bilingual titles.
+    return ENGLISH_ROLE_PATTERN.search(normalised) is None
 
 
 def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
@@ -110,8 +159,13 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
             if kw and kw.lower() in text:
                 return False, "low"
 
-    # English-only filter: reject jobs with no English signals when english_only is set
+    # English-only filter: a clearly German role title is a hard reject even
+    # when the description contains misleading markers such as "remote" or
+    # an English-language job-board footer.
     if profile and getattr(profile, "english_only", False):
+        if is_clearly_german_title(job.title):
+            return False, "low"
+
         english_friendly = any(signal in text for signal in ENGLISH_FRIENDLY_SIGNALS)
         if not english_friendly:
             return False, "low"

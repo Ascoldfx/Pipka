@@ -1,7 +1,7 @@
 import pytest
 from app.models.job import Job
 from app.models.user import UserProfile
-from app.scoring.rules import pre_filter
+from app.scoring.rules import is_clearly_german_title, pre_filter
 
 def test_hard_reject_junior():
     job = Job(title="Junior Procurement Analyst", description="Some text")
@@ -34,6 +34,59 @@ def test_english_only_filter_pass():
     job = Job(title="Director Supply Chain", description="International team, english working language.")
     passed, bucket = pre_filter(job, profile)
     assert passed is True
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Geschäftsführer Operational Excellence (m/w/d)",
+        "Gesch&auml;ftsf&uuml;hrer Logistik",
+        "Einkaufsleiter (m/w/d)",
+        "Leiter Logistik",
+        "Bereichsleiter Supply Chain",
+        "Produktmanager (m/w/d)",
+        "Krisenmanager Restrukturierung",
+    ],
+)
+def test_english_only_rejects_clearly_german_title_despite_english_markers(title):
+    profile = UserProfile(english_only=True)
+    job = Job(
+        title=title,
+        description="International global company. English working language. Remote role.",
+    )
+
+    assert pre_filter(job, profile) == (False, "low")
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Director Operations (m/w/d)",
+        "Head of Procurement – Deutschland",
+        "Chief Restructuring Officer",
+        "Global Supply Chain Director",
+    ],
+)
+def test_german_title_detector_allows_english_titles(title):
+    assert is_clearly_german_title(title) is False
+
+
+def test_german_title_detector_defers_bilingual_title_to_description_filter():
+    title = "Einkaufsleiter / Head of Procurement"
+    assert is_clearly_german_title(title) is False
+
+    profile = UserProfile(english_only=True)
+    job = Job(title=title, description="English is the working language in our global team.")
+    assert pre_filter(job, profile)[0] is True
+
+
+def test_german_title_is_allowed_when_english_only_is_disabled():
+    profile = UserProfile(english_only=False)
+    job = Job(
+        title="Geschäftsführer Operational Excellence",
+        description="International operations transformation.",
+    )
+    assert pre_filter(job, profile)[0] is True
 
 def test_domain_check_fail():
     # Marketing director should fail domain check
