@@ -34,13 +34,13 @@ class UserProfile(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
     resume_text: Mapped[str | None] = mapped_column(Text)
     target_titles: Mapped[list | None] = mapped_column(JSON)  # ["Supply Chain Manager", "Procurement Lead"]
-    min_salary: Mapped[int | None] = mapped_column(Integer)
     max_commute_km: Mapped[int | None] = mapped_column(Integer)
     languages: Mapped[dict | None] = mapped_column(JSON)  # {"en": "C1", "de": "B1"}
     experience_years: Mapped[int | None] = mapped_column(Integer)
     industries: Mapped[list | None] = mapped_column(JSON)
     work_mode: Mapped[str | None] = mapped_column(String(20))  # remote / hybrid / onsite / any
     preferred_countries: Mapped[list | None] = mapped_column(JSON)  # ["de", "ch", "at"]
+    hidden_countries: Mapped[list | None] = mapped_column(JSON)  # hidden from default feed; explicit filter overrides
     base_location: Mapped[str | None] = mapped_column(String(255))  # "Leipzig"
     excluded_keywords: Mapped[list | None] = mapped_column(JSON)  # ["junior", "sales", "b2"]
     english_only: Mapped[bool] = mapped_column(Boolean, default=False)  # prioritise English-language jobs only

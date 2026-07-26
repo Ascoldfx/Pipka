@@ -60,6 +60,50 @@
 
 См. [[Источники вакансий#регионы-за-пределами-европы-gulf--океания--юва--10072026]].
 
+## 26 июля 2026
+
+### Gemini 3.5/3.6 и новый Google GenAI SDK
+
+- `pyproject.toml` — legacy `google-generativeai` заменён на поддерживаемый `google-genai>=2,<3`.
+- `app/scoring/gemini_client.py` — единый async client для генерации и embeddings, корректное закрытие transport в lifespan.
+- `gemini-3.5-flash-lite` используется для массового real-time/backfill скоринга; `gemini-3.6-flash` — для подробного анализа одной вакансии.
+- Batch-скоринг переведён на structured JSON Schema. Deprecated для 3.5/3.6 sampling controls (`temperature`, `top_p`, `top_k`) не передаются.
+- Retry-классификатор понимает HTTP-коды и исключения старого/нового SDK.
+
+### Зарплата полностью исключена из фильтрации и скоринга
+
+- `user_profiles.min_salary` удаляется миграцией `0006_profile_feed_preferences`.
+- Salary-setting удалён из Telegram-профиля.
+- Salary context удалён из Claude/Gemini/NVIDIA prompts; `pre_filter` игнорирует salary при любом значении.
+- `jobs.salary_min/max/currency` сохранены для отображения исходных данных, если источник их отдаёт.
+
+### Скрытие стран из основной ленты
+
+- `user_profiles.hidden_countries JSON` — отдельная presentation-настройка.
+- Settings UI: красные country pills с i18n EN/RU/DE/ES.
+- `/api/jobs` скрывает эти страны из All Jobs/Inbox по умолчанию; явный country-filter временно переопределяет скрытие; Applied/Rejected сохраняют полную историю.
+- Сбор и AI-скоринг скрытых стран продолжаются. Изменение настройки не меняет `profile_hash`, не инвалидирует embedding и не вызывает лишний re-score.
+
+### AI-промпт следует целевым должностям профиля
+
+- Удалён старый хардкод «только Director+ в Supply Chain / Procurement / Operations / Logistics».
+- `Target roles` из профиля стали источником истины для Gemini, Claude и NVIDIA; допустимы несколько направлений одновременно, включая transformation, restructuring, growth и AI strategy.
+- Убраны зашитые в общий промпт данные конкретного кандидата: уровень немецкого, фиксированный набор отраслей и обязательность международной компании.
+- Явная целевая должность остаётся предпочтением, а не доказательством квалификации: модель должна подтвердить соответствие опытом из резюме.
+- Добавлена регрессия для `Chief Restructuring Officer` и `Director of AI Strategy`.
+
+### Миграции и тесты
+
+- Head Alembic: `0006_profile_feed_preferences`.
+- Старые `0002/0003` сделаны кросс-БД: fresh SQLite больше не падает на PostgreSQL-only `ADD COLUMN IF NOT EXISTS`.
+- Цепочка проверена с нуля и как upgrade `0005 → 0006`; данные профиля сохраняются.
+- Добавлены тесты нормализации стран, profile-hash semantics, Gemini-конфига и инварианта «зарплата игнорируется».
+- `pyproject.toml` получил явный setuptools package discovery (`app*`): `pip install .` снова воспроизводим и не падает на конфликте top-level `app`/`alembic`.
+- Закрыт старый ruff backlog (19 замечаний); полный `ruff check .` проходит.
+- `.gitignore` скрывает AppleDouble `._*`, `graphify-out/` и `.env.*` (кроме tracked `.env.example`), чтобы generated/backup-файлы сервера не засоряли deploy-status.
+
+См. [[Скоринг]], [[Настройки]], [[API]], [[Frontend]], [[Миграции]], [[База данных]].
+
 ---
 
 → [[Changelog 2026-06]] → [[Changelog 2026-05]] → [[Roadmap]] → [[API]] → [[Скоринг]] → [[Трекер]] → [[Источники вакансий]]

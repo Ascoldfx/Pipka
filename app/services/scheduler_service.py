@@ -169,7 +169,7 @@ async def _background_scan(bot_app, trigger: str = "scheduled"):
             async with async_session() as session:
                 # 1. Find all users with profiles to determine dynamic search scope
                 users_result = await session.execute(
-                    select(User).options(selectinload(User.profile)).where(User.is_active == True)
+                    select(User).options(selectinload(User.profile)).where(User.is_active.is_(True))
                 )
                 users = users_result.scalars().all()
 
@@ -435,7 +435,7 @@ def _backfill_score_fn():
     if settings.gemini_api_key:
         from app.scoring.gemini_matcher import is_gemini_available, score_jobs_gemini  # noqa: PLC0415
         if is_gemini_available():
-            logger.debug("Backfill scorer: using Gemini Flash (%s)", settings.gemini_model)
+            logger.debug("Backfill scorer: using Gemini (%s)", settings.gemini_scoring_model)
             return score_jobs_gemini
         logger.warning("Backfill scorer: Gemini breaker open — falling back to Claude")
 
@@ -576,7 +576,7 @@ async def _backfill_score():
 
     async with async_session() as session:
         users_result = await session.execute(
-            select(User).options(selectinload(User.profile)).where(User.is_active == True)
+            select(User).options(selectinload(User.profile)).where(User.is_active.is_(True))
         )
         users = users_result.scalars().all()
 
@@ -737,7 +737,7 @@ async def _nvidia_idle_rescore():
 
     async with async_session() as session:
         users_result = await session.execute(
-            select(User).options(selectinload(User.profile)).where(User.is_active == True)
+            select(User).options(selectinload(User.profile)).where(User.is_active.is_(True))
         )
         users = users_result.scalars().all()
 
@@ -891,7 +891,7 @@ async def _watchlist_scan(bot_app):
 
     async with async_session() as session:
         users_result = await session.execute(
-            select(User).options(selectinload(User.profile)).where(User.is_active == True)
+            select(User).options(selectinload(User.profile)).where(User.is_active.is_(True))
         )
         users = users_result.scalars().all()
 

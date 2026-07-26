@@ -15,10 +15,10 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Import models
-from app.models import Base
+from app.models import Base  # noqa: E402
 target_metadata = Base.metadata
 
-from app.config import settings
+from app.config import settings  # noqa: E402
 
 def get_url():
     return settings.database_url

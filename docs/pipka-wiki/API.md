@@ -36,6 +36,8 @@
 
 Без параметра `status` (вкладка «Все вакансии») **отклонённые скрываются** (с 04.07.2026) — раньше reject-клик оставлял строку в списке после перерисовки, что выглядело как «вакансия вернулась». Отклонённые доступны на вкладке Rejected (`status=rejected`).
 
+Если в профиле задан `hidden_countries`, `/api/jobs` исключает эти страны из основной ленты и Inbox. Явный `country`/`countries` имеет приоритет и временно показывает скрытую страну. Applied/Rejected не скрываются, чтобы история действий не пропадала.
+
 `semantic=1` — pre-rank через cosine-similarity к embedding профиля ([[Поиск и индексация]]); top-`SEMANTIC_SEARCH_LIMIT` (default 500) кандидатов сортируются по близости. Без флага — обычный SQL-сорт по `sort` колонке.
 
 `search=…` на PostgreSQL использует tsvector + `websearch_to_tsquery`. На SQLite (dev) — fallback `ILIKE`.
@@ -73,15 +75,15 @@ POST требует CSRF-заголовок — [[Безопасность#3-csr
 ### Поля POST /api/profile
 
 ```
-resume_text, target_titles, work_mode, preferred_countries,
+resume_text, target_titles, work_mode, preferred_countries, hidden_countries,
 excluded_keywords, english_only (0/1), target_companies
 ```
 
-> `min_salary` / `languages` / `experience_years` удалены 27 мая 2026 — не учитывались осмысленно. Колонки БД orphaned.
+> `min_salary` удалён из API/модели/БД миграцией `0006_profile_feed_preferences`; зарплата вакансии хранится только как исходное отображаемое поле. `languages` / `experience_years` удалены из API и скоринга, их старые DB-колонки пока orphaned.
 
 Валидация — [[Безопасность#4-input-validation]].
 
-Изменение профиля → новый `profile_hash` → постепенная пере-оценка stale-строк ([[Кэш и инвалидация]]).
+Изменение скоринг-релевантного профиля → новый `profile_hash` → постепенная пере-оценка stale-строк ([[Кэш и инвалидация]]). `hidden_countries` — presentation-only: не меняет hash, не инвалидирует embedding и не запускает пере-скоринг.
 
 ## Scan (`app/api/scan.py`)
 

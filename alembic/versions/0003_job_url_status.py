@@ -19,6 +19,7 @@ serves both the picker (oldest-first) and the dashboard "hide closed" filter.
 """
 from __future__ import annotations
 
+import sqlalchemy as sa
 from alembic import op
 
 revision = "0003_job_url_status"
@@ -28,9 +29,17 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS url_status VARCHAR(20)")
-    op.execute("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS url_checked_at TIMESTAMP")
-    op.execute("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS url_check_failures INTEGER NOT NULL DEFAULT 0")
+    bind = op.get_bind()
+    columns = {column["name"] for column in sa.inspect(bind).get_columns("jobs")}
+    if "url_status" not in columns:
+        op.add_column("jobs", sa.Column("url_status", sa.String(20), nullable=True))
+    if "url_checked_at" not in columns:
+        op.add_column("jobs", sa.Column("url_checked_at", sa.DateTime(), nullable=True))
+    if "url_check_failures" not in columns:
+        op.add_column(
+            "jobs",
+            sa.Column("url_check_failures", sa.Integer(), nullable=False, server_default="0"),
+        )
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS ix_jobs_url_status_checked

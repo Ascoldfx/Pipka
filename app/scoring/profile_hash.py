@@ -5,8 +5,8 @@ We tag every ``JobScore`` row with two pieces of provenance:
 * ``profile_hash`` — sha256 of the user's scoring-relevant profile fields,
   serialised in a stable order. Changes when the user edits anything that
   could change a score (resume, target titles, languages, etc.).
-* ``model_version`` — the AI backend identifier (``gemini-3.1-flash-lite-preview``,
-  ``claude-sonnet-4-20250514``, ``google/gemma-4-31b-it``). Changes when we
+* ``model_version`` — the AI backend identifier (``gemini-3.5-flash-lite``,
+  ``claude-sonnet-4-20250514``, ``meta/llama-3.3-70b-instruct``). Changes when we
   swap models or rev a model version.
 
 Application code reads these to decide whether a cached score is still
@@ -24,13 +24,13 @@ from app.models.user import UserProfile
 
 # Backend identifiers — pulled from settings so an env-only model bump
 # automatically invalidates downstream caches without code changes.
-MODEL_GEMINI = lambda: f"gemini:{settings.gemini_model}"           # noqa: E731
+MODEL_GEMINI = lambda: f"gemini:{settings.gemini_scoring_model}"   # noqa: E731
 MODEL_CLAUDE = lambda: f"claude:{settings.claude_model}"           # noqa: E731
 MODEL_NVIDIA = lambda: f"nvidia:{settings.nvidia_model}"           # noqa: E731
 
 # The set of profile attributes that influence scoring. Order is fixed so
 # the resulting JSON serialisation is deterministic across runs.
-# languages / min_salary / experience_years removed (May 2026) — no longer
+# languages / salary / experience_years removed (May 2026) — no longer
 # part of the scoring prompt, so they must not affect the cache key either.
 # (Changing this set re-hashes every profile once → a one-time gradual
 # re-score via the Phase 2b backfill path, which is correct: the prompt

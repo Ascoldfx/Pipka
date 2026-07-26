@@ -52,14 +52,15 @@ def test_plain_manager_fail():
     job = Job(title="Procurement Manager", description="Manage procurement tasks")
     passed, bucket = pre_filter(job, None)
     assert passed is False
-    assert bucket == "low"
+    assert bucket == "manager_tier2"
 
-def test_salary_floor():
-    profile = UserProfile(min_salary=100000)
-    job_low = Job(title="Head of Logistics", description="Logistics", salary_min=50000)
-    passed_low, _ = pre_filter(job_low, profile)
-    assert passed_low is False
-    
-    job_high = Job(title="Head of Logistics", description="Logistics", salary_min=90000)
-    passed_high, _ = pre_filter(job_high, profile)
-    assert passed_high is True
+@pytest.mark.parametrize("salary_min", [None, 50_000, 150_000])
+def test_salary_is_ignored(salary_min):
+    job = Job(
+        title="Head of Logistics",
+        description="Global logistics operations in English",
+        salary_min=salary_min,
+    )
+    passed, bucket = pre_filter(job, UserProfile())
+    assert passed is True
+    assert bucket == "high"

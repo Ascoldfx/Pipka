@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 import urllib.parse
 
 import aiohttp
@@ -71,8 +70,6 @@ class RemotiveSource(JobSource):
                     continue
 
                 posted = dateparser.parse(item["publication_date"]).replace(tzinfo=None) if item.get("publication_date") else None
-                salary = item.get("salary", "")
-                
                 jobs.append(
                     RawJob(
                         external_id=f"remotive_{item.get('id')}",

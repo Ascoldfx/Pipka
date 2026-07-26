@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.models.job import Job
 from app.models.user import UserProfile
+from app.scoring.gemini_client import get_gemini_client
 from app.scoring.profile_hash import compute_profile_hash
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,6 @@ logger = logging.getLogger(__name__)
 _embed_lock = asyncio.Lock()
 _pace_lock = asyncio.Lock()
 _last_embed_call: float = 0.0
-_genai_configured = False
 
 
 def _is_postgres(session: AsyncSession) -> bool:
@@ -61,37 +61,30 @@ def _extract_embedding(response: Any) -> list[float]:
 
     if isinstance(embedding, dict):
         embedding = embedding.get("values")
-    if embedding and isinstance(embedding[0], dict):
-        embedding = embedding[0].get("values")
-    if embedding and isinstance(embedding[0], list):
-        embedding = embedding[0]
+    elif hasattr(embedding, "values") and not callable(embedding.values):
+        embedding = embedding.values
+    if isinstance(embedding, (list, tuple)) and embedding:
+        first = embedding[0]
+        if isinstance(first, dict):
+            embedding = first.get("values")
+        elif hasattr(first, "values") and not callable(first.values):
+            embedding = first.values
+        elif isinstance(first, (list, tuple)):
+            embedding = first
     if not embedding:
         raise ValueError("Embedding response did not contain values")
     return _normalise_dimension([float(v) for v in embedding])
 
 
-def _embed_sync(text_value: str, *, task_type: str) -> list[float]:
-    global _genai_configured
-    import google.generativeai as genai  # noqa: PLC0415
-
-    if not _genai_configured:
-        genai.configure(api_key=settings.gemini_api_key)
-        _genai_configured = True
-
-    kwargs = {
-        "model": settings.embedding_model,
-        "content": text_value,
-        "task_type": task_type,
-    }
+async def _embed(text_value: str, *, task_type: str) -> list[float]:
+    config: dict[str, Any] = {"task_type": task_type.upper()}
     if settings.embedding_dimension:
-        kwargs["output_dimensionality"] = settings.embedding_dimension
-
-    try:
-        response = genai.embed_content(**kwargs)
-    except TypeError:
-        # Older google-generativeai releases do not expose output_dimensionality.
-        kwargs.pop("output_dimensionality", None)
-        response = genai.embed_content(**kwargs)
+        config["output_dimensionality"] = settings.embedding_dimension
+    response = await get_gemini_client().aio.models.embed_content(
+        model=settings.embedding_model,
+        contents=text_value,
+        config=config,
+    )
     return _extract_embedding(response)
 
 
@@ -100,7 +93,7 @@ async def embed_text(text_value: str, *, task_type: str) -> list[float]:
     text_value = (text_value or "").strip()
     if not text_value:
         raise ValueError("Cannot embed empty text")
-    return await asyncio.to_thread(_embed_sync, text_value[:12000], task_type=task_type)
+    return await _embed(text_value[:12000], task_type=task_type)
 
 
 def build_job_embedding_text(job: Job) -> str:

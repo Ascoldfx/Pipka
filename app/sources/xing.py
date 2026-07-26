@@ -153,11 +153,6 @@ class XingSource(JobSource):
         company_info = val.get("companyInfo") or {}
         if isinstance(company_info, dict):
             company_name = company_info.get("companyNameOverride") or None
-            # Also try via __ref resolution — not available without full state
-            if not company_name:
-                company_ref = (company_info.get("company") or {})
-                # company_ref is usually {"__ref": "Company:xxx"} — name not embedded
-                pass
 
         # Salary
         salary_obj = val.get("salary") or {}

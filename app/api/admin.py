@@ -41,6 +41,7 @@ async def admin_get_user_profile(request: Request, user_id: int):
                 "target_titles": p.target_titles if p else [],
                 "work_mode": p.work_mode if p else "any",
                 "preferred_countries": p.preferred_countries if p else [],
+                "hidden_countries": p.hidden_countries if p else [],
                 "excluded_keywords": p.excluded_keywords if p else [],
                 "english_only": p.english_only if p else False,
                 "target_companies": p.target_companies if p else [],

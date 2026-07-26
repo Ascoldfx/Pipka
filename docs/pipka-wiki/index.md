@@ -29,7 +29,7 @@
 ## Эксплуатация
 
 - [[Деплой]] — сервер, Docker, цикл выкатки
-- [[Миграции]] — Alembic, baseline + Phase 2
+- [[Миграции]] — Alembic, актуальный head `0006_profile_feed_preferences`
 - [[Бэкапы]] — pg_dump → gzip → local + Backblaze B2
 - [[Настройки]] — все env-переменные
 
@@ -48,6 +48,7 @@
 
 ## Changelog
 
+- [[Changelog 2026-07]] — Gemini 3.5/3.6, скрытые страны, удаление salary-фильтра
 - [[Changelog 2026-05]] — URL liveness, full-text search, pgvector embeddings
 - [[Changelog 2026-04]] — wiki expansion, Phase 2 (profile_hash), CSRF, Sentry, dashboard refactor, JSONB
 
@@ -59,7 +60,7 @@
 | БД | PostgreSQL 16 (asyncpg, JSONB) |
 | ORM | SQLAlchemy 2.0 async |
 | Migrations | Alembic |
-| AI | Gemini Flash · Claude Sonnet · NVIDIA Gemma |
+| AI | Gemini 3.5 Flash-Lite / 3.6 Flash · Claude Sonnet · NVIDIA Llama 3.3 |
 | Bot | python-telegram-bot 21 |
 | Scheduler | APScheduler 3 |
 | Auth | Google OAuth2 (authlib) + SessionMiddleware |

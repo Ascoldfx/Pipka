@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 
@@ -10,6 +11,7 @@ from app.api._helpers import VALID_WORK_MODES, get_user
 from app.api.stats import invalidate_stats_cache
 from app.database import async_session
 from app.models.user import UserProfile
+from app.scoring.profile_hash import compute_profile_hash
 from app.services.embedding_service import invalidate_profile_embedding
 
 logger = logging.getLogger(__name__)
@@ -34,6 +36,22 @@ MAX_PROFILE_FIELD_LEN = 200    # one entry's max length
 RESUME_PARSE_TIMEOUT_SECONDS = 30
 
 
+def _parse_country_codes(raw: str, field_name: str) -> list[str]:
+    """Validate, normalise, and de-duplicate two-letter country codes."""
+    codes: list[str] = []
+    for value in raw.split(","):
+        code = value.strip().lower()
+        if not code:
+            continue
+        if not re.fullmatch(r"[a-z]{2}", code):
+            raise HTTPException(status_code=400, detail=f"{field_name}: invalid country code '{code}'")
+        if code not in codes:
+            codes.append(code)
+    if len(codes) > MAX_PROFILE_LIST:
+        raise HTTPException(status_code=400, detail=f"{field_name}: max {MAX_PROFILE_LIST} entries")
+    return codes
+
+
 @router.get("/api/profile")
 async def get_profile(request: Request):
     async with async_session() as session:
@@ -48,6 +66,7 @@ async def get_profile(request: Request):
             "target_titles": p.target_titles or [],
             "work_mode": p.work_mode or "any",
             "preferred_countries": p.preferred_countries or [],
+            "hidden_countries": p.hidden_countries or [],
             "excluded_keywords": p.excluded_keywords or [],
             "english_only": getattr(p, "english_only", False) or False,
             "target_companies": getattr(p, "target_companies", None) or [],
@@ -61,14 +80,13 @@ async def update_profile(
     target_titles: str = Form(None),
     work_mode: str = Form(None),
     preferred_countries: str = Form(None),
+    hidden_countries: str = Form(None),
     excluded_keywords: str = Form(None),
     english_only: str = Form(None),
     target_companies: str = Form(None),
 ):
-    # min_salary / experience_years / languages removed (May 2026) — they
-    # were collected but never meaningfully used: salary is absent from most
-    # listings, and the scoring prompt's lang/experience hints added noise
-    # without signal. Columns remain in the DB (orphaned) for now.
+    # Salary / experience / language preferences are intentionally absent:
+    # incomplete listing data made them noise rather than reliable signals.
     if resume_text is not None and len(resume_text) > MAX_RESUME_CHARS:
         raise HTTPException(status_code=400, detail=f"Resume too long (>{MAX_RESUME_CHARS} chars)")
     if work_mode is not None and work_mode not in VALID_WORK_MODES:
@@ -85,6 +103,8 @@ async def update_profile(
                 p = UserProfile(user_id=user.id)
                 session.add(p)
 
+            old_profile_hash = compute_profile_hash(p)
+
             if resume_text is not None:
                 p.resume_text = resume_text
             if target_titles is not None:
@@ -95,10 +115,9 @@ async def update_profile(
             if work_mode is not None:
                 p.work_mode = work_mode
             if preferred_countries is not None:
-                items = [c.strip().lower()[:MAX_PROFILE_FIELD_LEN] for c in preferred_countries.split(",") if c.strip()]
-                if len(items) > MAX_PROFILE_LIST:
-                    raise HTTPException(status_code=400, detail=f"preferred_countries: max {MAX_PROFILE_LIST} entries")
-                p.preferred_countries = items
+                p.preferred_countries = _parse_country_codes(preferred_countries, "preferred_countries")
+            if hidden_countries is not None:
+                p.hidden_countries = _parse_country_codes(hidden_countries, "hidden_countries")
             if excluded_keywords is not None:
                 items = [k.strip()[:MAX_PROFILE_FIELD_LEN] for k in excluded_keywords.split(",") if k.strip()]
                 if len(items) > MAX_PROFILE_LIST:
@@ -113,7 +132,11 @@ async def update_profile(
                 p.target_companies = items
 
             await session.flush()
-            await invalidate_profile_embedding(session, p.id)
+            # hidden_countries is presentation-only and deliberately excluded
+            # from the profile hash, so toggling it does not trigger embeddings
+            # or a costly AI re-score.
+            if old_profile_hash != compute_profile_hash(p):
+                await invalidate_profile_embedding(session, p.id)
             await session.commit()
             invalidate_stats_cache(user.id)
             return {"ok": True}

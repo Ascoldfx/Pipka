@@ -12,11 +12,15 @@ class Settings(BaseSettings):
     # Claude AI
     anthropic_api_key: str
 
-    # Google Gemini (optional — free tier backfill scorer)
-    # Set GEMINI_API_KEY in .env to enable; leave empty to use Claude for backfill too
+    # Google Gemini (optional).
+    # Scoring and detailed analysis have different latency/quality profiles,
+    # so they intentionally use separate production-stable models.
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-3.1-flash-lite-preview"  # 15 RPM / 500 RPD free tier — единственная живая модель на ascoldfx@gmail free tier (2.5/2.0/3-flash все выбраны)
-    gemini_batch_delay: float = 4.0  # seconds between batches (30 RPM → 1 req/2s, use 4s to be safe)
+    gemini_scoring_model: str = "gemini-3.5-flash-lite"
+    gemini_analysis_model: str = "gemini-3.6-flash"
+    gemini_scoring_max_output_tokens: int = 12000
+    gemini_analysis_max_output_tokens: int = 4096
+    gemini_batch_delay: float = 4.0
 
     # NVIDIA Build (optional — idle rescorer, runs only when Gemini queue drained)
     # Get key at https://build.nvidia.com → set NVIDIA_API_KEY in .env to enable.

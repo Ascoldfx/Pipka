@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
 
 import aiohttp
 from dateutil import parser as dateparser
 
 from app.config import settings
-from app.sources.base import JobSource, RawJob, SearchParams
+from app.sources.base import RawJob, SearchParams
 
 logger = logging.getLogger(__name__)
 

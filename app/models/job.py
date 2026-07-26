@@ -4,11 +4,11 @@ from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, JSON, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.models import Base
+
 # Use JSONB on PostgreSQL (faster operators, GIN-indexable) but keep JSON for
 # sqlite (used in dev/tests) — SQLAlchemy variant picks the right one per dialect.
 _JSON = JSON().with_variant(JSONB(), "postgresql")
-
-from app.models import Base
 
 
 class Job(Base):
@@ -82,7 +82,7 @@ class JobScore(Base):
     scored_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     # Phase 2 — fingerprints for cache invalidation.
     # profile_hash: sha256 of stable JSON of scoring-relevant profile fields.
-    # model_version: e.g. "gemini-3.1-flash-lite-preview" or "claude-sonnet-4-20250514".
+    # model_version: e.g. "gemini:gemini-3.5-flash-lite" or "claude:claude-sonnet-4-20250514".
     # Both nullable for legacy rows scored before the migration.
     profile_hash: Mapped[str | None] = mapped_column(String(64), index=False)
     model_version: Mapped[str | None] = mapped_column(String(64), index=False)

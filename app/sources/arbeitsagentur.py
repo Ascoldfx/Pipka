@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 
 import aiohttp
 from dateutil import parser as dateparser

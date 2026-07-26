@@ -346,6 +346,9 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         app.state.ratelimit_cleanup_task.cancel()
+        from app.scoring.gemini_client import close_gemini_client  # noqa: PLC0415
+
+        await close_gemini_client()
 
 
 app = FastAPI(title="Pipka API", version="0.1.0", lifespan=lifespan)

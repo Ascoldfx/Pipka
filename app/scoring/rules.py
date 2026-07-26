@@ -121,8 +121,8 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     if not domain_match:
         return False, "low"
 
-    # Salary floor check removed — salary is rarely available in job listings.
-    # AI scorer handles salary assessment when data is present.
+    # Salary is deliberately ignored: most source listings do not provide it,
+    # so it cannot be a reliable filter or scoring signal.
 
     # Work mode filter
     if profile and profile.work_mode and profile.work_mode != "any":

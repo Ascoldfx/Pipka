@@ -7,51 +7,52 @@ from datetime import datetime, timedelta
 from anthropic import AsyncAnthropic
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.job import Job, JobScore
 from app.models.user import User, UserProfile
+from app.scoring.gemini_client import generate_gemini_content
 from app.scoring.profile_hash import MODEL_CLAUDE, compute_profile_hash
 
 logger = logging.getLogger(__name__)
 
 SCORING_PROMPT = """\
 You are a VERY strict Executive Recruiter AI. Score each job against the candidate profile REALISTICALLY.
-Use BOTH the candidate's resume background AND the target role preferences to assess fit.
-The candidate is looking EXCLUSIVELY for Director / Head of / VP / C-level positions in SUPPLY CHAIN, PROCUREMENT, OPERATIONS, or LOGISTICS at INTERNATIONAL companies with ENGLISH as working language.
+Use BOTH the candidate's resume/background AND the explicitly listed target roles to assess fit.
+The Target roles in the Candidate Profile are the source of truth. They may span several
+functions (for example operations, transformation, restructuring, growth, or AI strategy).
+Do not impose a fixed industry, function, or title hierarchy that is not present in the profile.
 
 ## Scoring Rules (CRITICAL — follow strictly, most jobs should score 30-60):
-- 90-100: RARE. Perfect match — Director+ level, Supply Chain/Procurement/Operations title, well-known international company, English-speaking, candidate's background is a strong fit
-- 75-89: Strong match — Director+ level, clearly related domain (supply chain/procurement/operations/logistics), English OK, background relevant
-- 50-74: Partial match — related but gaps (Senior Manager level, slightly different function, language concerns, unknown company)
-- 30-49: Weak — different function (IT, HR, Finance, Marketing, Sales, Consulting), or German-only, or plain Manager
+- 90-100: RARE. Near-exact target-role match, appropriate seniority, and exceptionally strong evidence from the resume/background
+- 75-89: Strong match — same or closely related target function, appropriate scope/seniority, and relevant background
+- 50-74: Partial match — adjacent role with meaningful overlap but clear gaps in scope, seniority, industry, or requirements
+- 30-49: Weak — substantially different function or seniority, with only transferable-skill overlap
 - 0-29: No match — completely wrong field, junior, or irrelevant
 
 ## Hard penalties (APPLY STRICTLY — these are MAXIMUM scores, not suggestions):
-- Job is NOT in Supply Chain/Procurement/Operations/Logistics → max 40
-- Job is in HR/Marketing/Sales/Finance/IT/Consulting/Legal → max 25
-- Plain "Manager" title (not Director/Head/VP/Chief/Lead) → max 45
-- Job requires fluent German (C1+/native/"verhandlungssicher"/"fließend"/"sehr gute Deutschkenntnisse") → max 30 (candidate has B1!)
-- Description entirely in German with no English mentioned → max 35
-- Job requires TECHNICAL/IT/ENGINEERING skills → max 35
-- Local German SME (Mittelstand) with no international presence → max 45
+- Job is clearly outside every explicit target role and unsupported by the resume/background → max 40
+- Job is in a clearly unrelated function (for example HR, Marketing, Sales, Finance, Legal, or Consulting) and is not an explicit target role → max 25
+- Plain "Manager" role that is neither an explicit target nor comparable in scope to a target role → max 45
+- Language requirements clearly conflict with an explicit profile preference or the candidate's documented proficiency → max 30
+- Technical individual-contributor or hands-on engineering role unrelated to an explicit target role → max 35
 - Junior/Trainee/Student → max 15
-- Consulting/Advisory role → max 35
+- Consulting/Advisory role outside the explicit target directions → max 35
 
 ## Key bonuses (only apply if base score is already decent):
-- International/English-speaking company → +10
-- "English" as working language → +5
-- Industry matches candidate's background (FMCG, manufacturing, food & beverage, retail) → +10
+- Direct or strong semantic match to an explicit target role → +10
+- Scope and seniority match the candidate's demonstrated experience → +10
+- Industry matches the candidate's documented background → +10
 - Remote/hybrid option → +5
-- Company/industry aligns with candidate's specific experience → +5
+- Company context and requirements align with the candidate's specific experience → +5
 
 ## IMPORTANT:
-- Salary not shown → do NOT penalize, note "зарплата не указана"
-- If salary IS shown and seems below expectation → mention in verdict but do NOT hard-cap the score (salary data is unreliable)
-- Use the candidate's resume to assess fit: relevant industry, past titles, years of experience
-- Be SKEPTICAL — most jobs score 40-65. Only truly matching Director+ international SC/Procurement roles deserve 75+
+- Ignore salary completely. It is absent from most listings and must not affect the score or verdict.
+- Use the candidate's resume to assess relevant industry, past titles, scope, and years of experience.
+- A target-role title is a preference, not proof of qualification: validate it against the resume.
+- Judge abbreviations by their intended profile meaning and the vacancy context; do not silently reinterpret them as a different executive function.
+- Be SKEPTICAL — most jobs score 40-65. Only genuinely strong target-role matches deserve 75+.
 
 ## Candidate Profile
 {profile_text}
@@ -62,7 +63,7 @@ The candidate is looking EXCLUSIVELY for Director / Head of / VP / C-level posit
 ## Instructions
 For each job, return a JSON object with:
 - "job_index": the index number
-- "score": 0-100 (be strict — most jobs should score 30-60, only truly matching Director+ international roles get 70+)
+- "score": 0-100 (be strict — most jobs should score 30-60, only genuinely strong target-role matches get 70+)
 - "breakdown": {{"relevance": 0-100, "seniority": 0-100, "language_fit": 0-100, "location": 0-100}}
 - "verdict": 1-2 sentence assessment in Russian. Mention: seniority level, company type, language requirements, relevance to candidate's background.
 - "red_flags": list of concerns (in Russian)
@@ -97,9 +98,8 @@ def build_profile_text(profile: UserProfile) -> str:
         parts.append(f"### Candidate Resume / Background\n{resume}")
 
     # --- Preferences ---
-    # min_salary / experience_years / languages dropped (May 2026): salary is
-    # absent from most listings, and the lang/experience hints added prompt
-    # noise without measurably improving scores.
+    # Salary / experience / language preferences are intentionally absent:
+    # incomplete listing data made them prompt noise rather than useful signals.
     prefs: list[str] = []
     if profile.target_titles:
         prefs.append(f"Target roles: {', '.join(profile.target_titles)}")
@@ -187,9 +187,6 @@ async def _score_batch(
     jobs_text = ""
     for idx, job in enumerate(jobs):
         desc_preview = (job.description or "")[:1200]
-        salary_info = ""
-        if job.salary_min or job.salary_max:
-            salary_info = f"Salary: {job.salary_min or '?'}-{job.salary_max or '?'} {job.salary_currency or 'EUR'}"
         remote_info = f"Remote: {'Yes' if job.is_remote else 'No' if job.is_remote is False else 'Unknown'}"
 
         jobs_text += (
@@ -197,7 +194,7 @@ async def _score_batch(
             f"Title: {job.title}\n"
             f"Company: {job.company_name or 'N/A'}\n"
             f"Location: {job.location or 'N/A'} ({job.country or 'N/A'})\n"
-            f"{salary_info}\n{remote_info}\n"
+            f"{remote_info}\n"
             f"Description: {desc_preview}\n"
         )
 
@@ -320,13 +317,14 @@ async def analyze_single_job(job: Job, profile: UserProfile) -> str:
     
     if settings.gemini_api_key:
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=settings.gemini_api_key)
-            model = genai.GenerativeModel(settings.gemini_model)
-            response = await model.generate_content_async(prompt)
+            response = await generate_gemini_content(
+                prompt,
+                model=settings.gemini_analysis_model,
+                max_output_tokens=settings.gemini_analysis_max_output_tokens,
+            )
             return response.text
         except Exception as e:
-            logger.error(f"Gemini analysis error: {e}")
+            logger.error("Gemini analysis error: %s", e)
             return f"Ошибка анализа Gemini: {str(e)[:100]}"
             
     try:

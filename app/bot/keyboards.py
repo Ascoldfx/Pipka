@@ -75,7 +75,6 @@ def profile_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📝 Резюме (текст)", callback_data="prof_resume")],
         [InlineKeyboardButton("🎯 Целевые должности", callback_data="prof_titles")],
-        [InlineKeyboardButton("💰 Мин. зарплата", callback_data="prof_salary")],
         [InlineKeyboardButton("🌐 Языки", callback_data="prof_languages")],
         [InlineKeyboardButton("📍 Локация / Режим", callback_data="prof_location")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="back_main")],

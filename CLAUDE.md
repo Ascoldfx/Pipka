@@ -11,7 +11,7 @@ SSH ключ: `~/.ssh/id_ed25519`.
   - `bot/` — Telegram бот (handlers, keyboards, formatters)
   - `models/` — SQLAlchemy модели (User, UserProfile, Job, JobScore, Application, OpsEvent)
   - `schemas/` — Pydantic-схемы
-  - `scoring/` — `rules.py` (pre_filter) + `matcher.py` (Claude) + `gemini_matcher.py` (Gemini Flash, backfill)
+  - `scoring/` — `rules.py` (pre_filter) + `matcher.py` (Claude/fallback) + `gemini_matcher.py` (Gemini) + `gemini_client.py` (Google GenAI SDK)
   - `sources/` — Adzuna, JobSpy, Arbeitnow, Remotive, Arbeitsagentur, Xing, BerlinStartupJobs, WTTJ, Jooble + aggregator
   - `services/` — scheduler, user_service, tracker_service, ops_service, backup_service, job_service
   - `static/` — dashboard.html, infographic.html, js/app.js, css/styles.css
@@ -38,9 +38,10 @@ cd /opt/pipka && git pull && docker compose up -d --build
 - Запрещено добавлять soft-миграции (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`) в `app/database.py` или куда-либо ещё в рантайме.
 
 ## Скоринг — текущий backend
-- **Реальное время** (`_score_and_notify` → Telegram push): Claude (`claude-sonnet-4-20250514`). Gemini тут НЕ используется — откатили 23.04.2026 из-за 429 Rate Limit.
-- **Backfill** (APScheduler, каждые 2ч): Gemini Flash если `GEMINI_API_KEY` задан в `.env`, иначе Claude.
-- **Детальный анализ** (`analyze_single_job`, кнопка «AI-анализ»): Gemini Flash если `GEMINI_API_KEY` задан, иначе Claude.
+- **Реальное время** (`_score_and_notify` → Telegram push): Gemini `gemini-3.5-flash-lite`, если задан `GEMINI_API_KEY`; иначе Claude.
+- **Backfill** (APScheduler, каждые 2ч): NVIDIA → Gemini `gemini-3.5-flash-lite` → Claude.
+- **Детальный анализ** (`analyze_single_job`, кнопка «AI-анализ»): Gemini `gemini-3.6-flash`, если задан ключ; иначе Claude.
+- Google SDK: только `google-genai`; legacy `google-generativeai` не использовать.
 
 Источник истины по скорингу: [[docs/pipka-wiki/Скоринг.md]].
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import re
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
+from datetime import datetime
 
 import aiohttp
 from dateutil import parser as dateparser

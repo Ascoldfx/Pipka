@@ -196,13 +196,16 @@ async function loadProfile(){
     $('s-titles').value=(p.target_titles||[]).join(', ');
     if($('s-excluded')) $('s-excluded').value=(p.excluded_keywords||[]).join(', ');
     if($('s-english-only')) $('s-english-only').checked=!!p.english_only;
-    $('s-salary').value=p.min_salary||'';
     $('s-experience').value=p.experience_years||'';
     $('s-languages').value=p.languages?Object.entries(p.languages).map(([k,v])=>k+':'+v).join(', '):'';
     $('s-workmode').value=p.work_mode||'any';
     const pc = p.preferred_countries||[];
     document.querySelectorAll('#s-countries-grid .country-item').forEach(el => {
       el.classList.toggle('active', pc.includes(el.dataset.code));
+    });
+    const hc = p.hidden_countries||[];
+    document.querySelectorAll('#s-hidden-countries-grid .country-item').forEach(el => {
+      el.classList.toggle('active', hc.includes(el.dataset.code));
     });
   }catch(e){console.error(e)}
 }
@@ -213,12 +216,13 @@ async function saveProfile(){
   fd.append('target_titles',$('s-titles').value);
   if($('s-excluded')) fd.append('excluded_keywords',$('s-excluded').value);
   fd.append('english_only', $('s-english-only') && $('s-english-only').checked ? '1' : '0');
-  fd.append('min_salary',$('s-salary').value||0);
   fd.append('experience_years',$('s-experience').value||0);
   fd.append('languages',$('s-languages').value);
   fd.append('work_mode',$('s-workmode').value);
   const activeCountries = Array.from(document.querySelectorAll('#s-countries-grid .country-item.active')).map(el => el.dataset.code);
   fd.append('preferred_countries', activeCountries.join(','));
+  const hiddenCountries = Array.from(document.querySelectorAll('#s-hidden-countries-grid .country-item.active')).map(el => el.dataset.code);
+  fd.append('hidden_countries', hiddenCountries.join(','));
   try{
     const r=await fetch('/api/profile',{method:'POST',body:fd});
     const d=await r.json();

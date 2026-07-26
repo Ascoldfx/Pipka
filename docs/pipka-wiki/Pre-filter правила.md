@@ -68,7 +68,8 @@ Crisis-related: `crisis management`, `turnaround`, `transformation`, `restructur
 
 - **22 апреля 2026:** введён `manager_tier2` бакет — `plain manager + domain` теперь не reject, а откладывается на второй тур backfill'а ([[Changelog 2026-04#двухуровневый-скоринг]]).
 - **22 апреля 2026:** расширены `DIRECTOR_KEYWORDS` под Interim/Crisis/Turnaround/CRO/growth-роли.
-- **апрель 2026:** удалён salary-floor check (зарплата редко доступна в листинге, AI-скорер сам это оценит).
+- **апрель 2026:** удалён salary-floor check.
+- **26 июля 2026:** зарплата полностью исключена и из AI-промптов/вердиктов: большинство источников её не отдаёт, поэтому сравнение было систематически неполным и несправедливым.
 
 ## Куда не масштабируется
 

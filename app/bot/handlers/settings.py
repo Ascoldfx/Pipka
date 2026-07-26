@@ -11,7 +11,6 @@ from app.services.user_service import ensure_profile, get_or_create_user, update
 PROFILE_FIELDS = {
     "prof_resume": ("resume_text", "📝 Отправьте текст резюме (краткое описание опыта):"),
     "prof_titles": ("target_titles", "🎯 Целевые должности через запятую (напр: Supply Chain Manager, Procurement Lead):"),
-    "prof_salary": ("min_salary", "💰 Минимальная годовая зарплата (EUR, число):"),
     "prof_languages": ("languages", "🌐 Языки в формате: EN:C1, DE:B1, RU:native"),
     "prof_location": ("base_location", "📍 Ваш город (напр: Leipzig):"),
 }
@@ -29,7 +28,6 @@ async def profile_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     lines = ["⚙️ Ваш профиль:\n"]
     lines.append(f"📝 Резюме: {'✅' if profile.resume_text else '❌ не задано'}")
     lines.append(f"🎯 Должности: {', '.join(profile.target_titles) if profile.target_titles else '❌'}")
-    lines.append(f"💰 Мин. зарплата: {profile.min_salary or '❌'}")
     lines.append(f"🌐 Языки: {profile.languages or '❌'}")
     lines.append(f"📍 Локация: {profile.base_location or '❌'}")
 
@@ -63,12 +61,6 @@ async def profile_text_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         # Parse field values
         if field_name == "target_titles":
             value = [t.strip() for t in text.split(",") if t.strip()]
-        elif field_name == "min_salary":
-            try:
-                value = int(text.replace(" ", "").replace(",", ""))
-            except ValueError:
-                await update.message.reply_text("❌ Введите число.")
-                return
         elif field_name == "languages":
             value = {}
             for part in text.split(","):

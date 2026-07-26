@@ -80,9 +80,45 @@ Medium-severity (4-5):
 - `dashboard.py` (750 строк) → 8 файлов по concern'ам (см. [[API]]).
 - Per-row `flush+IntegrityError` антипаттерн в Claude `_score_batch` → batch UPSERT.
 
+### Июль 2026 — профиль и AI
+
+- Google SDK `google-generativeai` → `google-genai`; Gemini 3.5 Flash-Lite для массового скоринга, Gemini 3.6 Flash для анализа.
+- Structured JSON Schema для Gemini batch scoring.
+- Зарплата полностью удалена как preference/scoring signal.
+- `hidden_countries`: постоянное скрытие стран из основной ленты без остановки сбора и скоринга.
+- Alembic head `0006_profile_feed_preferences`; fresh/existing SQLite migration-path проверен.
+
 ## 🟡 В работе / следующий приоритет
 
-Ничего не висит. Можно брать что угодно из ⏳.
+### P0 — безопасный production rollout
+
+1. Выкатить `0006` и Gemini SDK/model migration одним релизом.
+2. Сразу проверить `alembic current`, `/health`, один Gemini structured-score batch и один detailed analysis.
+3. 24 часа наблюдать `gemini_429`, `gemini_exhausted`, breaker и распределение score; сравнить с прежней моделью на фиксированной выборке.
+4. При деградации модель откатывается env-переменной, схема профиля остаётся совместимой.
+5. После подтверждения актуального `/opt/pipka/.env` удалить устаревшие `.env.bak*` с сервера или перенести их в закрытое хранилище секретов; `.gitignore` лишь скрывает их из status, но не удаляет.
+
+### P1 — качество и стоимость pipeline
+
+1. Сделать `target_titles` разрешающим сигналом в pre-filter: сейчас AI-промпт уже следует профилю, но старый domain gate может не пропустить AI/interim/crisis-роли до модели.
+2. Добавить golden dataset из 50–100 вручную размеченных вакансий и regression-метрики precision@20 / false-negative rate.
+3. Ввести per-backend latency/token/cost counters и вывести их в Ops.
+4. Кэшировать detailed analysis по `(user, job, profile_hash, analysis_model)` с TTL; идею из старого `pipka-latest` реализовать заново в текущих роутерах, не переносить устаревший монолит.
+5. Разделить AI-квоты real-time и backfill, чтобы массовая очередь не вытесняла пользовательский анализ.
+6. Добавить CI (`pytest`, `ruff`, fresh Alembic upgrade, inline-JS syntax check) на каждый push.
+
+### P1 — frontend/UX
+
+1. Убрать двойной источник JS: сейчас рабочая логика в `dashboard.html`, а `static/js/app.js` частично устарел.
+2. Добавить UI-toggle semantic search и показывать, когда скрытые страны применены к ленте.
+3. Перейти с offset pagination на keyset при росте таблицы.
+
+### P2 — эксплуатация
+
+1. Deep healthcheck: DB ping, scheduler heartbeat, возраст последнего успешного scan.
+2. Еженедельный restore-test бэкапа в disposable DB.
+3. Retention для `ops_events`.
+4. Distributed scheduler lock и Redis rate limiter — только перед multi-replica.
 
 ## ⏳ Отложено (high value, по запросу)
 
@@ -96,20 +132,11 @@ Medium-severity (4-5):
 
 - **Phase 2c — proactive invalidation** — endpoint "пере-оценить всё для меня прямо сейчас". Сейчас Phase 2b делает это постепенно через 2-часовой backfill.
 - **Soft-404 для Indeed/LinkedIn** — некоторые сайты на снятые вакансии возвращают HTTP 200 с body "this position has been filled" вместо 404. Per-source маркеры в `SOFT_404_MARKERS` + GET-проверка для тех источников где HEAD недостаточен.
-- **Semantic + AI hybrid в backfill** — использовать `embedding`-cosine как pre-filter ДО Gemini-скоринга (а не только как UI-опцию). Если cosine < 0.5 — пропустить AI-вызов, поставить score=0 с `model_version='semantic'`. Сэкономит ещё 50% Gemini RPD.
-- **Per-user AI buckets** — `MAX_JOBS_PER_SCORING_BATCH=8` глобально. При 10+ users в одной транзакции дерутся за квоту. Нужны per-user buckets с приоритезацией (платный → first).
+- **Per-user AI buckets** — `MAX_JOBS_PER_SCORING_BATCH=15` глобально. При 10+ users в одной транзакции дерутся за квоту. Нужны per-user buckets с приоритезацией (платный → first).
 
 ### Observability
 
 - **Prometheus `/metrics`** — `http_requests_total{path,status}`, `gemini_calls_total{result}`, `scan_duration_seconds`. Grafana сверху.
-- **Deep healthcheck** — `/health` сейчас всегда 200. Добавить `db_ping`, `last_scan_age_seconds`, `scheduler_alive`.
-- **`ops_events` retention** — таблица растёт ~50KB/день, нет ротации. Добавить cron-truncate >30 дней.
-
-### Robustness
-
-- **Telegram `Forbidden` обработка** — если user заблокировал бота, `_score_and_notify` падает. Ловить, ставить `User.is_active=False`.
-- **Backup integrity test** — раз в неделю auto-restore последний `*.sql.gz` в throwaway-контейнер, проверка `pg_restore --schema-only`.
-- **CI pipeline** — `.github/workflows/ci.yml` с pytest + ruff на каждый push. Сейчас тесты только локально.
 
 ### UX / продукт
 
@@ -119,7 +146,7 @@ Medium-severity (4-5):
 
 ### Cleanup
 
-- **Дроп `user_profiles.industries`** колонки — Industries-фильтр удалили из UI/API (24.04), сама колонка осталась orphan. Migration → drop column.
+- **Дроп orphaned profile-колонок** — `industries`, `languages`, `experience_years`, `base_location`, `max_commute_km` удалить отдельной миграцией после проверки, что Telegram/старые клиенты их не читают.
 - **Раздробить `Скоринг.md`** на под-страницы (Gemini / Claude / NVIDIA / Pre-filter / Recheck) — единая страница уже разрослась.
 - **`scripts/2026_04_add_hot_path_indexes.sql`** — устаревший, индексы создаются через [[Миграции]].
 

@@ -33,7 +33,7 @@ async def inbox_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "inbox_top":
         min_score = 70
 
-    await query.edit_message_text(f"📬 Собираю непросмотренные вакансии...")
+    await query.edit_message_text("📬 Собираю непросмотренные вакансии...")
 
     async with async_session() as session:
         user = await get_or_create_user(query.from_user.id, query.from_user.full_name, session)

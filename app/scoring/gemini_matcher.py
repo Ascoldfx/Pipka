@@ -1,14 +1,10 @@
-"""Gemini Flash scorer — free-tier alternative to Claude for backfill scoring.
+"""Gemini scorer — lower-cost alternative to Claude for backfill scoring.
 
-Free tier limits (as of 2026):
-  gemini-2.0-flash-lite: 30 RPM, 1 500 RPD, 1M TPM
-  gemini-2.0-flash:      15 RPM, 1 500 RPD, 1M TPM
-
-Used exclusively for _backfill_score() — non-urgent, runs every 2 h.
-Real-time scoring (scan → _score_and_notify) still uses Claude.
+Used by real-time scoring, backfill, and the zero-score recheck pass.
+Detailed single-job analysis uses the shared client from ``gemini_client.py``.
 
 Activation: set GEMINI_API_KEY in .env.
-Leave it empty to fall back to Claude for backfill too.
+Leave it empty to fall back to Claude.
 
 Recheck pass (recheck_zero_scores):
   After main backfill queue is empty, Gemini re-evaluates pre-filter rejects
@@ -37,23 +33,20 @@ from tenacity import (
 from app.config import settings
 from app.models.job import Job, JobScore
 from app.models.user import User
+from app.scoring.gemini_client import generate_gemini_content
 from app.scoring.matcher import SCORING_PROMPT, build_profile_text
 from app.scoring.profile_hash import MODEL_GEMINI, compute_profile_hash
 from app.services.ops_service import record_ops_event
 
 logger = logging.getLogger(__name__)
 
-_gemini_model = None  # lazy singleton
-
-# Serialise all Gemini calls across the process — free tier is 15 RPM on a single
-# project key, so any concurrency makes the 4s pacer useless.
+# Serialise all Gemini calls across the process so the configured pacer applies
+# predictably even when several scheduler paths become ready at once.
 _gemini_semaphore = asyncio.Semaphore(1)
 
-# Global pacer — enforces min interval between any two Gemini requests.
-# 15 RPM = 1 req / 4s; keep 4.5s for safety margin.
+# Global pacer — enforces the configured minimum interval between requests.
 _pacer_lock = asyncio.Lock()
 _last_call_monotonic: float = 0.0
-_MIN_INTERVAL_SECONDS = 4.5
 
 # Circuit breaker — trip when daily quota is exhausted so backfill can hand work
 # off to NVIDIA instead of looping retries forever. Resets at next UTC midnight.
@@ -61,6 +54,30 @@ _breaker_lock = asyncio.Lock()
 _gemini_disabled_until: datetime | None = None  # UTC, naive
 _consecutive_exhausts: int = 0
 _BREAKER_TRIP_THRESHOLD = 3  # exhausted batches in a row
+
+_SCORING_RESPONSE_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "job_index": {"type": "integer"},
+            "score": {"type": "integer", "minimum": 0, "maximum": 100},
+            "breakdown": {
+                "type": "object",
+                "properties": {
+                    "relevance": {"type": "integer", "minimum": 0, "maximum": 100},
+                    "seniority": {"type": "integer", "minimum": 0, "maximum": 100},
+                    "language_fit": {"type": "integer", "minimum": 0, "maximum": 100},
+                    "location": {"type": "integer", "minimum": 0, "maximum": 100},
+                },
+                "required": ["relevance", "seniority", "language_fit", "location"],
+            },
+            "verdict": {"type": "string"},
+            "red_flags": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["job_index", "score", "breakdown", "verdict", "red_flags"],
+    },
+}
 
 
 def _next_utc_midnight() -> datetime:
@@ -109,39 +126,44 @@ async def _record_exhaust(reason: str) -> None:
             )
 
 
-def _get_model():
-    global _gemini_model
-    if _gemini_model is None:
-        import google.generativeai as genai  # noqa: PLC0415
-
-        genai.configure(api_key=settings.gemini_api_key)
-        _gemini_model = genai.GenerativeModel(settings.gemini_model)
-        logger.info("Gemini model initialised: %s", settings.gemini_model)
-    return _gemini_model
-
-
 async def _pace() -> None:
-    """Sleep so at least _MIN_INTERVAL_SECONDS elapses between Gemini requests."""
+    """Sleep so the configured interval elapses between Gemini requests."""
     global _last_call_monotonic
     async with _pacer_lock:
         now = time.monotonic()
         elapsed = now - _last_call_monotonic
-        if elapsed < _MIN_INTERVAL_SECONDS:
-            await asyncio.sleep(_MIN_INTERVAL_SECONDS - elapsed)
+        if elapsed < settings.gemini_batch_delay:
+            await asyncio.sleep(settings.gemini_batch_delay - elapsed)
         _last_call_monotonic = time.monotonic()
 
 
+def _error_status(exc: BaseException) -> int | None:
+    """Extract an HTTP status from both old and new Google SDK exceptions."""
+    status = getattr(exc, "status_code", None)
+    if status is None:
+        status = getattr(exc, "code", None)
+    if callable(status):
+        status = status()
+    status = getattr(status, "value", status)
+    try:
+        return int(status)
+    except (TypeError, ValueError):
+        return None
+
+
 def _is_retryable(exc: BaseException) -> bool:
-    """429 / 503 / timeouts from google-generativeai all surface as subclasses of
-    google.api_core.exceptions.GoogleAPICallError. We match by class name to avoid
-    hard-importing google.api_core at module scope."""
+    """Retry transient statuses from both Google SDK generations."""
+    if _error_status(exc) in {408, 429, 500, 502, 503, 504}:
+        return True
     name = type(exc).__name__
     return name in {
-        "ResourceExhausted",   # 429
-        "ServiceUnavailable",  # 503
-        "DeadlineExceeded",    # timeout
-        "InternalServerError", # 500
-        "Aborted",             # 409 retryable
+        "ResourceExhausted",
+        "ServiceUnavailable",
+        "DeadlineExceeded",
+        "InternalServerError",
+        "ReadTimeout",
+        "ConnectTimeout",
+        "TimeoutError",
     }
 
 
@@ -153,16 +175,13 @@ def _build_jobs_text(jobs: list[Job]) -> str:
     jobs_text = ""
     for idx, job in enumerate(jobs):
         desc_preview = (job.description or "")[:1200]
-        salary_info = ""
-        if job.salary_min or job.salary_max:
-            salary_info = f"Salary: {job.salary_min or '?'}-{job.salary_max or '?'} {job.salary_currency or 'EUR'}"
         remote_info = f"Remote: {'Yes' if job.is_remote else 'No' if job.is_remote is False else 'Unknown'}"
         jobs_text += (
             f"\n### Job {idx}\n"
             f"Title: {job.title}\n"
             f"Company: {job.company_name or 'N/A'}\n"
             f"Location: {job.location or 'N/A'} ({job.country or 'N/A'})\n"
-            f"{salary_info}\n{remote_info}\n"
+            f"{remote_info}\n"
             f"Description: {desc_preview}\n"
         )
     return jobs_text
@@ -180,7 +199,6 @@ async def _generate_with_retry(prompt: str, batch_size: int):
     events in a 2-hour window. Letting tenacity wrap into ``RetryError``
     routes exhaustion through the proper handler.
     """
-    model = _get_model()
     attempt_counter = {"n": 0}
 
     async for attempt in AsyncRetrying(
@@ -194,7 +212,12 @@ async def _generate_with_retry(prompt: str, batch_size: int):
             async with _gemini_semaphore:
                 await _pace()
                 try:
-                    return await model.generate_content_async(prompt)
+                    return await generate_gemini_content(
+                        prompt,
+                        model=settings.gemini_scoring_model,
+                        max_output_tokens=settings.gemini_scoring_max_output_tokens,
+                        response_json_schema=_SCORING_RESPONSE_SCHEMA,
+                    )
                 except Exception as exc:
                     if _is_retryable(exc):
                         # Additive jitter so parallel users don't collide
@@ -204,7 +227,7 @@ async def _generate_with_retry(prompt: str, batch_size: int):
                             "Gemini transient error (attempt %d, batch=%d): %s",
                             attempt_counter["n"], batch_size, type(exc).__name__,
                         )
-                        if type(exc).__name__ == "ResourceExhausted":
+                        if _error_status(exc) == 429 or type(exc).__name__ == "ResourceExhausted":
                             await record_ops_event(
                                 "gemini_429",
                                 "retry",
@@ -229,23 +252,24 @@ async def _call_gemini_raw(
     try:
         response = await _generate_with_retry(prompt, len(jobs))
         await _record_success()
-        text = response.text.strip()
+        results = getattr(response, "parsed", None)
+        if not isinstance(results, list):
+            text = (response.text or "").strip()
 
-        # Strip markdown fences
-        if "```" in text:
-            if "```json" in text:
-                text = text.split("```json", 1)[-1]
-            elif text.count("```") >= 2:
-                text = text.split("```")[1]
-            text = text.replace("```", "").strip()
-
-        # Fix truncated JSON
-        if not text.endswith("]"):
-            last_brace = text.rfind("}")
-            if last_brace > 0:
-                text = text[: last_brace + 1] + "]"
-
-        results = json.loads(text)
+            # Defensive fallback for providers/proxies that ignore the schema.
+            if "```" in text:
+                if "```json" in text:
+                    text = text.split("```json", 1)[-1]
+                elif text.count("```") >= 2:
+                    text = text.split("```")[1]
+                text = text.replace("```", "").strip()
+            if not text.endswith("]"):
+                last_brace = text.rfind("}")
+                if last_brace > 0:
+                    text = text[: last_brace + 1] + "]"
+            results = json.loads(text)
+        if not isinstance(results, list):
+            raise ValueError("Gemini scoring response is not a JSON array")
     except RetryError as exc:
         final_exc = exc.last_attempt.exception()
         final_name = type(final_exc).__name__
@@ -272,8 +296,10 @@ async def _call_gemini_raw(
 
     output: list[tuple[Job, int, str]] = []
     for item in results:
-        idx = item.get("job_index", 0)
-        if idx >= len(jobs):
+        if not isinstance(item, dict):
+            continue
+        idx = int(item.get("job_index", 0))
+        if idx < 0 or idx >= len(jobs):
             continue
         output.append((
             jobs[idx],

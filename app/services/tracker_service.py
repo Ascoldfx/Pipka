@@ -75,7 +75,7 @@ async def get_unreviewed_jobs(user_id: int, session: AsyncSession, min_score: in
         .where(
             JobScore.user_id == user_id,
             JobScore.score >= min_score,
-            (Application.id == None) | (~Application.status.in_(["applied", "rejected", "withdrawn"]))
+            Application.id.is_(None) | (~Application.status.in_(["applied", "rejected", "withdrawn"]))
         )
         .order_by(JobScore.score.desc())
     )

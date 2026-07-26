@@ -221,7 +221,7 @@ async def build_ops_overview(
     # ── Users / clients ──────────────────────────────────────────
     total_users = (await session.execute(select(func.count(User.id)))).scalar() or 0
     active_users = (
-        await session.execute(select(func.count(User.id)).where(User.is_active == True))
+        await session.execute(select(func.count(User.id)).where(User.is_active.is_(True)))
     ).scalar() or 0
     users_with_profile = (
         await session.execute(select(func.count(UserProfile.id)))
@@ -244,7 +244,7 @@ async def build_ops_overview(
 
     # Per-user activity: scores + actions in window
     user_rows = await session.execute(
-        select(User).where(User.is_active == True).order_by(User.created_at.desc())
+        select(User).where(User.is_active.is_(True)).order_by(User.created_at.desc())
     )
     all_users = list(user_rows.scalars())
 

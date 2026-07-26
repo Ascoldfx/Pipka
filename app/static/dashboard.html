@@ -365,6 +365,8 @@
   .settings h3 { font-size:11px; font-weight:700; letter-spacing:.9px; text-transform:uppercase; color:var(--muted); margin:22px 0 8px; }
   .country-item { border-radius:999px; transition:all .18s; }
   .country-item.active { background:var(--fg); border-color:var(--fg); color:var(--bg); font-weight:600; box-shadow:none; }
+  .country-item.country-hidden.active { background:var(--red); border-color:var(--red); color:#fff; }
+  .country-hint { margin:7px 0 0; color:var(--muted); font-size:11px; line-height:1.45; }
 
   @media (max-width:768px) {
     .filters { padding:8px 12px; }
@@ -437,6 +439,8 @@ const TRANSLATIONS = {
     'settings.prefs':'Preferences','settings.workMode':'Work mode',
     'settings.workAny':'Any','settings.workRemote':'Remote','settings.workHybrid':'Hybrid','settings.workOnsite':'On-site',
     'settings.countries':'Active Target Countries',
+    'settings.hiddenCountries':'Hide countries from the default feed',
+    'settings.hiddenCountriesHint':'Jobs from these countries are still collected and scored. Choose a country in the feed filter to show it temporarily.',
     'msg.loading':'Loading...','msg.noJobs':'No jobs found.',
     'btn.guest':'Guest','btn.login':'Sign in with Google'},
   ru: {
@@ -463,6 +467,8 @@ const TRANSLATIONS = {
     'settings.prefs':'Предпочтения','settings.workMode':'Режим работы',
     'settings.workAny':'Любой','settings.workRemote':'Удалённо','settings.workHybrid':'Гибрид','settings.workOnsite':'В офисе',
     'settings.countries':'Целевые страны поиска',
+    'settings.hiddenCountries':'Скрыть страны из основной ленты',
+    'settings.hiddenCountriesHint':'Вакансии из этих стран продолжат собираться и оцениваться. Чтобы временно показать страну, выберите её в фильтре ленты.',
     'msg.loading':'Загрузка...','msg.noJobs':'Вакансии не найдены.',
     'btn.guest':'Гость','btn.login':'Войти через Google'},
   de: {
@@ -489,6 +495,8 @@ const TRANSLATIONS = {
     'settings.prefs':'Einstellungen','settings.workMode':'Arbeitsmodell',
     'settings.workAny':'Beliebig','settings.workRemote':'Remote','settings.workHybrid':'Hybrid','settings.workOnsite':'Vor Ort',
     'settings.countries':'Aktive Zielländer',
+    'settings.hiddenCountries':'Länder im Standard-Feed ausblenden',
+    'settings.hiddenCountriesHint':'Diese Stellen werden weiter gesammelt und bewertet. Wähle das Land im Feed-Filter, um es vorübergehend anzuzeigen.',
     'msg.loading':'Wird geladen...','msg.noJobs':'Keine Stellen gefunden.',
     'btn.guest':'Gast','btn.login':'Mit Google anmelden'},
   es: {
@@ -515,6 +523,8 @@ const TRANSLATIONS = {
     'settings.prefs':'Preferencias','settings.workMode':'Modo de trabajo',
     'settings.workAny':'Cualquiera','settings.workRemote':'Remoto','settings.workHybrid':'Híbrido','settings.workOnsite':'Presencial',
     'settings.countries':'Países objetivo activos',
+    'settings.hiddenCountries':'Ocultar países del feed principal',
+    'settings.hiddenCountriesHint':'Estos trabajos se siguen recopilando y puntuando. Selecciona el país en el filtro para mostrarlo temporalmente.',
     'msg.loading':'Cargando...','msg.noJobs':'No se encontraron trabajos.',
     'btn.guest':'Invitado','btn.login':'Iniciar sesión con Google'}};
 
@@ -770,6 +780,42 @@ function applyLang() {
           <div class="country-item" data-code="id">🇮🇩 Indonesia</div>
           <div class="country-item" data-code="sg">🇸🇬 Singapore</div>
         </div>
+      </div>
+
+      <!-- Full width: countries hidden only from the default feed -->
+      <div class="field span2">
+        <label data-i18n="settings.hiddenCountries">Hide countries from the default feed</label>
+        <div class="country-grid" id="s-hidden-countries-grid">
+          <div class="country-item country-hidden" data-code="de">🇩🇪 Germany</div>
+          <div class="country-item country-hidden" data-code="at">🇦🇹 Austria</div>
+          <div class="country-item country-hidden" data-code="nl">🇳🇱 Netherlands</div>
+          <div class="country-item country-hidden" data-code="ch">🇨🇭 Switzerland</div>
+          <div class="country-item country-hidden" data-code="be">🇧🇪 Belgium</div>
+          <div class="country-item country-hidden" data-code="si">🇸🇮 Slovenia</div>
+          <div class="country-item country-hidden" data-code="sk">🇸🇰 Slovakia</div>
+          <div class="country-item country-hidden" data-code="ro">🇷🇴 Romania</div>
+          <div class="country-item country-hidden" data-code="hu">🇭🇺 Hungary</div>
+          <div class="country-item country-hidden" data-code="cz">🇨🇿 Czech Rep</div>
+          <div class="country-item country-hidden" data-code="pl">🇵🇱 Poland</div>
+          <div class="country-item country-hidden" data-code="it">🇮🇹 Italy</div>
+          <div class="country-item country-hidden" data-code="es">🇪🇸 Spain</div>
+          <div class="country-item country-hidden" data-code="pt">🇵🇹 Portugal</div>
+          <div class="country-item country-hidden" data-code="fr">🇫🇷 France</div>
+          <div class="country-item country-hidden" data-code="uk">🇬🇧 UK</div>
+          <div class="country-item country-hidden" data-code="ie">🇮🇪 Ireland</div>
+          <div class="country-item country-hidden" data-code="dk">🇩🇰 Denmark</div>
+          <div class="country-item country-hidden" data-code="se">🇸🇪 Sweden</div>
+          <div class="country-item country-hidden" data-code="no">🇳🇴 Norway</div>
+          <div class="country-item country-hidden" data-code="fi">🇫🇮 Finland</div>
+          <div class="country-item country-hidden" data-code="ae">🇦🇪 UAE</div>
+          <div class="country-item country-hidden" data-code="sa">🇸🇦 Saudi Arabia</div>
+          <div class="country-item country-hidden" data-code="qa">🇶🇦 Qatar</div>
+          <div class="country-item country-hidden" data-code="au">🇦🇺 Australia</div>
+          <div class="country-item country-hidden" data-code="nz">🇳🇿 New Zealand</div>
+          <div class="country-item country-hidden" data-code="id">🇮🇩 Indonesia</div>
+          <div class="country-item country-hidden" data-code="sg">🇸🇬 Singapore</div>
+        </div>
+        <p class="country-hint" data-i18n="settings.hiddenCountriesHint">Jobs from these countries are still collected and scored. Choose a country in the feed filter to show it temporarily.</p>
       </div>
 
     </div>
@@ -1273,6 +1319,10 @@ async function loadProfile(){
     document.querySelectorAll('#s-countries-grid .country-item').forEach(el => {
       el.classList.toggle('active', pc.includes(el.dataset.code));
     });
+    const hc = p.hidden_countries||[];
+    document.querySelectorAll('#s-hidden-countries-grid .country-item').forEach(el => {
+      el.classList.toggle('active', hc.includes(el.dataset.code));
+    });
   }catch(e){console.error(e)}
 }
 
@@ -1286,6 +1336,8 @@ async function saveProfile(){
   fd.append('work_mode',_workMode);
   const activeCountries = Array.from(document.querySelectorAll('#s-countries-grid .country-item.active')).map(el => el.dataset.code);
   fd.append('preferred_countries', activeCountries.join(','));
+  const hiddenCountries = Array.from(document.querySelectorAll('#s-hidden-countries-grid .country-item.active')).map(el => el.dataset.code);
+  fd.append('hidden_countries', hiddenCountries.join(','));
   try{
     const r=await fetch('/api/profile',{method:'POST',body:fd});
     const d=await r.json();
@@ -1843,6 +1895,7 @@ async function viewAdminUserProfile(userId) {
         <div class="mini-list">
           <span>🎯 Titles: ${esc((p.target_titles||[]).join(', ') || '—')}</span>
           <span>📍 Countries: ${esc((p.preferred_countries||[]).join(', ').toUpperCase() || '—')}</span>
+          <span>🙈 Hidden: ${esc((p.hidden_countries||[]).join(', ').toUpperCase() || '—')}</span>
           <span>🏢 Mode: ${esc(p.work_mode || 'any')}</span>
           <span>🚫 Excluded: ${esc((p.excluded_keywords||[]).join(', ') || '—')}</span>
           <span>⭐ Companies: ${esc((p.target_companies||[]).join(', ') || '—')}</span>

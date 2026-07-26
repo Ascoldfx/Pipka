@@ -65,16 +65,13 @@ def _build_jobs_text(jobs: list[Job]) -> str:
     jobs_text = ""
     for idx, job in enumerate(jobs):
         desc_preview = (job.description or "")[:1200]
-        salary_info = ""
-        if job.salary_min or job.salary_max:
-            salary_info = f"Salary: {job.salary_min or '?'}-{job.salary_max or '?'} {job.salary_currency or 'EUR'}"
         remote_info = f"Remote: {'Yes' if job.is_remote else 'No' if job.is_remote is False else 'Unknown'}"
         jobs_text += (
             f"\n### Job {idx}\n"
             f"Title: {job.title}\n"
             f"Company: {job.company_name or 'N/A'}\n"
             f"Location: {job.location or 'N/A'} ({job.country or 'N/A'})\n"
-            f"{salary_info}\n{remote_info}\n"
+            f"{remote_info}\n"
             f"Description: {desc_preview}\n"
         )
     return jobs_text
@@ -147,7 +144,7 @@ async def _call_nvidia(prompt: str, batch_size: int) -> str | None:
                                 message=f"batch={batch_size}",
                             )
                     raise
-    except RetryError as exc:
+    except RetryError:
         # Single summary at WARNING for the whole batch — visible but quiet.
         logger.warning(
             "NVIDIA exhausted after %d retries (batch=%d last_status=%s): %s",

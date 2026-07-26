@@ -168,13 +168,40 @@ async def get_jobs(
         elif region == "cee":
             filters.append(Job.country.in_(["si", "sk", "ro", "hu"]))
 
-        # Multi-country filter takes precedence over legacy single country
+        # Multi-country filter takes precedence over legacy single country.
+        # An explicit country selection also acts as a temporary override for
+        # the user's hidden-country defaults, so a hidden country is never
+        # inaccessible.
+        explicit_country_filter = False
         if countries:
             codes = [c.strip().lower() for c in countries.split(",") if c.strip()]
             if codes:
                 filters.append(func.lower(Job.country).in_(codes))
+                explicit_country_filter = True
         elif country:
             filters.append(Job.country.ilike(country))
+            explicit_country_filter = True
+
+        hidden_countries: list[str] = []
+        is_default_feed = status in (None, "", "new")
+        if (
+            is_default_feed
+            and not explicit_country_filter
+            and user.profile
+            and user.profile.hidden_countries
+        ):
+            hidden_countries = [
+                code.strip().lower()
+                for code in user.profile.hidden_countries
+                if isinstance(code, str) and re.fullmatch(r"[a-z]{2}", code.strip().lower())
+            ]
+            if hidden_countries:
+                filters.append(
+                    or_(
+                        Job.country.is_(None),
+                        func.lower(Job.country).notin_(hidden_countries),
+                    )
+                )
 
         # Hide jobs the daily HEAD-ping flagged as closed (404/410/redirect-to-listing).
         # NULL = never checked yet → treated as still open. ``unreachable`` is also
@@ -271,6 +298,7 @@ async def get_jobs(
             "pages": pages,
             "semantic": bool(semantic),
             "semantic_ready": bool(semantic_ids),
+            "hidden_countries_applied": hidden_countries,
         }
 
 

@@ -4,7 +4,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from app.bot.formatters import format_stats
-from app.bot.keyboards import main_menu, status_keyboard
+from app.bot.keyboards import main_menu
 from app.database import async_session
 from app.services.tracker_service import get_pipeline_stats, get_user_applications, update_status
 from app.services.user_service import get_or_create_user
