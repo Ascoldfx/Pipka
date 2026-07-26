@@ -36,6 +36,7 @@ from app.models.user import User
 from app.scoring.gemini_client import generate_gemini_content
 from app.scoring.matcher import SCORING_PROMPT, build_profile_text
 from app.scoring.profile_hash import MODEL_GEMINI, compute_profile_hash
+from app.scoring.rules import pre_filter
 from app.services.ops_service import record_ops_event
 
 logger = logging.getLogger(__name__)
@@ -410,12 +411,14 @@ async def recheck_zero_scores(
 ) -> tuple[int, int]:
     """Re-evaluate pre-filter rejects with full Gemini AI pass.
 
-    Targets jobs where score=0 AND ai_analysis IS NULL — these were rejected by
-    the rule-based pre_filter without ever seeing an AI model.
+    Targets legacy jobs where score=0 AND ai_analysis IS NULL. The current
+    profile rules are applied again before AI: an explicit hard reject is
+    final and cannot be overridden by a probabilistic model.
 
     After this pass:
-    - If Gemini scores > 0  → record updated, job appears in dashboard inbox
-    - If Gemini scores = 0  → ai_analysis set to '✓ confirmed' so it's never rechecked again
+    - Current hard reject → mark as filtered; never send it to Gemini
+    - Current pre-filter pass + Gemini score > 0 → record updated
+    - Current pre-filter pass + Gemini score = 0 → mark confirmed
 
     Returns (checked, upgraded) counts.
     """
@@ -445,10 +448,35 @@ async def recheck_zero_scores(
     jobs_map = {j.id: j for j in jobs_result.scalars().all()}
     score_map = {zs.job_id: zs for zs in zero_scores}
 
-    jobs_list = [jobs_map[jid] for jid in job_ids if jid in jobs_map]
     profile_text = build_profile_text(profile)
     profile_hash = compute_profile_hash(profile)
     model_version = MODEL_GEMINI()
+
+    jobs_list: list[Job] = []
+    filtered_count = 0
+    for job_id in job_ids:
+        job = jobs_map.get(job_id)
+        existing = score_map.get(job_id)
+        if job is None or existing is None:
+            continue
+        passed, _bucket = pre_filter(job, profile)
+        if passed:
+            jobs_list.append(job)
+            continue
+
+        existing.ai_analysis = "Filtered by current profile rules"
+        existing.scored_at = datetime.now()
+        existing.profile_hash = profile_hash
+        existing.model_version = "prefilter"
+        filtered_count += 1
+
+    if filtered_count:
+        await session.commit()
+        logger.info(
+            "Recheck [user %s]: kept %d current profile-rule rejects at score=0",
+            user.telegram_id,
+            filtered_count,
+        )
 
     checked = 0
     upgraded = 0

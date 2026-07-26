@@ -103,7 +103,7 @@ async def build_ops_overview(
             select(func.count(JobScore.id)).where(
                 JobScore.user_id == user_id,
                 JobScore.score == 0,
-                JobScore.ai_analysis.is_(None),
+                JobScore.model_version == "prefilter",
             )
         )
     ).scalar() or 0

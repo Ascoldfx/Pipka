@@ -114,6 +114,8 @@
 - `Operations` больше не считается достаточным функциональным совпадением: роли в `commercial`, `retail`, `sales`, `revenue` и `store operations` получают hard reject до AI.
 - Исключение защищено от слишком широкого срабатывания: `Director of Retail Supply Chain`, `Commercial Procurement Director` и другие titles с явным `supply chain/procurement/sourcing/purchasing/logistics` остаются допустимыми.
 - Добавлена регрессия на production-вакансию `Director of Retail and Commercial Operations`, ранее ошибочно получившую score 78.
+- Закрыт обход hard reject через `recheck_zero_scores`: повторная Gemini-проверка сначала применяет актуальный профиль и больше не может повысить явно исключённую вакансию.
+- Добавлен protected target-title match: точная целевая роль имеет приоритет над общими category/domain/seniority правилами. Нормализация учитывает `of` и `(m/w/d)`, но не удаляет функциональные модификаторы, поэтому широкая commercial-вакансия не маскируется под `Director Operations`.
 
 См. [[Скоринг]], [[Настройки]], [[API]], [[Frontend]], [[Миграции]], [[База данных]].
 

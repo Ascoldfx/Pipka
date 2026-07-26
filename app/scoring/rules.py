@@ -122,6 +122,17 @@ CORE_FUNCTION_TITLE_PATTERN = re.compile(
     r"einkauf|beschaffung|logistik|lieferkette)\b"
 )
 
+TARGET_TITLE_FILLER_TOKENS = {
+    "of",
+    # Gender suffixes used in European job titles.
+    "m",
+    "w",
+    "d",
+    "f",
+    "x",
+    "gn",
+}
+
 # Non-English/non-German language requirements → reject
 FOREIGN_LANGUAGE_REQUIRED = [
     # French
@@ -169,19 +180,47 @@ def is_commercial_function_title(title: str) -> bool:
     return any(pattern.search(normalised) for pattern in COMMERCIAL_FUNCTION_PATTERNS)
 
 
+def _target_title_tokens(title: str) -> tuple[str, ...]:
+    """Normalise only harmless fillers; retain all functional modifiers."""
+    return tuple(
+        token
+        for token in _normalise_title(title).split()
+        if token not in TARGET_TITLE_FILLER_TOKENS
+    )
+
+
+def matches_explicit_target_title(title: str, profile: UserProfile | None) -> bool:
+    """Exact role match against the user's target list.
+
+    Removing ``of`` makes "Director Operations" and "Director of Operations"
+    equivalent. Functional modifiers are deliberately retained, so
+    "Director of Retail and Commercial Operations" does not match.
+    """
+    if profile is None or not profile.target_titles:
+        return False
+    title_tokens = _target_title_tokens(title)
+    return bool(title_tokens) and any(
+        title_tokens == _target_title_tokens(target)
+        for target in profile.target_titles
+        if target
+    )
+
+
 def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     """Fast rule-based pre-filter. Returns (pass, bucket) where bucket is low/medium/high."""
     title_lower = job.title.lower()
     desc_lower = (job.description or "").lower()
     text = f"{title_lower} {desc_lower}"
+    explicit_target_match = matches_explicit_target_title(job.title, profile)
 
-    # Hard reject: too junior or wrong function
-    if any(kw in title_lower for kw in REJECT_TITLE_KEYWORDS):
+    # An exact user target is authoritative over generic title/category rules.
+    # Explicit exclusions and language/location preferences below still apply.
+    if not explicit_target_match and any(kw in title_lower for kw in REJECT_TITLE_KEYWORDS):
         return False, "low"
 
     # "Operations" can mean retail/sales/revenue rather than the user's
     # supply-chain and transformation background.
-    if is_commercial_function_title(job.title):
+    if not explicit_target_match and is_commercial_function_title(job.title):
         return False, "low"
 
     # Hard reject: non-English/German language required
@@ -206,7 +245,9 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
             return False, "low"
 
     # Domain check — must be in supply chain / procurement / operations
-    domain_match = any(kw in title_lower or kw in desc_lower for kw in DOMAIN_KEYWORDS)
+    domain_match = explicit_target_match or any(
+        kw in title_lower or kw in desc_lower for kw in DOMAIN_KEYWORDS
+    )
     if not domain_match:
         return False, "low"
 
@@ -235,6 +276,11 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     if profile and profile.preferred_countries and job.country:
         if job.country.lower() not in [c.lower() for c in profile.preferred_countries]:
             return False, "low"
+
+    # Exact targets do not need to rediscover seniority through generic
+    # Director/Head/Manager keywords.
+    if explicit_target_match:
+        return True, "high"
 
     # Director-level seniority
     is_director = any(kw in title_lower for kw in DIRECTOR_KEYWORDS)

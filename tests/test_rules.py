@@ -4,6 +4,7 @@ from app.models.user import UserProfile
 from app.scoring.rules import (
     is_clearly_german_title,
     is_commercial_function_title,
+    matches_explicit_target_title,
     pre_filter,
 )
 
@@ -133,6 +134,86 @@ def test_explicit_supply_chain_title_overrides_commercial_sector_word(title):
     )
     assert is_commercial_function_title(title) is False
     assert pre_filter(job, UserProfile(english_only=True))[0] is True
+
+
+def test_exact_target_title_is_protected_from_generic_domain_filter():
+    profile = UserProfile(
+        target_titles=["Director Operations", "AI Agent Orchestrator"],
+        english_only=True,
+    )
+    job = Job(
+        title="AI Agent Orchestrator (m/w/d)",
+        description="English is the working language.",
+    )
+
+    assert matches_explicit_target_title(job.title, profile) is True
+    assert pre_filter(job, profile) == (True, "high")
+
+
+@pytest.mark.parametrize(
+    "target_title",
+    [
+        "Director Supply Chain",
+        "Head of Procurement",
+        "Head of Supply Chain",
+        "Director Operations",
+        "Chief Procurement Officer",
+        "Director Purchasing",
+        "Head of Sourcing",
+        "Director Logistics",
+        "Head of Operations",
+        "Global Supply Chain Director",
+        "interim manager",
+        "crisis manager",
+        "crisis director",
+        "turnaround",
+        "Supply chain transformation",
+        "E2E Supply Chain",
+        "Chief Restructuring Officer",
+        "Growth director",
+        "Growth manager",
+        "Head of Autonomous Operations",
+        "AI Agent Orchestrator",
+        "Supply Chain Transformation & AI",
+        "Director of AI Strategy",
+        "Chief of Staff AI",
+    ],
+)
+def test_current_target_role_is_never_lost_to_generic_rules(target_title):
+    profile = UserProfile(
+        target_titles=[target_title],
+        english_only=True,
+    )
+    job = Job(
+        title=f"{target_title} (m/w/d)",
+        description="International team. English is the working language.",
+    )
+
+    assert pre_filter(job, profile) == (True, "high")
+
+
+def test_director_of_operations_matches_target_but_commercial_modifiers_do_not():
+    profile = UserProfile(target_titles=["Director Operations"])
+
+    assert matches_explicit_target_title("Director of Operations (m/w/d)", profile) is True
+    assert matches_explicit_target_title(
+        "Director of Retail and Commercial Operations",
+        profile,
+    ) is False
+
+
+def test_explicit_target_does_not_override_personal_exclusion():
+    profile = UserProfile(
+        target_titles=["Director Operations"],
+        excluded_keywords=["gambling"],
+    )
+    job = Job(
+        title="Director of Operations",
+        description="Lead operations for an online gambling platform.",
+    )
+
+    assert matches_explicit_target_title(job.title, profile) is True
+    assert pre_filter(job, profile) == (False, "low")
 
 
 def test_domain_check_fail():

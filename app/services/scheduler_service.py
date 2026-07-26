@@ -626,14 +626,14 @@ async def _backfill_score():
                         need_ai_t2.append(job)
                     else:
                         # Hard reject — mark score=0 so it never re-enters the queue.
-                        # model_version='prefilter' marks the source so AI rescore
-                        # paths (recheck_zero_scores) can distinguish rule-based
-                        # zeros from genuine AI-rated zeros.
+                        # Profile rules are authoritative. A non-NULL analysis
+                        # prevents the legacy Gemini "second opinion" pass from
+                        # overriding explicit user exclusions.
                         skip_rows.append({
                             "job_id": job.id,
                             "user_id": user.id,
                             "score": 0,
-                            "ai_analysis": None,
+                            "ai_analysis": "Filtered by current profile rules",
                             "profile_hash": profile_hash,
                             "model_version": "prefilter",
                         })
