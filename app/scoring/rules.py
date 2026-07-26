@@ -100,6 +100,28 @@ ENGLISH_ROLE_PATTERN = re.compile(
     r"\bvice president\b|\bvp\b"
 )
 
+# "Operations" alone is too broad: search engines routinely return sales,
+# retail and revenue leadership for a "Director Operations" query.  Reject
+# those commercial functions unless the title itself explicitly names one of
+# the user's operational domains.
+COMMERCIAL_FUNCTION_PATTERNS = [
+    re.compile(r"\b(?:commercial|retail|sales|revenue|store)\s+operations\b"),
+    re.compile(
+        r"\b(?:commercial|retail|sales|revenue|store)\s+"
+        r"(?:operations\s+)?(?:director|manager|lead|head)\b"
+    ),
+    re.compile(
+        r"\b(?:director|head|chief)\s+(?:of\s+)?"
+        r"(?:commercial|retail|sales|revenue|store)\b"
+    ),
+    re.compile(r"\bchief commercial officer\b"),
+]
+
+CORE_FUNCTION_TITLE_PATTERN = re.compile(
+    r"\b(?:supply chain|procurement|sourcing|purchasing|logistics|"
+    r"einkauf|beschaffung|logistik|lieferkette)\b"
+)
+
 # Non-English/non-German language requirements → reject
 FOREIGN_LANGUAGE_REQUIRED = [
     # French
@@ -139,6 +161,14 @@ def is_clearly_german_title(title: str) -> bool:
     return ENGLISH_ROLE_PATTERN.search(normalised) is None
 
 
+def is_commercial_function_title(title: str) -> bool:
+    """Reject commercial/retail operations while preserving explicit SC roles."""
+    normalised = _normalise_title(title)
+    if CORE_FUNCTION_TITLE_PATTERN.search(normalised):
+        return False
+    return any(pattern.search(normalised) for pattern in COMMERCIAL_FUNCTION_PATTERNS)
+
+
 def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     """Fast rule-based pre-filter. Returns (pass, bucket) where bucket is low/medium/high."""
     title_lower = job.title.lower()
@@ -147,6 +177,11 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
 
     # Hard reject: too junior or wrong function
     if any(kw in title_lower for kw in REJECT_TITLE_KEYWORDS):
+        return False, "low"
+
+    # "Operations" can mean retail/sales/revenue rather than the user's
+    # supply-chain and transformation background.
+    if is_commercial_function_title(job.title):
         return False, "low"
 
     # Hard reject: non-English/German language required

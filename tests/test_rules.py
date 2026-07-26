@@ -1,7 +1,11 @@
 import pytest
 from app.models.job import Job
 from app.models.user import UserProfile
-from app.scoring.rules import is_clearly_german_title, pre_filter
+from app.scoring.rules import (
+    is_clearly_german_title,
+    is_commercial_function_title,
+    pre_filter,
+)
 
 def test_hard_reject_junior():
     job = Job(title="Junior Procurement Analyst", description="Some text")
@@ -87,6 +91,49 @@ def test_german_title_is_allowed_when_english_only_is_disabled():
         description="International operations transformation.",
     )
     assert pre_filter(job, profile)[0] is True
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Director of Retail and Commercial Operations",
+        "Director of Commercial Operations",
+        "Head of Retail Operations",
+        "Sales Operations Director",
+        "Revenue Operations Director",
+        "Retail Director",
+        "Chief Commercial Officer",
+    ],
+)
+def test_commercial_operations_titles_are_hard_rejected(title):
+    job = Job(
+        title=title,
+        description=(
+            "International English-speaking company with distribution, "
+            "inventory, suppliers and operational excellence."
+        ),
+    )
+    assert is_commercial_function_title(title) is True
+    assert pre_filter(job, UserProfile(english_only=True)) == (False, "low")
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Director of Retail Supply Chain",
+        "Commercial Procurement Director",
+        "Head of Sourcing — Retail",
+        "Director of Logistics, Retail Division",
+    ],
+)
+def test_explicit_supply_chain_title_overrides_commercial_sector_word(title):
+    job = Job(
+        title=title,
+        description="International team. English working language.",
+    )
+    assert is_commercial_function_title(title) is False
+    assert pre_filter(job, UserProfile(english_only=True))[0] is True
+
 
 def test_domain_check_fail():
     # Marketing director should fail domain check

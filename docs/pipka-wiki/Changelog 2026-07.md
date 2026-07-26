@@ -109,6 +109,12 @@
 - `(m/w/d)`, немецкий город и страна сами по себе не являются причиной reject. Двуязычное название передаётся на существующую проверку описания.
 - Подсказка настройки обновлена на EN/RU/DE/ES; добавлены регрессии на реальные заголовки из ленты.
 
+### Commercial/Retail Operations исключены из рекомендаций
+
+- `Operations` больше не считается достаточным функциональным совпадением: роли в `commercial`, `retail`, `sales`, `revenue` и `store operations` получают hard reject до AI.
+- Исключение защищено от слишком широкого срабатывания: `Director of Retail Supply Chain`, `Commercial Procurement Director` и другие titles с явным `supply chain/procurement/sourcing/purchasing/logistics` остаются допустимыми.
+- Добавлена регрессия на production-вакансию `Director of Retail and Commercial Operations`, ранее ошибочно получившую score 78.
+
 См. [[Скоринг]], [[Настройки]], [[API]], [[Frontend]], [[Миграции]], [[База данных]].
 
 ---
