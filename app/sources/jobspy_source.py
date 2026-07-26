@@ -185,7 +185,10 @@ class JobSpySource:
                         url=str(row.get("job_url", "")),
                         is_remote=is_remote,
                         posted_at=posted,
-                        raw_data={"site": site},
+                        # Keep the retrieval query for later false-positive /
+                        # false-negative audits. Search engines use the query as
+                        # a relevance hint, not an exact title allowlist.
+                        raw_data={"site": site, "query": query},
                     )
                 )
             except Exception as e:
