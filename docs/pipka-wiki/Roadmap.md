@@ -86,7 +86,7 @@ Medium-severity (4-5):
 - Structured JSON Schema для Gemini batch scoring.
 - Зарплата полностью удалена как preference/scoring signal.
 - `hidden_countries`: постоянное скрытие стран из основной ленты без остановки сбора и скоринга.
-- Alembic head `0006_profile_feed_preferences`; fresh/existing SQLite migration-path проверен.
+- Alembic head `0007_excluded_companies`; fresh и upgrade `0006 → 0007` SQLite migration-path проверен.
 
 ## 🟡 В работе / следующий приоритет
 

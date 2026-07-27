@@ -42,6 +42,7 @@ if settings.sentry_dsn:
         "resume_text",
         "target_companies",
         "excluded_keywords",
+        "excluded_companies",
         "email",
         "user_email",
         "name",

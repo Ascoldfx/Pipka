@@ -2,6 +2,7 @@ import pytest
 from app.models.job import Job
 from app.models.user import UserProfile
 from app.scoring.rules import (
+    detect_description_language,
     is_clearly_german_title,
     is_commercial_function_title,
     matches_explicit_target_title,
@@ -27,6 +28,33 @@ def test_user_exclusions():
     assert passed is False
     assert bucket == "low"
 
+
+def test_excluded_company_matches_company_only_not_description():
+    profile = UserProfile(excluded_companies=["Amazon", "SAP"])
+    unrelated = Job(
+        title="Head of Supply Chain",
+        company_name="Hyprwork",
+        description="Experience with Amazon fulfilment and SAP is useful.",
+    )
+    blocked = Job(
+        title="Head of Supply Chain",
+        company_name="  AMAZON ",
+        description="Global supply chain leadership role.",
+    )
+
+    assert pre_filter(unrelated, profile)[0] is True
+    assert pre_filter(blocked, profile) == (False, "low")
+
+
+def test_legacy_nan_keyword_is_ignored_defensively():
+    profile = UserProfile(excluded_keywords=["nan"])
+    job = Job(
+        title="Director Procurement",
+        description="Own financial planning and vendor management.",
+    )
+    assert pre_filter(job, profile)[0] is True
+
+
 def test_english_only_filter_fail():
     profile = UserProfile(english_only=True)
     job = Job(title="Leiter Logistik", description="Wir suchen einen Leiter.")
@@ -39,6 +67,45 @@ def test_english_only_filter_pass():
     job = Job(title="Director Supply Chain", description="International team, english working language.")
     passed, bucket = pre_filter(job, profile)
     assert passed is True
+
+
+def test_english_only_accepts_english_description_without_marker_words():
+    profile = UserProfile(english_only=True)
+    job = Job(
+        title="Director - Contracts & Procurement",
+        description=(
+            "The successful candidate will lead sourcing and contract lifecycle "
+            "management for the business. You will work with internal stakeholders "
+            "and suppliers to ensure that procurement requirements are delivered on "
+            "time. Responsibilities include vendor governance, planning, reporting "
+            "and continuous improvement across the organisation."
+        ),
+    )
+    assert detect_description_language(job.description) == "en"
+    assert pre_filter(job, profile)[0] is True
+
+
+def test_english_only_rejects_confidently_german_description_with_english_title():
+    profile = UserProfile(english_only=True)
+    job = Job(
+        title="Director Supply Chain",
+        description=(
+            "Wir suchen eine erfahrene Führungskraft für die Leitung unserer "
+            "Lieferkette. Sie sind verantwortlich für die Planung und arbeiten "
+            "mit den Teams in der Produktion zusammen. Ihre Aufgaben umfassen "
+            "die Steuerung von Lieferanten und die kontinuierliche Verbesserung "
+            "der Prozesse in unserem Unternehmen."
+        ),
+    )
+    assert detect_description_language(job.description) == "de"
+    assert pre_filter(job, profile) == (False, "low")
+
+
+def test_english_only_allows_ambiguous_short_text_for_ai_review():
+    profile = UserProfile(english_only=True)
+    job = Job(title="Head of Procurement", description="Procurement leadership role.")
+    assert detect_description_language(job.description) == "unknown"
+    assert pre_filter(job, profile)[0] is True
 
 
 @pytest.mark.parametrize(

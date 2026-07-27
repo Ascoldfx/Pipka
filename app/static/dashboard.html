@@ -433,9 +433,11 @@ const TRANSLATIONS = {
     'settings.watchlist':'Target Companies Watchlist','settings.companiesLabel':'Companies to monitor closely (comma-separated)',
     'settings.companiesPlaceholder':'Nestlé, Unilever, Bayer, Roche, Mars, Mondelez, PepsiCo, Danone...',
     'settings.watchlistHint':'Jobs from these companies will be highlighted and tracked separately.',
-    'settings.exclusions':'Exclusions & Negative Keywords','settings.excludedLabel':'Do not show jobs requiring (comma-separated)',
+    'settings.exclusions':'Exclusions & Negative Keywords','settings.excludedLabel':'Do not show jobs containing these phrases',
+    'settings.excludedCompaniesLabel':'Blocked companies — exact company-name match only',
+    'settings.excludedCompaniesPlaceholder':'Amazon, SAP, Airbus...',
     
-    'settings.englishOnly':'English Only — reject clearly German job titles and jobs with no sign of English as a working language',
+    'settings.englishOnly':'English Only — reject only confidently non-English titles or descriptions; ambiguous text goes to AI review',
     'settings.prefs':'Preferences','settings.workMode':'Work mode',
     'settings.workAny':'Any','settings.workRemote':'Remote','settings.workHybrid':'Hybrid','settings.workOnsite':'On-site',
     'settings.countries':'Active Target Countries',
@@ -461,9 +463,11 @@ const TRANSLATIONS = {
     'settings.watchlist':'Список отслеживаемых компаний','settings.companiesLabel':'Компании для мониторинга (через запятую)',
     'settings.companiesPlaceholder':'Nestlé, Unilever, Bayer, Roche, Mars, Mondelez, PepsiCo, Danone...',
     'settings.watchlistHint':'Вакансии от этих компаний будут выделены и отслеживаться отдельно.',
-    'settings.exclusions':'Исключения и стоп-слова','settings.excludedLabel':'Не показывать вакансии с требованиями (через запятую)',
+    'settings.exclusions':'Исключения и стоп-слова','settings.excludedLabel':'Не показывать вакансии с этими фразами в тексте',
+    'settings.excludedCompaniesLabel':'Заблокированные компании — только точное совпадение названия',
+    'settings.excludedCompaniesPlaceholder':'Amazon, SAP, Airbus...',
     
-    'settings.englishOnly':'Только английский — скрывать явно немецкие названия и вакансии без признаков английского рабочего языка',
+    'settings.englishOnly':'Только английский — скрывать только уверенно неанглоязычные названия или описания; неоднозначные проверяет AI',
     'settings.prefs':'Предпочтения','settings.workMode':'Режим работы',
     'settings.workAny':'Любой','settings.workRemote':'Удалённо','settings.workHybrid':'Гибрид','settings.workOnsite':'В офисе',
     'settings.countries':'Целевые страны поиска',
@@ -489,9 +493,11 @@ const TRANSLATIONS = {
     'settings.watchlist':'Zielunternehmen-Watchlist','settings.companiesLabel':'Zu überwachende Unternehmen (kommagetrennt)',
     'settings.companiesPlaceholder':'Nestlé, Unilever, Bayer, Roche, Mars, Mondelez, PepsiCo, Danone...',
     'settings.watchlistHint':'Stellen dieser Unternehmen werden hervorgehoben und separat verfolgt.',
-    'settings.exclusions':'Ausschlüsse & Negativwörter','settings.excludedLabel':'Jobs mit diesen Anforderungen ausblenden (kommagetrennt)',
+    'settings.exclusions':'Ausschlüsse & Negativwörter','settings.excludedLabel':'Stellen mit diesen Textphrasen ausblenden',
+    'settings.excludedCompaniesLabel':'Gesperrte Unternehmen — nur exakter Firmenname',
+    'settings.excludedCompaniesPlaceholder':'Amazon, SAP, Airbus...',
     
-    'settings.englishOnly':'Nur Englisch — eindeutig deutsche Stellentitel und Stellen ohne Hinweis auf Englisch als Arbeitssprache ausblenden',
+    'settings.englishOnly':'Nur Englisch — nur sicher nicht-englische Titel oder Beschreibungen ausblenden; mehrdeutige Texte prüft die KI',
     'settings.prefs':'Einstellungen','settings.workMode':'Arbeitsmodell',
     'settings.workAny':'Beliebig','settings.workRemote':'Remote','settings.workHybrid':'Hybrid','settings.workOnsite':'Vor Ort',
     'settings.countries':'Aktive Zielländer',
@@ -517,9 +523,11 @@ const TRANSLATIONS = {
     'settings.watchlist':'Lista de empresas objetivo','settings.companiesLabel':'Empresas a monitorear (separadas por coma)',
     'settings.companiesPlaceholder':'Nestlé, Unilever, Bayer, Roche, Mars, Mondelez, PepsiCo, Danone...',
     'settings.watchlistHint':'Los trabajos de estas empresas serán destacados y rastreados por separado.',
-    'settings.exclusions':'Exclusiones y palabras negativas','settings.excludedLabel':'No mostrar trabajos que requieren (separados por coma)',
+    'settings.exclusions':'Exclusiones y palabras negativas','settings.excludedLabel':'No mostrar puestos que contengan estas frases',
+    'settings.excludedCompaniesLabel':'Empresas bloqueadas — solo coincidencia exacta del nombre',
+    'settings.excludedCompaniesPlaceholder':'Amazon, SAP, Airbus...',
     
-    'settings.englishOnly':'Solo inglés — ocultar títulos claramente alemanes y puestos sin indicios de inglés como idioma de trabajo',
+    'settings.englishOnly':'Solo inglés — ocultar solo títulos o descripciones claramente no ingleses; la IA revisa los textos ambiguos',
     'settings.prefs':'Preferencias','settings.workMode':'Modo de trabajo',
     'settings.workAny':'Cualquiera','settings.workRemote':'Remoto','settings.workHybrid':'Híbrido','settings.workOnsite':'Presencial',
     'settings.countries':'Países objetivo activos',
@@ -719,10 +727,14 @@ function applyLang() {
       <div id="excluded-chips" class="chip-wrap"></div>
       <input type="text" id="s-excluded-input" class="chip-input-field" placeholder="Add keyword, press Enter or comma...">
     </div>
+    <div class="field" style="margin-bottom:12px;">
+      <label data-i18n="settings.excludedCompaniesLabel">Blocked companies — exact company-name match only</label>
+      <textarea id="s-excluded-companies" rows="2" data-i18n="settings.excludedCompaniesPlaceholder" data-i18n-attr="placeholder" placeholder="Amazon, SAP, Airbus..."></textarea>
+    </div>
     <div class="field" style="margin-bottom:24px;">
       <label class="toggle-label">
         <input type="checkbox" id="s-english-only">
-        <span class="toggle-text" data-i18n="settings.englishOnly"><strong>English Only</strong> — reject clearly German job titles and jobs with no sign of English as a working language</span>
+        <span class="toggle-text" data-i18n="settings.englishOnly"><strong>English Only</strong> — reject only confidently non-English titles or descriptions; ambiguous text goes to AI review</span>
       </label>
     </div>
 
@@ -1312,6 +1324,7 @@ async function loadProfile(){
     $('s-resume').value=p.resume_text||'';
     $('s-titles').value=(p.target_titles||[]).join(', ');
     _excludedKws = p.excluded_keywords||[]; _renderExcludedChips();
+    if($('s-excluded-companies')) $('s-excluded-companies').value=(p.excluded_companies||[]).join(', ');
     if($('s-english-only')) $('s-english-only').checked=!!p.english_only;
     if($('s-companies')) $('s-companies').value=(p.target_companies||[]).join(', ');
     setWorkMode(p.work_mode||'any');
@@ -1331,6 +1344,7 @@ async function saveProfile(){
   fd.append('resume_text',$('s-resume').value);
   fd.append('target_titles',$('s-titles').value);
   fd.append('excluded_keywords', _excludedKws.join(', '));
+  if($('s-excluded-companies')) fd.append('excluded_companies',$('s-excluded-companies').value);
   fd.append('english_only', $('s-english-only') && $('s-english-only').checked ? '1' : '0');
   if($('s-companies')) fd.append('target_companies',$('s-companies').value);
   fd.append('work_mode',_workMode);
@@ -1897,7 +1911,8 @@ async function viewAdminUserProfile(userId) {
           <span>📍 Countries: ${esc((p.preferred_countries||[]).join(', ').toUpperCase() || '—')}</span>
           <span>🙈 Hidden: ${esc((p.hidden_countries||[]).join(', ').toUpperCase() || '—')}</span>
           <span>🏢 Mode: ${esc(p.work_mode || 'any')}</span>
-          <span>🚫 Excluded: ${esc((p.excluded_keywords||[]).join(', ') || '—')}</span>
+          <span>🚫 Keywords: ${esc((p.excluded_keywords||[]).join(', ') || '—')}</span>
+          <span>⛔ Blocked companies: ${esc((p.excluded_companies||[]).join(', ') || '—')}</span>
           <span>⭐ Companies: ${esc((p.target_companies||[]).join(', ') || '—')}</span>
           <span>🇬🇧 English Only: ${p.english_only ? 'Yes' : 'No'}</span>
         </div>

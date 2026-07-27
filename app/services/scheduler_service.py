@@ -266,16 +266,13 @@ async def _background_scan(bot_app, trigger: str = "scheduled"):
 
 async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
     """Score new jobs for user, push top ones to Telegram."""
-    # Phase 2b: scope "already scored" to rows whose profile_hash matches the
-    # user's current profile. Mismatched rows go back into the scoring queue.
+    # Scope "already scored" to rows whose profile_hash exactly matches the
+    # current profile and scoring rules. NULL/legacy hashes are stale.
     profile_hash = compute_profile_hash(user.profile)
     scored_result = await session.execute(
         select(JobScore.job_id).where(
             JobScore.user_id == user.id,
-            or_(
-                JobScore.profile_hash.is_(None),
-                JobScore.profile_hash == profile_hash,
-            ),
+            JobScore.profile_hash == profile_hash,
         )
     )
     already_scored_ids = {row[0] for row in scored_result.fetchall()}
@@ -536,8 +533,8 @@ async def _semantic_skip_filter(
             })
 
     if skip_rows:
-        # Same UPSERT pattern as elsewhere — overwrite stale rows whose
-        # profile_hash differs, leave matching ones alone.
+        # Same UPSERT pattern as elsewhere — overwrite stale rows (including
+        # legacy NULL hashes), while leaving matching ones alone.
         stmt = pg_insert(JobScore).values(skip_rows)
         stmt = stmt.on_conflict_do_update(
             index_elements=["job_id", "user_id"],
@@ -548,7 +545,10 @@ async def _semantic_skip_filter(
                 "profile_hash": stmt.excluded.profile_hash,
                 "model_version": stmt.excluded.model_version,
             },
-            where=JobScore.profile_hash != stmt.excluded.profile_hash,
+            where=or_(
+                JobScore.profile_hash.is_(None),
+                JobScore.profile_hash != stmt.excluded.profile_hash,
+            ),
         )
         try:
             await session.execute(stmt)
@@ -590,19 +590,13 @@ async def _backfill_score():
                 )
                 all_jobs = all_jobs_result.scalars().all()
 
-                # Phase 2b: "already scored" = has a JobScore row whose
-                # profile_hash matches the user's current profile, OR is NULL
-                # (legacy, pre-Phase 2). Rows with mismatched profile_hash are
-                # treated as unscored — they'll be re-evaluated and the UPSERT
-                # below overwrites them with fresh provenance.
+                # "Already scored" requires the current profile/rules hash.
+                # Mismatched and legacy NULL hashes return to the queue.
                 profile_hash = compute_profile_hash(user.profile)
                 scored_result = await session.execute(
                     select(JobScore.job_id).where(
                         JobScore.user_id == user.id,
-                        or_(
-                            JobScore.profile_hash.is_(None),
-                            JobScore.profile_hash == profile_hash,
-                        ),
+                        JobScore.profile_hash == profile_hash,
                     )
                 )
                 already_scored_ids = {row[0] for row in scored_result.fetchall()}
@@ -639,9 +633,8 @@ async def _backfill_score():
                         })
 
                 # Bulk UPSERT hard rejects (no API calls) — cap at 2000 per run.
-                # ON CONFLICT DO UPDATE only triggers when the existing row's
-                # profile_hash differs from the incoming one, keeping legacy
-                # NULL rows untouched (NULL != X is unknown, not true).
+                # ON CONFLICT DO UPDATE handles both mismatched hashes and
+                # legacy NULL hashes. Matching rows remain untouched.
                 if skip_rows:
                     capped = skip_rows[:2000]
                     stmt = pg_insert(JobScore).values(capped)
@@ -654,7 +647,10 @@ async def _backfill_score():
                             "profile_hash": stmt.excluded.profile_hash,
                             "model_version": stmt.excluded.model_version,
                         },
-                        where=JobScore.profile_hash != stmt.excluded.profile_hash,
+                        where=or_(
+                            JobScore.profile_hash.is_(None),
+                            JobScore.profile_hash != stmt.excluded.profile_hash,
+                        ),
                     )
                     await session.execute(stmt)
                     await session.commit()

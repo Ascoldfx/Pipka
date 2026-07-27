@@ -22,6 +22,10 @@ from typing import Any
 from app.config import settings
 from app.models.user import UserProfile
 
+# Increment whenever deterministic pre-filter semantics change. This makes
+# existing JobScore rows stale even when the user did not edit their profile.
+SCORING_RULES_VERSION = "2026-07-27.1"
+
 # Backend identifiers — pulled from settings so an env-only model bump
 # automatically invalidates downstream caches without code changes.
 MODEL_GEMINI = lambda: f"gemini:{settings.gemini_scoring_model}"   # noqa: E731
@@ -41,6 +45,7 @@ _PROFILE_FIELDS: tuple[str, ...] = (
     "work_mode",
     "preferred_countries",
     "excluded_keywords",
+    "excluded_companies",
     "english_only",
     "target_companies",
 )
@@ -57,7 +62,7 @@ def compute_profile_hash(profile: UserProfile | None) -> str | None:
     if profile is None:
         return None
 
-    payload: dict[str, Any] = {}
+    payload: dict[str, Any] = {"_rules_version": SCORING_RULES_VERSION}
     for field in _PROFILE_FIELDS:
         value = getattr(profile, field, None)
         if isinstance(value, str):

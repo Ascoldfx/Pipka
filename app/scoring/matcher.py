@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timedelta
 
 from anthropic import AsyncAnthropic
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -117,6 +117,12 @@ def build_profile_text(profile: UserProfile) -> str:
             "Score < 20 for any job requiring these: "
             + ", ".join(profile.excluded_keywords)
         )
+    if getattr(profile, "excluded_companies", None):
+        parts.append(
+            "### BLOCKED COMPANIES\n"
+            "Score 0 when the employer name exactly matches one of: "
+            + ", ".join(profile.excluded_companies)
+        )
     if getattr(profile, "english_only", False):
         parts.append(
             "### Language requirement\n"
@@ -136,7 +142,8 @@ async def score_jobs(
         return []
 
     # Check cache — single batch SELECT instead of N+1 queries.
-    # Phase 2b: cache hit requires profile_hash match (or legacy NULL).
+    # A cache hit requires an exact profile/rules hash match. Legacy NULL
+    # hashes are stale by definition and must be rescored.
     cache_cutoff = datetime.now() - timedelta(hours=settings.score_cache_hours)
     job_ids = [j.id for j in jobs]
     current_hash = compute_profile_hash(profile)
@@ -145,7 +152,7 @@ async def score_jobs(
             JobScore.job_id.in_(job_ids),
             JobScore.user_id == user.id,
             JobScore.scored_at > cache_cutoff,
-            (JobScore.profile_hash.is_(None)) | (JobScore.profile_hash == current_hash),
+            JobScore.profile_hash == current_hash,
         )
     )
     cached_map = {s.job_id: s for s in cached_result.scalars().all()}
@@ -241,9 +248,8 @@ async def _score_batch(
         return []
 
     # Phase 2b: bulk UPSERT instead of per-row flush+IntegrityError.
-    # ON CONFLICT DO UPDATE overwrites stale rows whose profile_hash differs;
-    # the WHERE clause leaves matching ones untouched (no churn) and legacy
-    # NULL ones too (NULL != X is unknown, not true).
+    # ON CONFLICT DO UPDATE overwrites stale rows, including legacy rows whose
+    # profile_hash is NULL. Matching rows stay untouched to avoid churn.
     rows = []
     for item in results:
         idx = item.get("job_index", 0)
@@ -274,7 +280,10 @@ async def _score_batch(
             "profile_hash": stmt.excluded.profile_hash,
             "model_version": stmt.excluded.model_version,
         },
-        where=JobScore.profile_hash != stmt.excluded.profile_hash,
+        where=or_(
+            JobScore.profile_hash.is_(None),
+            JobScore.profile_hash != stmt.excluded.profile_hash,
+        ),
     ).returning(JobScore.id, JobScore.job_id)
 
     try:

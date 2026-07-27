@@ -34,7 +34,11 @@ Crisis-related: `crisis management`, `turnaround`, `transformation`, `restructur
 
 ### `ENGLISH_FRIENDLY_SIGNALS`
 
-`english`, `international`, `global`, `multinational`, `working language: english`, `english-speaking`, `startup`, `remote`. Используется и при бакетинге high vs medium, и для filter'а `english_only` в профиле.
+`english`, `international`, `global`, `multinational`, `working language: english`, `english-speaking`, `startup`, `remote`. Используется только при бакетинге high vs medium. Для `english_only` наличие такого слова больше не считается доказательством языка всей вакансии.
+
+### Определение языка описания
+
+`detect_description_language()` считает частотные служебные слова EN/DE/FR/NL/ES/IT. Уверенный неанглийский результат блокируется только при `profile.english_only=True`; `unknown` и короткий текст проходят в AI, чтобы не терять целевые вакансии.
 
 ### `FOREIGN_LANGUAGE_REQUIRED` — hard-reject
 
@@ -46,25 +50,28 @@ Crisis-related: `crisis management`, `turnaround`, `transformation`, `restructur
 2. **Junior/wrong function** — `REJECT_TITLE_KEYWORDS` в title → `low`, кроме protected target-title.
 3. **Commercial-function reject** — `commercial/retail/sales/revenue/store operations` и соответствующие Director/Head/Manager роли → `low`. Если в самом title явно есть `supply chain`, `procurement`, `sourcing`, `purchasing` или `logistics`, отраслевое слово `retail/commercial` не блокирует вакансию.
 4. **Foreign language required** — `FOREIGN_LANGUAGE_REQUIRED` в description → `low`, включая protected target-title.
-5. **User exclusions** — `profile.excluded_keywords` в title+description → `low`, включая protected target-title. Триггерит [[Трекер#auto-exclude]] косвенно: компании с >5 reject'ами пользователя автоматически добавляются сюда.
-6. **English-only filter** — если `profile.english_only=True`:
+5. **User content exclusions** — валидные `profile.excluded_keywords` ищутся в title+description → `low`, включая protected target-title. Технические заглушки `nan/null/none/n/a/unknown` игнорируются.
+6. **Blocked companies** — `profile.excluded_companies` сравнивается только с `Job.company_name`, регистронезависимо и по полному нормализованному названию. Упоминание Amazon или SAP в описании другой компании ничего не блокирует. [[Трекер#auto-exclude]] пишет названия только в этот список.
+7. **English-only filter** — если `profile.english_only=True`:
    - явно немецкое название должности (`Geschäftsführer`, `Einkaufsleiter`, `Leiter Logistik`, `Bereichsleiter`, `Produktmanager`, `Krisenmanager` и близкие формы) → `low`, даже если в тексте есть общий маркер `remote`, `global` или `international`;
-   - нет ни одного из `ENGLISH_FRIENDLY_SIGNALS` → `low`.
+   - уверенно неанглийское описание (DE/FR/NL/ES/IT) → `low`;
+   - английское, короткое или неоднозначное описание → продолжает фильтрацию и AI-проверку.
    Суффикс `(m/w/d)`, немецкий город и страна сами по себе не считаются немецким названием. Двуязычные названия вроде `Einkaufsleiter / Head of Procurement` передаются на проверку описания.
-7. **Domain check** — нет protected target-title и `DOMAIN_KEYWORDS` в title или description → `low`.
-8. **Work mode filter** — соответствие `profile.work_mode` (`remote`/`onsite`/`hybrid`/`any`) и `Job.is_remote` + ключевых слов.
-9. **Country check** — `Job.country` должен быть в `profile.preferred_countries`.
-10. **Protected target-title priority** — после обязательных personal/language/location ограничений exact target возвращается как `high`, не требуя generic Director/Head keywords.
-8. **Seniority bucketing** — `is_director` / `is_senior_manager` / `is_plain_manager` решают `high` / `medium` / `manager_tier2`
-9. **Default** — domain match, но без seniority-сигналов → `medium`
+8. **Domain check** — нет protected target-title и `DOMAIN_KEYWORDS` в title или description → `low`.
+9. **Work mode filter** — соответствие `profile.work_mode` (`remote`/`onsite`/`hybrid`/`any`) и `Job.is_remote` + ключевых слов.
+10. **Country check** — `Job.country` должен быть в `profile.preferred_countries`.
+11. **Protected target-title priority** — после обязательных personal/language/location ограничений exact target возвращается как `high`, не требуя generic Director/Head keywords.
+12. **Seniority bucketing** — `is_director` / `is_senior_manager` / `is_plain_manager` решают `high` / `medium` / `manager_tier2`.
+13. **Default** — domain match, но без seniority-сигналов → `medium`.
 
 ## Тесты
 
 `tests/test_rules.py` покрывает:
 - Junior auto-reject (`Junior Procurement Analyst` → low)
 - Foreign-language reject (`fluent french required` → low)
-- User-exclusion (Amazon в `excluded_keywords` → low)
-- English-only fail/pass (немецкий title без EN-маркеров → low; international description → pass)
+- Content-exclusion и точное company-exclusion; упоминание заблокированной компании в чужом описании не режет вакансию
+- Защита от legacy `nan`
+- English-only: немецкий title/описание → low; английский текст без marker-слов и неоднозначный короткий текст → pass
 - Wrong function (`Marketing Director` → low)
 - Director + domain → high
 
@@ -76,6 +83,7 @@ Crisis-related: `crisis management`, `turnaround`, `transformation`, `restructur
 - **22 апреля 2026:** расширены `DIRECTOR_KEYWORDS` под Interim/Crisis/Turnaround/CRO/growth-роли.
 - **апрель 2026:** удалён salary-floor check.
 - **26 июля 2026:** зарплата полностью исключена и из AI-промптов/вердиктов: большинство источников её не отдаёт, поэтому сравнение было систематически неполным и несправедливым.
+- **27 июля 2026:** компании отделены от контентных стоп-фраз миграцией `0007`; `nan` очищается; English-only перешёл с marker-гейта на консервативное определение языка.
 
 ## Куда не масштабируется
 

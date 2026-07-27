@@ -73,6 +73,50 @@ ENGLISH_FRIENDLY_SIGNALS = [
     "startup", "remote",
 ]
 
+# High-frequency function words provide a deterministic, dependency-free
+# language classifier for long vacancy descriptions.  We only hard-reject a
+# confident non-English result; ambiguous/short text is sent to AI instead of
+# risking a false negative.
+LANGUAGE_STOPWORDS = {
+    "en": {
+        "the", "and", "of", "to", "in", "for", "with", "that", "this",
+        "will", "you", "your", "our", "we", "are", "as", "on", "from",
+        "an", "be", "is", "at", "by", "have", "has", "experience",
+        "role", "team", "skills", "responsibilities", "requirements",
+    },
+    "de": {
+        "der", "die", "das", "und", "zu", "in", "für", "mit", "von",
+        "den", "dem", "des", "ein", "eine", "einer", "einem", "einen",
+        "auf", "als", "wir", "sie", "ihre", "ist", "sind", "werden",
+        "du", "deine", "unser", "bei", "oder", "durch", "erfahrung",
+        "aufgaben", "anforderungen",
+    },
+    "fr": {
+        "le", "la", "les", "de", "des", "du", "et", "à", "en", "pour",
+        "avec", "dans", "un", "une", "vous", "votre", "nous", "notre",
+        "est", "sont", "sur", "par", "ce", "cette", "expérience",
+        "missions", "profil",
+    },
+    "nl": {
+        "de", "het", "een", "en", "van", "voor", "met", "in", "op",
+        "als", "je", "jouw", "wij", "ons", "is", "zijn", "aan", "door",
+        "bij", "naar", "dit", "dat", "ervaring", "functie", "taken",
+    },
+    "es": {
+        "el", "la", "los", "las", "de", "del", "y", "en", "para",
+        "con", "un", "una", "su", "sus", "nuestro", "como", "por",
+        "es", "son", "se", "que", "experiencia", "responsabilidades",
+        "requisitos",
+    },
+    "it": {
+        "il", "lo", "la", "i", "gli", "le", "di", "del", "e", "in",
+        "per", "con", "un", "una", "come", "che", "si", "è", "sono",
+        "nostro", "vostro", "esperienza", "responsabilità", "requisiti",
+    },
+}
+
+INVALID_EXCLUSION_VALUES = {"", "nan", "none", "null", "n/a", "unknown"}
+
 # Strong German role words in a job title.  Short titles are a poor fit for
 # statistical language detection, so keep this deliberately deterministic.
 # German locations, company names and the common "(m/w/d)" suffix are not
@@ -161,6 +205,32 @@ def _normalise_title(title: str) -> str:
     return " ".join(value.split())
 
 
+def _normalise_company(value: str | None) -> str:
+    return " ".join(html.unescape(value or "").strip().casefold().split())
+
+
+def detect_description_language(description: str | None) -> str:
+    """Return en/de/fr/nl/es/it for confident text, otherwise ``unknown``."""
+    value = html.unescape(description or "")
+    value = re.sub(r"<[^>]+>", " ", value).casefold()
+    tokens = re.findall(r"[a-zà-öø-ÿß]+", value[:12_000], flags=re.UNICODE)
+    if len(tokens) < 20:
+        return "unknown"
+
+    counts = {
+        language: sum(token in stopwords for token in tokens)
+        for language, stopwords in LANGUAGE_STOPWORDS.items()
+    }
+    ranked = sorted(counts.items(), key=lambda item: item[1], reverse=True)
+    winner, winner_score = ranked[0]
+    runner_up_score = ranked[1][1]
+    if winner_score < 6:
+        return "unknown"
+    if winner_score < runner_up_score * 1.5 and winner_score - runner_up_score < 4:
+        return "unknown"
+    return winner
+
+
 def is_clearly_german_title(title: str) -> bool:
     """Detect an explicitly German role title without guessing from location."""
     normalised = _normalise_title(title)
@@ -227,21 +297,37 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     if any(kw in desc_lower for kw in FOREIGN_LANGUAGE_REQUIRED):
         return False, "low"
 
-    # User-defined Exclusions
+    # User-defined content exclusions. Invalid source placeholders such as
+    # "nan" are ignored defensively even on a legacy/unmigrated profile.
     if profile and profile.excluded_keywords:
         for kw in profile.excluded_keywords:
-            if kw and kw.lower() in text:
+            normalised_kw = str(kw or "").strip().casefold()
+            if (
+                normalised_kw not in INVALID_EXCLUSION_VALUES
+                and normalised_kw in text
+            ):
                 return False, "low"
 
-    # English-only filter: a clearly German role title is a hard reject even
-    # when the description contains misleading markers such as "remote" or
-    # an English-language job-board footer.
+    # Company exclusions are exact company-name matches, never free-text
+    # searches across requirements. Blocking SAP must not reject another
+    # employer merely because its description mentions SAP.
+    if profile and getattr(profile, "excluded_companies", None):
+        company = _normalise_company(job.company_name)
+        excluded_companies = {
+            _normalise_company(str(value))
+            for value in profile.excluded_companies
+            if _normalise_company(str(value)) not in INVALID_EXCLUSION_VALUES
+        }
+        if company and company in excluded_companies:
+            return False, "low"
+
+    # English-only filter: reject only confident non-English language. Short
+    # or ambiguous text is allowed through to AI rather than false-rejected.
     if profile and getattr(profile, "english_only", False):
         if is_clearly_german_title(job.title):
             return False, "low"
-
-        english_friendly = any(signal in text for signal in ENGLISH_FRIENDLY_SIGNALS)
-        if not english_friendly:
+        description_language = detect_description_language(job.description)
+        if description_language not in {"en", "unknown"}:
             return False, "low"
 
     # Domain check — must be in supply chain / procurement / operations

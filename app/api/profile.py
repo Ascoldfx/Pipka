@@ -12,6 +12,7 @@ from app.api.stats import invalidate_stats_cache
 from app.database import async_session
 from app.models.user import UserProfile
 from app.scoring.profile_hash import compute_profile_hash
+from app.scoring.rules import INVALID_EXCLUSION_VALUES
 from app.services.embedding_service import invalidate_profile_embedding
 
 logger = logging.getLogger(__name__)
@@ -26,7 +27,7 @@ MAX_RESUME_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 # ``compute_profile_hash`` (sha256 over JSON of every entry), the per-job
 # pre_filter loop (O(jobs × keywords)), and the watchlist scanner
 # (Adzuna call per company × per country).
-MAX_PROFILE_LIST = 50          # target_titles, preferred_countries, excluded_keywords, target_companies
+MAX_PROFILE_LIST = 50          # target_titles, countries, exclusions, target_companies
 MAX_PROFILE_FIELD_LEN = 200    # one entry's max length
 
 # Hard wall on parse time. pdfminer can spin forever on a maliciously-crafted
@@ -52,6 +53,22 @@ def _parse_country_codes(raw: str, field_name: str) -> list[str]:
     return codes
 
 
+def _parse_exclusion_list(raw: str, field_name: str) -> list[str]:
+    """Normalise exclusions and discard invalid upstream placeholders."""
+    items: list[str] = []
+    seen: set[str] = set()
+    for raw_value in raw.split(","):
+        value = raw_value.strip()[:MAX_PROFILE_FIELD_LEN]
+        normalised = " ".join(value.casefold().split())
+        if not value or normalised in INVALID_EXCLUSION_VALUES or normalised in seen:
+            continue
+        items.append(value)
+        seen.add(normalised)
+    if len(items) > MAX_PROFILE_LIST:
+        raise HTTPException(status_code=400, detail=f"{field_name}: max {MAX_PROFILE_LIST} entries")
+    return items
+
+
 @router.get("/api/profile")
 async def get_profile(request: Request):
     async with async_session() as session:
@@ -68,6 +85,7 @@ async def get_profile(request: Request):
             "preferred_countries": p.preferred_countries or [],
             "hidden_countries": p.hidden_countries or [],
             "excluded_keywords": p.excluded_keywords or [],
+            "excluded_companies": getattr(p, "excluded_companies", None) or [],
             "english_only": getattr(p, "english_only", False) or False,
             "target_companies": getattr(p, "target_companies", None) or [],
         }}
@@ -82,6 +100,7 @@ async def update_profile(
     preferred_countries: str = Form(None),
     hidden_countries: str = Form(None),
     excluded_keywords: str = Form(None),
+    excluded_companies: str = Form(None),
     english_only: str = Form(None),
     target_companies: str = Form(None),
 ):
@@ -119,10 +138,9 @@ async def update_profile(
             if hidden_countries is not None:
                 p.hidden_countries = _parse_country_codes(hidden_countries, "hidden_countries")
             if excluded_keywords is not None:
-                items = [k.strip()[:MAX_PROFILE_FIELD_LEN] for k in excluded_keywords.split(",") if k.strip()]
-                if len(items) > MAX_PROFILE_LIST:
-                    raise HTTPException(status_code=400, detail=f"excluded_keywords: max {MAX_PROFILE_LIST} entries")
-                p.excluded_keywords = items
+                p.excluded_keywords = _parse_exclusion_list(excluded_keywords, "excluded_keywords")
+            if excluded_companies is not None:
+                p.excluded_companies = _parse_exclusion_list(excluded_companies, "excluded_companies")
             if english_only is not None:
                 p.english_only = english_only in ("1", "true", "True", "yes", "on")
             if target_companies is not None:

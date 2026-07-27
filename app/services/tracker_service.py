@@ -10,12 +10,13 @@ from sqlalchemy.orm import selectinload
 from app.models.application import Application, ApplicationHistory
 from app.models.job import Job, JobScore
 from app.models.user import UserProfile
+from app.scoring.rules import INVALID_EXCLUSION_VALUES
 
 logger = logging.getLogger(__name__)
 
 VALID_STATUSES = ("saved", "applied", "interviewing", "offer", "rejected", "withdrawn")
 
-AUTO_EXCLUDE_THRESHOLD = 5  # rejections from one company → auto-add to excluded_keywords
+AUTO_EXCLUDE_THRESHOLD = 5  # rejections from one company → auto-add to excluded_companies
 
 
 async def save_job(user_id: int, job_id: int, session: AsyncSession) -> Application:
@@ -190,7 +191,7 @@ async def check_auto_exclude_company(
     user_id: int, job_id: int, session: AsyncSession
 ) -> str | None:
     """After a rejection: if this company has been rejected >= AUTO_EXCLUDE_THRESHOLD times,
-    auto-add the company name to excluded_keywords and zero-out unactioned scores for all
+    auto-add the company name to excluded_companies and zero-out unactioned scores for all
     remaining jobs from that company.
 
     Returns the company name string if auto-exclusion was triggered, else None.
@@ -201,7 +202,10 @@ async def check_auto_exclude_company(
         return None
 
     company = job.company_name.strip()
-    if len(company) < 3:
+    if (
+        len(company) < 3
+        or " ".join(company.casefold().split()) in INVALID_EXCLUSION_VALUES
+    ):
         return None
 
     # Count total rejections for this company (case-insensitive, all jobs from it)
@@ -227,13 +231,14 @@ async def check_auto_exclude_company(
         return None
 
     # Already in excluded list?
-    current = list(profile.excluded_keywords or [])
+    current = list(profile.excluded_companies or [])
     if any(kw.lower() == company.lower() for kw in current):
         return None  # nothing new to do
 
-    # Add to excluded_keywords
+    # Keep company names in a dedicated exact-match list. They must never act
+    # as free-text keywords against unrelated vacancy descriptions.
     current.append(company)
-    profile.excluded_keywords = current
+    profile.excluded_companies = current
     session.add(profile)
 
     # Collect all job IDs from this company

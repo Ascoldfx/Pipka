@@ -195,6 +195,7 @@ async function loadProfile(){
     $('s-resume').value=p.resume_text||'';
     $('s-titles').value=(p.target_titles||[]).join(', ');
     if($('s-excluded')) $('s-excluded').value=(p.excluded_keywords||[]).join(', ');
+    if($('s-excluded-companies')) $('s-excluded-companies').value=(p.excluded_companies||[]).join(', ');
     if($('s-english-only')) $('s-english-only').checked=!!p.english_only;
     $('s-experience').value=p.experience_years||'';
     $('s-languages').value=p.languages?Object.entries(p.languages).map(([k,v])=>k+':'+v).join(', '):'';
@@ -215,6 +216,7 @@ async function saveProfile(){
   fd.append('resume_text',$('s-resume').value);
   fd.append('target_titles',$('s-titles').value);
   if($('s-excluded')) fd.append('excluded_keywords',$('s-excluded').value);
+  if($('s-excluded-companies')) fd.append('excluded_companies',$('s-excluded-companies').value);
   fd.append('english_only', $('s-english-only') && $('s-english-only').checked ? '1' : '0');
   fd.append('experience_years',$('s-experience').value||0);
   fd.append('languages',$('s-languages').value);

@@ -61,6 +61,17 @@ JOBSPY_MAX_COUNTRIES = 3  # countries per scan; rotated by 3h slot like queries 
                           # 6+ countries sequentially would blow the 240s source
                           # timeout and lose the WHOLE jobspy result set
 
+
+def _clean_optional_text(value) -> str | None:
+    """Convert pandas cells to text without persisting NaN placeholders."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if text.casefold() in {"", "nan", "none", "null", "<na>"}:
+        return None
+    return text
+
+
 class JobSpySource:
     @property
     def source_name(self) -> str:
@@ -152,6 +163,7 @@ class JobSpySource:
             try:
                 site = str(row.get("site", "unknown"))
                 ext_id = f"{site}_{country}_{row.get('id', hash(row.get('job_url', '')))}"
+                company_text = _clean_optional_text(row.get("company"))
 
                 posted = None
                 if row.get("date_posted"):
@@ -172,7 +184,7 @@ class JobSpySource:
                         external_id=ext_id,
                         source=site,
                         title=str(row.get("title", "")),
-                        company_name=str(row.get("company", "")) or None,
+                        company_name=company_text,
                         location=str(row.get("location", "")) or None,
                         # LinkedIn ignores country_indeed param and returns global results.
                         # Set country=None for LinkedIn so the text-based location filter runs.

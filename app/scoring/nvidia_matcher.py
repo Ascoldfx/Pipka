@@ -17,7 +17,7 @@ import time
 from datetime import datetime, timedelta
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import (
@@ -250,7 +250,7 @@ async def score_jobs_nvidia(
             }
             for job, score, verdict in batch_results
         ]
-        # Phase 2b: UPSERT, overwriting stale rows whose profile_hash differs.
+        # UPSERT stale rows, including legacy rows whose profile_hash is NULL.
         stmt = pg_insert(JobScore).values(rows)
         stmt = stmt.on_conflict_do_update(
             index_elements=["job_id", "user_id"],
@@ -261,7 +261,10 @@ async def score_jobs_nvidia(
                 "profile_hash": stmt.excluded.profile_hash,
                 "model_version": stmt.excluded.model_version,
             },
-            where=JobScore.profile_hash != stmt.excluded.profile_hash,
+            where=or_(
+                JobScore.profile_hash.is_(None),
+                JobScore.profile_hash != stmt.excluded.profile_hash,
+            ),
         ).returning(JobScore.id, JobScore.job_id)
         try:
             inserted = (await session.execute(stmt)).all()

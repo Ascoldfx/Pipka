@@ -4,11 +4,12 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from starlette.requests import Request
 
 from app.api import jobs as jobs_api
-from app.api.profile import _parse_country_codes
+from app.api.profile import _parse_country_codes, _parse_exclusion_list
 from app.models import Base
 from app.models.application import Application
 from app.models.job import Job
 from app.models.user import User, UserProfile
+import app.scoring.profile_hash as profile_hash_module
 from app.scoring.profile_hash import compute_profile_hash
 
 
@@ -33,6 +34,32 @@ def test_target_countries_still_invalidate_scoring_profile():
     germany = UserProfile(resume_text="Supply chain director", preferred_countries=["de"])
     singapore = UserProfile(resume_text="Supply chain director", preferred_countries=["sg"])
     assert compute_profile_hash(germany) != compute_profile_hash(singapore)
+
+
+def test_excluded_companies_invalidate_scoring_profile():
+    open_profile = UserProfile(excluded_companies=[])
+    blocked = UserProfile(excluded_companies=["Amazon"])
+    assert compute_profile_hash(open_profile) != compute_profile_hash(blocked)
+
+
+def test_scoring_rules_version_invalidates_profile_hash(monkeypatch):
+    profile = UserProfile(resume_text="Supply chain director")
+    previous_hash = compute_profile_hash(profile)
+
+    monkeypatch.setattr(
+        profile_hash_module,
+        "SCORING_RULES_VERSION",
+        "future-rules-version",
+    )
+
+    assert compute_profile_hash(profile) != previous_hash
+
+
+def test_exclusion_parser_drops_placeholders_and_deduplicates():
+    assert _parse_exclusion_list(
+        " nan, Amazon, AMAZON, null, SAP ",
+        "excluded_companies",
+    ) == ["Amazon", "SAP"]
 
 
 async def _get_jobs(request, **overrides):

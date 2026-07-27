@@ -29,7 +29,7 @@
 ## Эксплуатация
 
 - [[Деплой]] — сервер, Docker, цикл выкатки
-- [[Миграции]] — Alembic, актуальный head `0006_profile_feed_preferences`
+- [[Миграции]] — Alembic, актуальный head `0007_excluded_companies`
 - [[Бэкапы]] — pg_dump → gzip → local + Backblaze B2
 - [[Настройки]] — все env-переменные
 

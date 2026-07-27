@@ -19,7 +19,7 @@ import random
 import time
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import (
@@ -348,10 +348,8 @@ async def score_jobs_gemini(
         if not batch_results:
             continue
 
-        # Phase 2b UPSERT: insert new scores; on conflict, overwrite ONLY when
-        # the existing row's profile_hash differs (i.e. stale provenance from
-        # a previous profile or backend). Legacy NULL rows are NOT touched —
-        # `NULL != X` is unknown, which the WHERE clause filters out.
+        # Insert new scores; on conflict overwrite stale provenance, including
+        # legacy rows whose profile_hash is NULL.
         rows = [
             {
                 "job_id": job.id,
@@ -373,7 +371,10 @@ async def score_jobs_gemini(
                 "profile_hash": stmt.excluded.profile_hash,
                 "model_version": stmt.excluded.model_version,
             },
-            where=JobScore.profile_hash != stmt.excluded.profile_hash,
+            where=or_(
+                JobScore.profile_hash.is_(None),
+                JobScore.profile_hash != stmt.excluded.profile_hash,
+            ),
         ).returning(JobScore.id, JobScore.job_id)
         try:
             inserted = (await session.execute(stmt)).all()

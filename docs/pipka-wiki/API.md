@@ -76,10 +76,11 @@ POST требует CSRF-заголовок — [[Безопасность#3-csr
 
 ```
 resume_text, target_titles, work_mode, preferred_countries, hidden_countries,
-excluded_keywords, english_only (0/1), target_companies
+excluded_keywords, excluded_companies, english_only (0/1), target_companies
 ```
 
 > `min_salary` удалён из API/модели/БД миграцией `0006_profile_feed_preferences`; зарплата вакансии хранится только как исходное отображаемое поле. `languages` / `experience_years` удалены из API и скоринга, их старые DB-колонки пока orphaned.
+> `excluded_keywords` — фразы в title/description; `excluded_companies` — только точные названия работодателей. Заглушки `nan/null/none/n/a/unknown` при сохранении отбрасываются.
 
 Валидация — [[Безопасность#4-input-validation]].
 
