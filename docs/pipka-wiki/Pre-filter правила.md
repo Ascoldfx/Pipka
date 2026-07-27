@@ -24,7 +24,7 @@ DE: `direktor`, `leiter`, `abteilungsleiter`, `bereichsleiter`, `geschäftsführ
 
 Junior/operational: `specialist`, `analyst`, `coordinator`, `assistant`, `clerk`, `sachbearbeiter`, `referent`, `mitarbeiter`, `fachkraft`, `junior`, `trainee`, `werkstudent`, `praktikant`, `azubi`, `intern`, `student`, `buyer`, `dispatcher`, `planner`, `merchandiser`.
 
-Wrong function (не Supply Chain / Procurement / Operations): `marketing`, `sales director`, `account executive/manager`, `hr director/manager`, `human resources`, `people operations/lead`, `talent`, `recruiting/recruitment`, `engineering manager`, `software`, `developer`, `data scientist`, `product manager/director/lead`, `finance director`, `financial controller`, `accounting`, `legal`, `compliance director`, `regulatory`, `creative director`, `design director`, `art director`, `editorial`, `content director`, `communications director`, `customer success/service`, `support manager`, `research director`, `r&d director`, `scientific`, `medical director`, `clinical`, `real estate`, `property`, `founding`, `co-founder`, `consultant`, `consulting`, `berater`, `beratung`, `advisory`, `advisor`.
+Wrong function (не Supply Chain / Procurement / Operations): `marketing`, `sales director`, `business development`, `account executive/manager`, `hr director/manager`, `human resources`, `people operations/lead`, `talent`, `recruiting/recruitment`, `engineering manager`, `software`, `developer`, `data scientist`, `product manager/director/lead`, `finance director`, `financial controller`, `accounting`, `legal`, `compliance director`, `regulatory`, `creative director`, `design director`, `art director`, `editorial`, `content director`, `communications director`, `customer success/service`, `support manager`, `research director`, `r&d director`, `scientific`, `medical director`, `clinical`, `real estate`, `property`, `founding`, `co-founder`, `consultant`, `consulting`, `berater`, `beratung`, `advisory`, `advisor`.
 
 ### `DOMAIN_KEYWORDS` — нужно совпадение для прохождения
 
@@ -47,22 +47,23 @@ Crisis-related: `crisis management`, `turnaround`, `transformation`, `restructur
 ## Порядок проверок
 
 1. **Protected target-title match** — нормализованное точное совпадение с `profile.target_titles` защищает вакансию от общих category/domain/seniority правил. Удаляются только служебное `of` и gender suffix `(m/w/d)`, но функциональные модификаторы сохраняются: `Director of Operations` совпадает с `Director Operations`, а `Director of Retail and Commercial Operations` — нет.
-2. **Junior/wrong function** — `REJECT_TITLE_KEYWORDS` в title → `low`, кроме protected target-title.
-3. **Commercial-function reject** — `commercial/retail/sales/revenue/store operations` и соответствующие Director/Head/Manager роли → `low`. Если в самом title явно есть `supply chain`, `procurement`, `sourcing`, `purchasing` или `logistics`, отраслевое слово `retail/commercial` не блокирует вакансию.
-4. **Foreign language required** — `FOREIGN_LANGUAGE_REQUIRED` в description → `low`, включая protected target-title.
-5. **User content exclusions** — валидные `profile.excluded_keywords` ищутся в title+description → `low`, включая protected target-title. Технические заглушки `nan/null/none/n/a/unknown` игнорируются.
-6. **Blocked companies** — `profile.excluded_companies` сравнивается только с `Job.company_name`, регистронезависимо и по полному нормализованному названию. Упоминание Amazon или SAP в описании другой компании ничего не блокирует. [[Трекер#auto-exclude]] пишет названия только в этот список.
-7. **English-only filter** — если `profile.english_only=True`:
+2. **COO opt-in** — `COO`, `Chief Operating Officer`, `Chief Operations Officer` → `low`, если COO не присутствует явно в `profile.target_titles`.
+3. **Junior/wrong function** — `REJECT_TITLE_KEYWORDS` в title → `low`, кроме protected target-title. `Business Development` относится к коммерческой функции.
+4. **Commercial-function reject** — `commercial/retail/sales/revenue/store operations` и соответствующие Director/Head/Manager роли → `low`. Если в самом title явно есть `supply chain`, `procurement`, `sourcing`, `purchasing` или `logistics`, отраслевое слово `retail/commercial` не блокирует вакансию.
+5. **Foreign language required** — `FOREIGN_LANGUAGE_REQUIRED` в description → `low`, включая protected target-title.
+6. **User content exclusions** — валидные `profile.excluded_keywords` ищутся в title+description → `low`, включая protected target-title. Технические заглушки `nan/null/none/n/a/unknown` игнорируются.
+7. **Blocked companies** — `profile.excluded_companies` сравнивается только с `Job.company_name`, регистронезависимо и по полному нормализованному названию. Упоминание Amazon или SAP в описании другой компании ничего не блокирует. [[Трекер#auto-exclude]] пишет названия только в этот список.
+8. **English-only filter** — если `profile.english_only=True`:
    - явно немецкое название должности (`Geschäftsführer`, `Einkaufsleiter`, `Leiter Logistik`, `Bereichsleiter`, `Produktmanager`, `Krisenmanager` и близкие формы) → `low`, даже если в тексте есть общий маркер `remote`, `global` или `international`;
    - уверенно неанглийское описание (DE/FR/NL/ES/IT) → `low`;
    - английское, короткое или неоднозначное описание → продолжает фильтрацию и AI-проверку.
    Суффикс `(m/w/d)`, немецкий город и страна сами по себе не считаются немецким названием. Двуязычные названия вроде `Einkaufsleiter / Head of Procurement` передаются на проверку описания.
-8. **Domain check** — нет protected target-title и `DOMAIN_KEYWORDS` в title или description → `low`.
-9. **Work mode filter** — соответствие `profile.work_mode` (`remote`/`onsite`/`hybrid`/`any`) и `Job.is_remote` + ключевых слов.
-10. **Country check** — `Job.country` должен быть в `profile.preferred_countries`.
-11. **Protected target-title priority** — после обязательных personal/language/location ограничений exact target возвращается как `high`, не требуя generic Director/Head keywords.
-12. **Seniority bucketing** — `is_director` / `is_senior_manager` / `is_plain_manager` решают `high` / `medium` / `manager_tier2`.
-13. **Default** — domain match, но без seniority-сигналов → `medium`.
+9. **Domain check** — нет protected target-title и `DOMAIN_KEYWORDS` в title или description → `low`.
+10. **Work mode filter** — соответствие `profile.work_mode` (`remote`/`onsite`/`hybrid`/`any`) и `Job.is_remote` + ключевых слов.
+11. **Country check** — `Job.country` должен быть в `profile.preferred_countries`.
+12. **Protected target-title priority** — после обязательных personal/language/location ограничений exact target возвращается как `high`, не требуя generic Director/Head keywords.
+13. **Seniority bucketing** — `is_director` / `is_senior_manager` / `is_plain_manager` решают `high` / `medium` / `manager_tier2`.
+14. **Default** — domain match, но без seniority-сигналов → `medium`.
 
 ## Тесты
 

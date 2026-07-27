@@ -5,6 +5,7 @@ from app.scoring.rules import (
     detect_description_language,
     is_clearly_german_title,
     is_commercial_function_title,
+    is_non_target_coo,
     matches_explicit_target_title,
     pre_filter,
 )
@@ -183,6 +184,43 @@ def test_commercial_operations_titles_are_hard_rejected(title):
     )
     assert is_commercial_function_title(title) is True
     assert pre_filter(job, UserProfile(english_only=True)) == (False, "low")
+
+
+def test_business_development_is_rejected_as_commercial_function():
+    job = Job(
+        title="Business Development Manager – Freight Forwarding & Logistics",
+        description="Lead international logistics growth and commercial sales.",
+    )
+    assert pre_filter(job, UserProfile()) == (False, "low")
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Chief Operating Officer (COO)",
+        "Chief Operations Officer",
+        "COO - Middle East",
+    ],
+)
+def test_coo_is_rejected_when_not_an_explicit_target(title):
+    profile = UserProfile(
+        target_titles=["Director Operations", "Chief Restructuring Officer"],
+    )
+    assert is_non_target_coo(title, profile) is True
+    assert pre_filter(
+        Job(title=title, description="Lead global supply chain operations."),
+        profile,
+    ) == (False, "low")
+
+
+def test_coo_can_be_explicitly_enabled_in_target_roles():
+    profile = UserProfile(target_titles=["Chief Operating Officer"])
+    job = Job(
+        title="COO - Middle East",
+        description="Lead global supply chain operations.",
+    )
+    assert is_non_target_coo(job.title, profile) is False
+    assert pre_filter(job, profile)[0] is True
 
 
 @pytest.mark.parametrize(

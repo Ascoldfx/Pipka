@@ -15,7 +15,7 @@ import asyncio
 import json
 from datetime import datetime, timedelta
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
 
@@ -42,6 +42,14 @@ def _arguments() -> argparse.Namespace:
         type=int,
         default=0,
         help="Maximum AI-eligible vacancies this run; 0 means all.",
+    )
+    parser.add_argument(
+        "--reuse-from-hash",
+        default=None,
+        help=(
+            "Adopt existing AI scores from this audited profile hash for jobs "
+            "that still pass current rules; changed hard rejects are refreshed."
+        ),
     )
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
@@ -103,6 +111,38 @@ async def _upsert_rejects(
         )
         await session.execute(stmt)
         await session.commit()
+
+
+async def _reuse_eligible_scores(
+    user_id: int,
+    old_hash: str,
+    current_hash: str,
+    jobs: list[Job],
+    session,
+) -> int:
+    """Adopt audited old AI scores for jobs that still pass current rules."""
+    adopted = 0
+    for offset in range(0, len(jobs), 1000):
+        job_ids = [job.id for job in jobs[offset : offset + 1000]]
+        if not job_ids:
+            continue
+        result = await session.execute(
+            update(JobScore)
+            .where(
+                JobScore.user_id == user_id,
+                JobScore.job_id.in_(job_ids),
+                JobScore.profile_hash == old_hash,
+                or_(
+                    JobScore.model_version.like("gemini:%"),
+                    JobScore.model_version.like("nvidia:%"),
+                    JobScore.model_version.like("claude:%"),
+                ),
+            )
+            .values(profile_hash=current_hash, scored_at=func.now())
+        )
+        adopted += result.rowcount or 0
+        await session.commit()
+    return adopted
 
 
 async def _run(args: argparse.Namespace) -> None:
@@ -196,6 +236,23 @@ async def _run(args: argparse.Namespace) -> None:
             return
 
         await _upsert_rejects(user.id, profile_hash, rejected, session)
+        if args.reuse_from_hash:
+            adopted = await _reuse_eligible_scores(
+                user.id,
+                args.reuse_from_hash,
+                profile_hash,
+                eligible,
+                session,
+            )
+            result = {
+                **summary,
+                "prefilter_refreshed": len(rejected),
+                "ai_reused": adopted,
+                "ai_remaining": len(eligible) - adopted,
+            }
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return
+
         score_fn = _score_function(args.backend)
         await score_fn(selected, user, session)
 

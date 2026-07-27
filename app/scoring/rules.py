@@ -34,7 +34,8 @@ REJECT_TITLE_KEYWORDS = [
     "dispatcher", "planner",  # too operational
     "merchandiser",  # retail/marketing
     # Wrong function — NOT supply chain / procurement / operations
-    "marketing", "sales director", "account executive", "account manager",
+    "marketing", "sales director", "business development",
+    "account executive", "account manager",
     "hr director", "hr manager", "human resources", "people operations",
     "people lead", "talent", "recruiting", "recruitment",
     "engineering manager", "software", "developer", "data scientist",
@@ -166,6 +167,10 @@ CORE_FUNCTION_TITLE_PATTERN = re.compile(
     r"einkauf|beschaffung|logistik|lieferkette)\b"
 )
 
+COO_TITLE_PATTERN = re.compile(
+    r"\bcoo\b|\bchief\s+(?:operating|operations)\s+officer\b"
+)
+
 TARGET_TITLE_FILLER_TOKENS = {
     "of",
     # Gender suffixes used in European job titles.
@@ -250,6 +255,19 @@ def is_commercial_function_title(title: str) -> bool:
     return any(pattern.search(normalised) for pattern in COMMERCIAL_FUNCTION_PATTERNS)
 
 
+def is_non_target_coo(title: str, profile: UserProfile | None) -> bool:
+    """Reject COO unless that direction is explicitly present in target roles."""
+    if not COO_TITLE_PATTERN.search(_normalise_title(title)):
+        return False
+    if profile is None or not profile.target_titles:
+        return True
+    return not any(
+        COO_TITLE_PATTERN.search(_normalise_title(target))
+        for target in profile.target_titles
+        if target
+    )
+
+
 def _target_title_tokens(title: str) -> tuple[str, ...]:
     """Normalise only harmless fillers; retain all functional modifiers."""
     return tuple(
@@ -282,6 +300,11 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     desc_lower = (job.description or "").lower()
     text = f"{title_lower} {desc_lower}"
     explicit_target_match = matches_explicit_target_title(job.title, profile)
+
+    # COO was deliberately removed from this candidate's target directions.
+    # Keep the rule profile-driven so a future user can opt in explicitly.
+    if is_non_target_coo(job.title, profile):
+        return False, "low"
 
     # An exact user target is authoritative over generic title/category rules.
     # Explicit exclusions and language/location preferences below still apply.
