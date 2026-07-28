@@ -30,6 +30,21 @@ ADZUNA_CONCURRENCY = 6        # parallel in-flight requests
 ADZUNA_PACE_SECONDS = 0.4     # min gap between request starts (≈150/min ceiling)
 ADZUNA_REQUEST_TIMEOUT = 8    # per-page HTTP timeout (was 15) — fail fast on Adzuna 500s/slow pages
 
+ADZUNA_CURRENCIES = {
+    "au": "AUD",
+    "br": "BRL",
+    "ca": "CAD",
+    "ch": "CHF",
+    "gb": "GBP",
+    "in": "INR",
+    "mx": "MXN",
+    "nz": "NZD",
+    "pl": "PLN",
+    "sg": "SGD",
+    "us": "USD",
+    "za": "ZAR",
+}
+
 
 class AdzunaSource:
     @property
@@ -52,8 +67,17 @@ class AdzunaSource:
             logger.debug("Adzuna: skipping unsupported countries %s", sorted(skipped))
 
         combos: list[tuple[str, str, str]] = []
-        for query in params.queries:
+        country_queries = {
+            country: params.queries_for_country(country)
+            for country in countries
+        }
+        max_queries = max((len(queries) for queries in country_queries.values()), default=0)
+        for query_index in range(max_queries):
             for country in countries:
+                queries = country_queries[country]
+                if query_index >= len(queries):
+                    continue
+                query = queries[query_index]
                 for location in locations:
                     combos.append((country, location, query))
         if len(combos) > ADZUNA_MAX_COMBOS:
@@ -145,7 +169,7 @@ class AdzunaSource:
                         description=item.get("description", ""),
                         salary_min=item.get("salary_min"),
                         salary_max=item.get("salary_max"),
-                        salary_currency="EUR" if country in ("de", "at", "nl", "be", "fr") else "CHF" if country == "ch" else "EUR",
+                        salary_currency=ADZUNA_CURRENCIES.get(country, "EUR"),
                         url=job_url,
                         is_remote=None,
                         posted_at=posted,

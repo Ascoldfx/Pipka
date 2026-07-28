@@ -168,8 +168,13 @@ class SearchParams:
     queries: list[str]
     countries: list[str] = field(default_factory=lambda: ["de"])
     locations: list[str] = field(default_factory=list)
+    country_queries: dict[str, list[str]] = field(default_factory=dict)
     results_per_query: int = 50
     max_age_days: int = 60
+
+    def queries_for_country(self, country: str) -> list[str]:
+        """Use country-pack aliases when present, otherwise global queries."""
+        return self.country_queries.get(country.casefold(), self.queries)
 
 
 class JobSource(Protocol):

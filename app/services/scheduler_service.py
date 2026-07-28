@@ -24,9 +24,22 @@ from app.scoring.rules import pre_filter
 from app.services.backup_service import run_backup
 from app.services.ops_service import record_ops_event
 from app.services.tracker_service import get_hidden_dedup_hashes, get_hidden_job_ids
+from app.sources import (
+    AdzunaSource,
+    ArbeitnowSource,
+    ArbeitsagenturSource,
+    BerlinStartupJobsSource,
+    GupyFeedSource,
+    JobSpySource,
+    JoobleSource,
+    RemotiveSource,
+    WatchlistSource,
+    WTTJSource,
+    XingSource,
+)
 from app.sources.aggregator import JobAggregator
 from app.sources.base import SearchParams
-from app.sources import AdzunaSource, JobSpySource, ArbeitnowSource, RemotiveSource, ArbeitsagenturSource, XingSource, WatchlistSource, BerlinStartupJobsSource, WTTJSource, JoobleSource
+from app.sources.country_queries import expand_queries_for_country
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
@@ -162,7 +175,20 @@ async def _background_scan(bot_app, trigger: str = "scheduled"):
         started_at = datetime.now()
         started_perf = time.perf_counter()
 
-        aggregator = JobAggregator([AdzunaSource(), JobSpySource(), ArbeitnowSource(), RemotiveSource(), ArbeitsagenturSource(), XingSource(), BerlinStartupJobsSource(), WTTJSource(), JoobleSource()])
+        aggregator = JobAggregator(
+            [
+                AdzunaSource(),
+                JobSpySource(),
+                ArbeitnowSource(),
+                RemotiveSource(),
+                ArbeitsagenturSource(),
+                XingSource(),
+                BerlinStartupJobsSource(),
+                WTTJSource(),
+                JoobleSource(),
+                GupyFeedSource(),
+            ]
+        )
 
 
         try:
@@ -198,11 +224,17 @@ async def _background_scan(bot_app, trigger: str = "scheduled"):
                 # Fallbacks to defaults if nothing found in profiles
                 final_queries = dynamic_queries if dynamic_queries else SCAN_QUERIES
                 final_countries = dynamic_countries if dynamic_countries else ["de", "at", "nl", "ch", "be", "si", "sk", "ro", "hu"]
+                country_queries = {
+                    country: expand_queries_for_country(final_queries, country)
+                    for country in final_countries
+                    if country == "br"
+                }
 
                 params = SearchParams(
                     queries=final_queries,
                     countries=final_countries,
                     locations=[],
+                    country_queries=country_queries,
                 )
 
                 # 2. Collect and store jobs (aggregator handles dedup + upsert)
@@ -262,6 +294,16 @@ async def _background_scan(bot_app, trigger: str = "scheduled"):
             raise
 
     logger.info("Background scan completed (%s)", trigger)
+
+
+def _is_hidden_country(job: Job, profile) -> bool:
+    """Whether a job is excluded from default feed-style delivery."""
+    hidden_countries = {
+        str(country).strip().casefold()
+        for country in (getattr(profile, "hidden_countries", None) or [])
+        if str(country).strip()
+    }
+    return bool(job.country) and job.country.casefold() in hidden_countries
 
 
 async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
@@ -337,12 +379,14 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
     else:
         scores = await score_jobs(to_score, user, session)
 
-    # Find top results to push
+    # Find top results to push. Hidden countries are still collected and
+    # scored for an auditable pilot, but must not leak into automatic
+    # Telegram delivery (the default web feed applies the same preference).
     top_results = []
     for s in scores:
         if s.score >= TOP_SCORE_THRESHOLD:
             job = next((j for j in to_score if j.id == s.job_id), None)
-            if job:
+            if job and not _is_hidden_country(job, user.profile):
                 top_results.append((job, s))
 
     if not top_results:

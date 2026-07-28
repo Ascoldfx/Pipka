@@ -11,9 +11,10 @@ from app.bot.keyboards import job_actions, search_type_menu, show_more_button
 from app.database import async_session
 from app.services.job_service import search_and_score
 from app.services.user_service import get_or_create_user
+from app.sources import AdzunaSource, ArbeitnowSource, ArbeitsagenturSource, JobSpySource, RemotiveSource, XingSource
 from app.sources.aggregator import JobAggregator
 from app.sources.base import SearchParams
-from app.sources import AdzunaSource, JobSpySource, ArbeitnowSource, RemotiveSource, ArbeitsagenturSource, XingSource
+from app.sources.country_queries import expand_queries_for_country
 
 logger = logging.getLogger(__name__)
 
@@ -158,10 +159,16 @@ async def search_preset_handler(update: Update, context: ContextTypes.DEFAULT_TY
         "Это может занять 1-3 минуты."
     )
 
+    country_queries = {
+        country: expand_queries_for_country(preset["queries"], country)
+        for country in preset["countries"]
+        if country == "br"
+    }
     params = SearchParams(
         queries=preset["queries"],
         countries=preset["countries"],
         locations=preset.get("locations", []),
+        country_queries=country_queries,
     )
 
     aggregator = _build_aggregator()

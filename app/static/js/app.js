@@ -64,7 +64,7 @@ const COUNTRY_NAMES = {
   us:'USA', ca:'Canada', pt:'Portugal', lu:'Luxembourg', ee:'Estonia',
   lv:'Latvia', lt:'Lithuania', hr:'Croatia', rs:'Serbia', bg:'Bulgaria',
   ae:'UAE', sa:'Saudi Arabia', qa:'Qatar', au:'Australia', nz:'New Zealand',
-  id:'Indonesia', sg:'Singapore',
+  id:'Indonesia', sg:'Singapore', br:'Brazil',
 };
 let _selCountries = new Set();
 

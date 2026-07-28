@@ -791,6 +791,7 @@ function applyLang() {
           <div class="country-item" data-code="nz">🇳🇿 New Zealand</div>
           <div class="country-item" data-code="id">🇮🇩 Indonesia</div>
           <div class="country-item" data-code="sg">🇸🇬 Singapore</div>
+          <div class="country-item" data-code="br">🇧🇷 Brazil</div>
         </div>
       </div>
 
@@ -826,6 +827,7 @@ function applyLang() {
           <div class="country-item country-hidden" data-code="nz">🇳🇿 New Zealand</div>
           <div class="country-item country-hidden" data-code="id">🇮🇩 Indonesia</div>
           <div class="country-item country-hidden" data-code="sg">🇸🇬 Singapore</div>
+          <div class="country-item country-hidden" data-code="br">🇧🇷 Brazil</div>
         </div>
         <p class="country-hint" data-i18n="settings.hiddenCountriesHint">Jobs from these countries are still collected and scored. Choose a country in the feed filter to show it temporarily.</p>
       </div>
@@ -1113,7 +1115,9 @@ const COUNTRY_NAMES = {
   gb:'UK', uk:'UK', ie:'Ireland', dk:'Denmark', se:'Sweden', no:'Norway',
   fi:'Finland', ro:'Romania', hu:'Hungary', sk:'Slovakia', si:'Slovenia',
   us:'USA', ca:'Canada', pt:'Portugal', lu:'Luxembourg', ee:'Estonia',
-  lv:'Latvia', lt:'Lithuania', hr:'Croatia', rs:'Serbia', bg:'Bulgaria'};
+  lv:'Latvia', lt:'Lithuania', hr:'Croatia', rs:'Serbia', bg:'Bulgaria',
+  ae:'UAE', sa:'Saudi Arabia', qa:'Qatar', au:'Australia', nz:'New Zealand',
+  id:'Indonesia', sg:'Singapore', br:'Brazil'};
 let _selCountries = new Set();
 
 function toggleCountryDrop(e) {

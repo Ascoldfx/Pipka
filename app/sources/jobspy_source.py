@@ -53,6 +53,7 @@ COUNTRY_NAME = {
     "nz": "new zealand",
     "id": "indonesia",
     "sg": "singapore",
+    "br": "brazil",
 }
 
 
@@ -81,17 +82,7 @@ class JobSpySource:
         results: list[RawJob] = []
         seen: set[str] = set()
 
-        # Cap queries — LinkedIn/Indeed scraping is slow; too many sequential calls → timeout.
-        # Rotate the window by 3h scan slot so EVERY profile title gets scraped over a
-        # day (8 scans × 8 queries = 64 slots ≥ any realistic title list) instead of
-        # only ever the same first 8.
-        n = len(params.queries)
         slot = datetime.now().hour // 3  # 0..7, stable within one scan interval
-        if n > JOBSPY_MAX_QUERIES:
-            start = (slot * JOBSPY_MAX_QUERIES) % n
-            queries = [params.queries[(start + i) % n] for i in range(JOBSPY_MAX_QUERIES)]
-        else:
-            queries = params.queries
 
         # Same rotation for countries: with Gulf/APAC opted in there are 6+, and
         # scraping them all sequentially would exceed the source timeout.
@@ -108,6 +99,17 @@ class JobSpySource:
         allowed = {s.strip().lower() for s in settings.jobspy_sites.split(",") if s.strip()}
 
         for country in countries:
+            country_query_pool = params.queries_for_country(country)
+            n = len(country_query_pool)
+            if n > JOBSPY_MAX_QUERIES:
+                start = (slot * JOBSPY_MAX_QUERIES) % n
+                queries = [
+                    country_query_pool[(start + i) % n]
+                    for i in range(JOBSPY_MAX_QUERIES)
+                ]
+            else:
+                queries = country_query_pool
+
             sites = SITE_MAP.get(country, ["indeed", "linkedin", "google"])
             sites = [s for s in sites if s in allowed]
             if not sites:

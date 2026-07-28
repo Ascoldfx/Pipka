@@ -24,7 +24,7 @@ from app.models.user import UserProfile
 
 # Increment whenever deterministic pre-filter semantics change. This makes
 # existing JobScore rows stale even when the user did not edit their profile.
-SCORING_RULES_VERSION = "2026-07-27.2"
+SCORING_RULES_VERSION = "2026-07-28.1"
 
 # Backend identifiers — pulled from settings so an env-only model bump
 # automatically invalidates downstream caches without code changes.

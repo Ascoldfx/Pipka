@@ -22,6 +22,10 @@ NEGATIVE_KEYWORDS = [
     "sachbearbeiter", "referent", "mitarbeiter", "fachkraft",
     "dispatcher", "planner",
     "merchandiser", "account executive", "founding",
+    # Brazilian Portuguese junior / operational titles
+    "analista", "coordenador", "coordenadora", "assistente",
+    "estagiário", "estagiario", "aprendiz", "comprador", "compradora",
+    "planejador", "planejadora",
 ]
 
 # Foreign language requirements (not EN/DE) → reject
@@ -33,6 +37,14 @@ FOREIGN_LANG_REQUIRED = [
     "español requerido", "spanish required",
     "italiano richiesto", "italian required",
     "polski wymagany", "polish required",
+    # Portuguese content is allowed; only explicit advanced/native
+    # requirements are rejected.
+    "português fluente", "portugues fluente",
+    "fluência em português", "fluencia em portugues",
+    "português nativo", "portugues nativo",
+    "português obrigatório", "portugues obrigatorio",
+    "português avançado", "portugues avancado",
+    "portuguese required", "native portuguese",
 ]
 
 # Phrases in title or description that indicate restricted positions
@@ -536,6 +548,12 @@ REGION_MARKERS: dict[str, list[str]] = {
     "nz": ["new zealand", "auckland", "wellington", "christchurch"],
     "id": ["indonesia", "jakarta", "surabaya", "bandung", "bali"],
     "sg": ["singapore"],
+    "br": [
+        "brazil", "brasil", "são paulo", "sao paulo", "campinas",
+        "barueri", "rio de janeiro", "belo horizonte", "curitiba",
+        "porto alegre", "joinville", "recife", "salvador", "manaus",
+        "goiânia", "goiania",
+    ],
 }
 
 

@@ -5,6 +5,7 @@ import re
 
 from app.models.job import Job
 from app.models.user import UserProfile
+from app.sources.country_queries import expand_queries_for_country
 
 # Director+ level only — no plain "Manager"
 DIRECTOR_KEYWORDS = [
@@ -21,6 +22,10 @@ DIRECTOR_KEYWORDS = [
     # German equivalents
     "direktor", "leiter", "abteilungsleiter", "bereichsleiter",
     "geschäftsführer", "geschaeftsfuehrer",
+    # Brazilian Portuguese equivalents
+    "diretor", "diretora", "head de", "vice-presidente",
+    "gerente executivo", "gerente executiva", "gerente nacional",
+    "superintendente",
 ]
 
 # These in title = too junior or wrong function, auto-reject
@@ -33,10 +38,18 @@ REJECT_TITLE_KEYWORDS = [
     "buyer",  # operational buyer, not strategic
     "dispatcher", "planner",  # too operational
     "merchandiser",  # retail/marketing
+    # Brazilian Portuguese junior / operational
+    "analista", "coordenador", "coordenadora", "assistente",
+    "estagiário", "estagiario", "aprendiz", "comprador", "compradora",
+    "planejador", "planejadora",
     # Wrong function — NOT supply chain / procurement / operations
     "marketing", "sales director", "business development",
     "account executive", "account manager",
+    "diretor comercial", "diretora comercial", "diretor de vendas",
+    "diretora de vendas", "desenvolvimento de negócios",
+    "desenvolvimento de negocios",
     "hr director", "hr manager", "human resources", "people operations",
+    "recursos humanos",
     "people lead", "talent", "recruiting", "recruitment",
     "engineering manager", "software", "developer", "data scientist",
     "product manager", "product director", "product lead",
@@ -61,6 +74,12 @@ DOMAIN_KEYWORDS = [
     "demand planning", "inventory", "distribution", "fulfillment",
     "supplier", "vendor management", "category management",
     "strategic sourcing", "indirect procurement", "direct procurement",
+    # Brazilian Portuguese equivalents
+    "cadeia de suprimentos", "suprimentos", "compras", "compras estratégicas",
+    "compras estrategicas", "logística", "logistica", "operações", "operacoes",
+    "abastecimento", "planejamento de demanda", "gestão de fornecedores",
+    "gestao de fornecedores", "estoque", "distribuição", "distribuicao",
+    "excelência operacional", "excelencia operacional",
     # Crisis / Turnaround / Transformation — closely related to operations
     "crisis management", "turnaround", "transformation",
     "restructuring", "interim management", "business continuity",
@@ -114,6 +133,14 @@ LANGUAGE_STOPWORDS = {
         "per", "con", "un", "una", "come", "che", "si", "è", "sono",
         "nostro", "vostro", "esperienza", "responsabilità", "requisiti",
     },
+    "pt": {
+        "o", "a", "os", "as", "de", "do", "da", "dos", "das", "e", "em",
+        "para", "com", "um", "uma", "que", "por", "como", "se", "no", "na",
+        "nos", "nas", "sua", "suas", "seu", "seus", "nossa", "nosso",
+        "você", "voce", "ser", "ter", "é", "são", "esta", "está",
+        "experiência", "experiencia", "responsabilidades", "requisitos",
+        "atividades", "empresa", "equipe", "vaga",
+    },
 }
 
 INVALID_EXCLUSION_VALUES = {"", "nan", "none", "null", "n/a", "unknown"}
@@ -160,11 +187,21 @@ COMMERCIAL_FUNCTION_PATTERNS = [
         r"(?:commercial|retail|sales|revenue|store)\b"
     ),
     re.compile(r"\bchief commercial officer\b"),
+    re.compile(
+        r"\b(?:comercial|comerciais|varejo|vendas|receita|lojas?)\s+"
+        r"(?:e\s+)?opera(?:ç|c)(?:ão|ao|ões|oes)\b"
+    ),
+    re.compile(
+        r"\b(?:diretor(?:a)?|head|chief)\s+(?:de\s+|da\s+|do\s+)?"
+        r"(?:comercial|varejo|vendas|receita|lojas?)\b"
+    ),
+    re.compile(r"\bopera(?:ç|c)(?:ão|ao|ões|oes)\s+(?:comerciais|de\s+varejo|de\s+vendas)\b"),
 ]
 
 CORE_FUNCTION_TITLE_PATTERN = re.compile(
     r"\b(?:supply chain|procurement|sourcing|purchasing|logistics|"
-    r"einkauf|beschaffung|logistik|lieferkette)\b"
+    r"einkauf|beschaffung|logistik|lieferkette|cadeia de suprimentos|"
+    r"suprimentos|compras|logística|abastecimento)\b"
 )
 
 COO_TITLE_PATTERN = re.compile(
@@ -173,6 +210,9 @@ COO_TITLE_PATTERN = re.compile(
 
 TARGET_TITLE_FILLER_TOKENS = {
     "of",
+    "de",
+    "da",
+    "do",
     # Gender suffixes used in European job titles.
     "m",
     "w",
@@ -199,6 +239,14 @@ FOREIGN_LANGUAGE_REQUIRED = [
     # Polish, Czech etc.
     "polski wymagany", "polish required",
     "čeština", "czech required",
+    # Brazilian Portuguese — do not reject a Portuguese ad by itself; only
+    # an explicit advanced/native/mandatory language requirement.
+    "português fluente", "portugues fluente",
+    "fluência em português", "fluencia em portugues",
+    "português nativo", "portugues nativo",
+    "português obrigatório", "portugues obrigatorio",
+    "português avançado", "portugues avancado",
+    "portuguese required", "native portuguese",
 ]
 
 
@@ -215,7 +263,7 @@ def _normalise_company(value: str | None) -> str:
 
 
 def detect_description_language(description: str | None) -> str:
-    """Return en/de/fr/nl/es/it for confident text, otherwise ``unknown``."""
+    """Return en/de/fr/nl/es/it/pt for confident text, otherwise ``unknown``."""
     value = html.unescape(description or "")
     value = re.sub(r"<[^>]+>", " ", value).casefold()
     tokens = re.findall(r"[a-zà-öø-ÿß]+", value[:12_000], flags=re.UNICODE)
@@ -287,11 +335,17 @@ def matches_explicit_target_title(title: str, profile: UserProfile | None) -> bo
     if profile is None or not profile.target_titles:
         return False
     title_tokens = _target_title_tokens(title)
-    return bool(title_tokens) and any(
-        title_tokens == _target_title_tokens(target)
-        for target in profile.target_titles
-        if target
-    )
+    if not title_tokens:
+        return False
+    for target in profile.target_titles:
+        if not target:
+            continue
+        # Brazil aliases are retrieval equivalents of the same profile role,
+        # not new directions. Protect their exact matches from generic rules.
+        variants = expand_queries_for_country([target], "br")
+        if any(title_tokens == _target_title_tokens(variant) for variant in variants):
+            return True
+    return False
 
 
 def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
@@ -395,11 +449,19 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     is_director = any(kw in title_lower for kw in DIRECTOR_KEYWORDS)
 
     # "Senior Manager" is borderline — allow but lower bucket
-    is_senior_manager = "senior manager" in title_lower or "lead" in title_lower
+    is_senior_manager = (
+        "senior manager" in title_lower
+        or "lead" in title_lower
+        or "gerente sênior" in title_lower
+        or "gerente senior" in title_lower
+        or "gerente executivo" in title_lower
+        or "gerente executiva" in title_lower
+        or "gerente nacional" in title_lower
+    )
 
     # Plain "Manager" without Director/Head/VP → tier2 queue (scored after tier1 is clear)
     is_plain_manager = (
-        "manager" in title_lower
+        ("manager" in title_lower or "gerente" in title_lower)
         and not is_director
         and not is_senior_manager
     )

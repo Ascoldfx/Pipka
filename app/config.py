@@ -82,6 +82,11 @@ class Settings(BaseSettings):
     # Jooble meta-aggregator (covers Stepstone, Monster, regional boards)
     jooble_api_key: str = ""
 
+    # Gupy official job-board partner feed. Both stay empty until Gupy approves
+    # the integration and issues a feed URL/token; no candidate-portal scraping.
+    gupy_feed_url: str = ""
+    gupy_feed_token: str = ""
+
     # Scoring
     max_jobs_per_scoring_batch: int = 15
     max_scored_per_search: int = 30

@@ -43,6 +43,7 @@ COUNTRY_LOCATIONS: dict[str, tuple[str, str]] = {
     "nz": ("New Zealand", "NZ"),
     "id": ("Indonesia", "ID"),
     "sg": ("Singapore", "SG"),
+    "br": ("Brazil", "BR"),
 }
 
 # FALLBACK queries for Jooble — used only when no profile titles are available.
@@ -112,7 +113,8 @@ class JoobleSource(JobSource):
         # Search the user's actual top-priority titles (profile order), not the
         # static fallback list — otherwise profile titles outside the hardcoded
         # sample (interim/crisis/AI roles) were never searched on Jooble.
-        queries = params.queries[: self.REQUESTS_PER_SCAN] if params.queries else JOOBLE_QUERIES
+        country_queries = params.queries_for_country(primary_country)
+        queries = country_queries[: self.REQUESTS_PER_SCAN] if country_queries else JOOBLE_QUERIES
 
         async with aiohttp.ClientSession() as http:
             for query in queries:  # 8 queries × 1 page = 8 requests/scan
