@@ -32,7 +32,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            overflow: hidden;
+            overflow: auto;
             background-image:
                 radial-gradient(ellipse 60% 50% at 15% 45%, rgba(139, 92, 246, 0.08), transparent),
                 radial-gradient(ellipse 50% 40% at 85% 30%, rgba(59, 130, 246, 0.06), transparent),
@@ -41,15 +41,15 @@
 
         .dashboard {
             width: 100%;
-            max-width: 1100px;
-            padding: 48px 40px;
+            max-width: 1180px;
+            padding: 40px;
             animation: fadeIn 0.8s ease-out;
         }
 
         /* ── Header ── */
         .header {
             text-align: center;
-            margin-bottom: 56px;
+            margin-bottom: 36px;
         }
         .eyebrow {
             font-size: 0.75rem;
@@ -130,6 +130,104 @@
             font-size: 1.2rem;
             color: var(--text-muted);
             opacity: 0.4;
+        }
+
+        /* ── History comparison ── */
+        .history-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .period-card {
+            position: relative;
+            overflow: hidden;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 24px;
+            padding: 28px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        .period-card::before {
+            content: '';
+            position: absolute;
+            inset: 0 0 auto;
+            height: 3px;
+        }
+        .period-card.month::before {
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-blue));
+        }
+        .period-card.all-time::before {
+            background: linear-gradient(90deg, var(--accent-purple), var(--accent-amber));
+        }
+        .period-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+        .period-kicker {
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+        .period-title {
+            font-size: 1.55rem;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+        }
+        .period-source {
+            flex: 0 0 auto;
+            border: 1px solid var(--card-border);
+            border-radius: 999px;
+            padding: 7px 11px;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .period-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1px;
+            overflow: hidden;
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            background: var(--card-border);
+        }
+        .history-metric {
+            min-width: 0;
+            background: rgba(10, 12, 20, 0.78);
+            padding: 20px;
+        }
+        .history-value {
+            display: block;
+            font-size: 2.45rem;
+            font-weight: 800;
+            line-height: 1;
+            margin-bottom: 7px;
+            font-variant-numeric: tabular-nums;
+        }
+        .month .history-value {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .all-time .history-value {
+            background: linear-gradient(135deg, var(--accent-purple), var(--accent-amber));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .history-label {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-weight: 500;
+            line-height: 1.3;
         }
 
         /* ── Hero User Card ── */
@@ -245,6 +343,7 @@
 
         @media (max-width: 900px) {
             .funnel { grid-template-columns: repeat(2, 1fr); }
+            .history-grid { grid-template-columns: 1fr; }
             .hero-row { grid-template-columns: 1fr; }
             .funnel-card:not(:last-child) .funnel-arrow { display: none; }
         }
@@ -253,6 +352,10 @@
             .dashboard { padding: 24px 16px; }
             .title { font-size: 2rem; }
             .funnel-value { font-size: 2.2rem; }
+            .period-card { padding: 20px; }
+            .period-title { font-size: 1.3rem; }
+            .history-value { font-size: 2rem; }
+            .history-metric { padding: 16px; }
             .hero-number, .sources-number { font-size: 3.5rem; }
         }
     </style>
@@ -263,33 +366,64 @@
 
     <div class="header">
         <div class="eyebrow">Platform Intelligence</div>
-        <h1 class="title">All of This — for One Person</h1>
+        <h1 class="title">The Job Search Engine — in Numbers</h1>
     </div>
 
-    <!-- Funnel -->
-    <div class="funnel">
-        <div class="funnel-card">
-            <div class="funnel-icon">🔍</div>
-            <div class="funnel-value skeleton" id="v-collected">0</div>
-            <div class="funnel-label">Jobs Collected</div>
-            <span class="funnel-arrow">→</span>
+    <!-- Month vs all-time history -->
+    <div class="history-grid">
+        <div class="period-card month">
+            <div class="period-header">
+                <div>
+                    <div class="period-kicker">Recent history</div>
+                    <h2 class="period-title">Last 30 Days</h2>
+                </div>
+                <span class="period-source" id="m-sources">— sources</span>
+            </div>
+            <div class="period-metrics">
+                <div class="history-metric">
+                    <span class="history-value skeleton" id="m-collected">0</span>
+                    <span class="history-label">Jobs collected</span>
+                </div>
+                <div class="history-metric">
+                    <span class="history-value skeleton" id="m-prefilter">0</span>
+                    <span class="history-label">Rejected before AI</span>
+                </div>
+                <div class="history-metric">
+                    <span class="history-value skeleton" id="m-analyzed">0</span>
+                    <span class="history-label">AI analyses</span>
+                </div>
+                <div class="history-metric">
+                    <span class="history-value skeleton" id="m-top">0</span>
+                    <span class="history-label">Top matches (70+)</span>
+                </div>
+            </div>
         </div>
-        <div class="funnel-card">
-            <div class="funnel-icon">⚡</div>
-            <div class="funnel-value skeleton" id="v-prefilter">0</div>
-            <div class="funnel-label">Rejected by Pre-filter</div>
-            <span class="funnel-arrow">→</span>
-        </div>
-        <div class="funnel-card">
-            <div class="funnel-icon">🧠</div>
-            <div class="funnel-value skeleton" id="v-analyzed">0</div>
-            <div class="funnel-label">AI Analyses Performed</div>
-            <span class="funnel-arrow">→</span>
-        </div>
-        <div class="funnel-card">
-            <div class="funnel-icon">🎯</div>
-            <div class="funnel-value skeleton" id="v-top">0</div>
-            <div class="funnel-label">Top Matches (70+)</div>
+        <div class="period-card all-time">
+            <div class="period-header">
+                <div>
+                    <div class="period-kicker">Complete history</div>
+                    <h2 class="period-title">All Time</h2>
+                </div>
+                <span class="period-source" id="a-sources">— sources</span>
+            </div>
+            <div class="period-metrics">
+                <div class="history-metric">
+                    <span class="history-value skeleton" id="a-collected">0</span>
+                    <span class="history-label">Jobs collected</span>
+                </div>
+                <div class="history-metric">
+                    <span class="history-value skeleton" id="a-prefilter">0</span>
+                    <span class="history-label">Rejected before AI</span>
+                </div>
+                <div class="history-metric">
+                    <span class="history-value skeleton" id="a-analyzed">0</span>
+                    <span class="history-label">AI analyses</span>
+                </div>
+                <div class="history-metric">
+                    <span class="history-value skeleton" id="a-top">0</span>
+                    <span class="history-label">Top matches (70+)</span>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -313,7 +447,7 @@
 
     <div class="footer">
         <span class="dot"></span>
-        <span>System Operational • All-time stats</span>
+        <span>System Operational • Live 30-day and all-time history</span>
     </div>
 </div>
 
@@ -337,12 +471,31 @@ async function load() {
         if (!r.ok) throw new Error('API error');
         const d = await r.json();
 
+        const allTime = d.history?.all_time || {
+            jobs_collected: d.total_jobs_collected,
+            prefilter_rejected: d.prefilter_rejected,
+            ai_analyses_performed: d.ai_analyses_performed,
+            top_matches: d.top_matches,
+            active_sources: d.active_sources,
+        };
+        const month = d.history?.month || {
+            jobs_collected: 0,
+            prefilter_rejected: 0,
+            ai_analyses_performed: 0,
+            top_matches: 0,
+            active_sources: 0,
+        };
+
         const map = [
-            ['v-collected', d.total_jobs_collected],
-            ['v-prefilter', d.prefilter_rejected],
-            ['v-analyzed',  d.ai_analyses_performed],
-            ['v-top',       d.top_matches],
-            ['v-sources',   d.active_sources],
+            ['m-collected', month.jobs_collected],
+            ['m-prefilter', month.prefilter_rejected],
+            ['m-analyzed',  month.ai_analyses_performed],
+            ['m-top',       month.top_matches],
+            ['a-collected', allTime.jobs_collected],
+            ['a-prefilter', allTime.prefilter_rejected],
+            ['a-analyzed',  allTime.ai_analyses_performed],
+            ['a-top',       allTime.top_matches],
+            ['v-sources',   allTime.active_sources],
         ];
 
         map.forEach(([id, val]) => {
@@ -350,6 +503,10 @@ async function load() {
             el.classList.remove('skeleton');
             animateValue(el, val || 0, 2200);
         });
+
+        const sourceLabel = count => `${count || 0} ${(count || 0) === 1 ? 'source' : 'sources'}`;
+        document.getElementById('m-sources').textContent = sourceLabel(month.active_sources);
+        document.getElementById('a-sources').textContent = sourceLabel(allTime.active_sources);
 
         // User count
         const userEl = document.getElementById('v-user');

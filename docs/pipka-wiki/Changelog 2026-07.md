@@ -2,6 +2,14 @@
 
 # Changelog июль 2026
 
+## 28 июля 2026 — история SMM-инфографики
+
+- `/api/public/stats` отдаёт два сопоставимых среза: последние 30 дней и всё
+  время — jobs, pre-filter, AI analyses, top matches и число источников.
+- `/infographic` показывает оба периода одновременно в screenshot-friendly
+  композиции; сохранены desktop и mobile layouts.
+- Flat-поля public stats оставлены для обратной совместимости.
+
 ## 28 июля 2026 — Brazil country pack + официальный Gupy feed
 
 - Добавлена Бразилия (`br`) в UI активных/скрытых стран, JobSpy/Indeed и

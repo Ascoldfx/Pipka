@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Request
@@ -96,20 +97,57 @@ async def get_public_stats():
         if expires_at > now:
             return payload
 
+    month_cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=30)
+
     async with async_session() as session:
-        total_jobs = (await session.execute(select(func.count(Job.id)))).scalar() or 0
-        total_analyses = (await session.execute(select(func.count(JobScore.id)))).scalar() or 0
-        prefilter_rejected = (await session.execute(
-            select(func.count(JobScore.id)).where(
-                JobScore.score == 0, JobScore.ai_analysis.is_(None),
+        job_totals = (
+            await session.execute(
+                select(
+                    func.count(Job.id),
+                    func.count(Job.id).filter(Job.scraped_at >= month_cutoff),
+                    func.count(func.distinct(Job.source)),
+                    func.count(func.distinct(Job.source)).filter(
+                        Job.scraped_at >= month_cutoff
+                    ),
+                )
             )
-        )).scalar() or 0
-        top_matches = (await session.execute(
-            select(func.count(JobScore.id)).where(JobScore.score >= 70)
-        )).scalar() or 0
-        sources_count = (await session.execute(
-            select(func.count(func.distinct(Job.source)))
-        )).scalar() or 0
+        ).one()
+        score_totals = (
+            await session.execute(
+                select(
+                    func.count(JobScore.id),
+                    func.count(JobScore.id).filter(
+                        JobScore.scored_at >= month_cutoff
+                    ),
+                    func.count(JobScore.id).filter(
+                        JobScore.score == 0,
+                        JobScore.ai_analysis.is_(None),
+                    ),
+                    func.count(JobScore.id).filter(
+                        JobScore.score == 0,
+                        JobScore.ai_analysis.is_(None),
+                        JobScore.scored_at >= month_cutoff,
+                    ),
+                    func.count(JobScore.id).filter(JobScore.score >= 70),
+                    func.count(JobScore.id).filter(
+                        JobScore.score >= 70,
+                        JobScore.scored_at >= month_cutoff,
+                    ),
+                )
+            )
+        ).one()
+
+        total_jobs, month_jobs, sources_count, month_sources = (
+            int(value or 0) for value in job_totals
+        )
+        (
+            total_analyses,
+            month_analyses,
+            prefilter_rejected,
+            month_prefilter_rejected,
+            top_matches,
+            month_top_matches,
+        ) = (int(value or 0) for value in score_totals)
         active_users = (await session.execute(
             select(func.count(User.id)).where(User.is_active == True)  # noqa: E712
         )).scalar() or 0
@@ -121,6 +159,23 @@ async def get_public_stats():
             "top_matches": top_matches,
             "active_sources": sources_count,
             "active_users": active_users,
+            "history": {
+                "month": {
+                    "days": 30,
+                    "jobs_collected": month_jobs,
+                    "prefilter_rejected": month_prefilter_rejected,
+                    "ai_analyses_performed": month_analyses,
+                    "top_matches": month_top_matches,
+                    "active_sources": month_sources,
+                },
+                "all_time": {
+                    "jobs_collected": total_jobs,
+                    "prefilter_rejected": prefilter_rejected,
+                    "ai_analyses_performed": total_analyses,
+                    "top_matches": top_matches,
+                    "active_sources": sources_count,
+                },
+            },
         }
         _PUBLIC_STATS_CACHE["stats"] = (now + _PUBLIC_STATS_TTL, payload)
         return payload

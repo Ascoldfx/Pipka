@@ -8,7 +8,7 @@
 |------|--------|-----------|
 | `app/static/dashboard.html` | ~2000 строк | Каркас + inline CSS + i18n-словари + ~70% логики |
 | `app/static/js/app.js` | ~600 строк | Инициализация, fetch-wrapper с CSRF, обработчики табов |
-| `app/static/infographic.html` | отдельный | Публичная статистика для лэндинга (`/infographic`) |
+| `app/static/infographic.html` | отдельный | SMM-friendly сравнение истории за 30 дней и всё время (`/infographic`) |
 | `app/static/llms.txt` | манифест | Описание проекта для AI-краулеров |
 
 ## Структура

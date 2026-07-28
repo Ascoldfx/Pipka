@@ -60,7 +60,11 @@ POST требует CSRF-заголовок — [[Безопасность#3-csr
 | Метод | Путь | Кэш | Описание |
 |-------|------|-----|---------|
 | GET | `/api/stats` | 30s/user | `{total_jobs, scored, top_matches, applied, rejected, inbox, sources}` |
-| GET | `/api/public/stats` | 5min global | Публичная статистика для лэндинга/инфографики |
+| GET | `/api/public/stats` | 5min global | Публичная статистика + `history.month` (30 дней) и `history.all_time` для SMM-инфографики |
+
+Оба history-среза содержат `jobs_collected`, `prefilter_rejected`,
+`ai_analyses_performed`, `top_matches`, `active_sources`. Старые flat-поля
+сохранены для обратной совместимости.
 
 `/api/stats` инвалидируется через `invalidate_stats_cache(user_id)` после `job_action` и `update_profile`.
 
