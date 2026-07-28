@@ -40,14 +40,18 @@ REJECT_TITLE_KEYWORDS = [
     "merchandiser",  # retail/marketing
     # Brazilian Portuguese junior / operational
     "analista", "coordenador", "coordenadora", "assistente",
-    "estagiário", "estagiario", "aprendiz", "comprador", "compradora",
-    "planejador", "planejadora",
+    "estagiário", "estagiario", "estágio", "estagio", "aprendiz",
+    "auxiliar", "operador", "operadora", "recepcionista",
+    "técnico", "tecnico", "supervisor", "júnior", " jr", "jr ",
+    "comprador", "compradora", "planejador", "planejadora",
     # Wrong function — NOT supply chain / procurement / operations
     "marketing", "sales director", "business development",
     "account executive", "account manager",
     "diretor comercial", "diretora comercial", "diretor de vendas",
     "diretora de vendas", "desenvolvimento de negócios",
-    "desenvolvimento de negocios",
+    "desenvolvimento de negocios", "executivo de negócios",
+    "executivo de negocios", "gerente comercial", "gerente de vendas",
+    "key account",
     "hr director", "hr manager", "human resources", "people operations",
     "recursos humanos",
     "people lead", "talent", "recruiting", "recruitment",

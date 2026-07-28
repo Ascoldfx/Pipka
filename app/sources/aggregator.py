@@ -24,8 +24,13 @@ NEGATIVE_KEYWORDS = [
     "merchandiser", "account executive", "founding",
     # Brazilian Portuguese junior / operational titles
     "analista", "coordenador", "coordenadora", "assistente",
-    "estagiário", "estagiario", "aprendiz", "comprador", "compradora",
-    "planejador", "planejadora",
+    "estagiário", "estagiario", "estágio", "estagio", "aprendiz",
+    "auxiliar", "operador", "operadora", "recepcionista",
+    "técnico", "tecnico", "supervisor", "júnior", " jr", "jr ",
+    "comprador", "compradora", "planejador", "planejadora",
+    # Brazilian Portuguese commercial / business-development titles
+    "executivo de negócios", "executivo de negocios",
+    "gerente comercial", "gerente de vendas", "key account",
 ]
 
 # Foreign language requirements (not EN/DE) → reject

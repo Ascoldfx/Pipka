@@ -17,6 +17,10 @@
   Без `GUPY_FEED_URL` источник остаётся выключенным.
 - `hidden_countries` теперь подавляет не только дефолтную веб-ленту, но и
   Telegram push; сбор и скоринг скрытых стран продолжаются.
+- По результатам первого live-скана расширен ранний PT-BR noise-фильтр:
+  estágio/auxiliar/operador/recepcionista/supervisor/jr и
+  executivo de negócios/gerente comercial/key account больше не расходуют
+  AI-скоринг.
 
 ## 4 июля 2026
 

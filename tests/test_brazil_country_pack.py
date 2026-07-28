@@ -137,6 +137,28 @@ def test_plain_portuguese_manager_stays_in_tier2():
     assert pre_filter(job, UserProfile()) == (False, "manager_tier2")
 
 
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Estágio de Custos",
+        "Auxiliar de Escritório",
+        "Operador de Loja",
+        "Recepcionista",
+        "Supervisor de Logística",
+        "Executivo de Negócios Jr.",
+        "Gerente Comercial",
+        "Key Account Manager",
+    ],
+)
+def test_brazilian_junior_and_commercial_noise_is_rejected_early(title):
+    job = Job(
+        title=title,
+        description="Operações, logística, compras e fornecedores.",
+    )
+
+    assert pre_filter(job, UserProfile()) == (False, "low")
+
+
 @pytest.mark.asyncio
 async def test_gupy_official_feed_parses_relevant_brazilian_jobs(monkeypatch):
     payload = {
