@@ -132,14 +132,16 @@ def start_scheduler(bot_app):
         id="embed_index_startup",
         replace_existing=True,
     )
-    # NVIDIA idle rescorer: every 30 min — runs only when Gemini queue drained
-    scheduler.add_job(
-        _nvidia_idle_rescore,
-        "interval",
-        minutes=30,
-        id="nvidia_idle_rescore",
-        replace_existing=True,
-    )
+    # Optional NVIDIA idle rescorer. NVIDIA remains available as the automatic
+    # backfill fallback even when this periodic refresh job is disabled.
+    if settings.nvidia_idle_rescore_enabled:
+        scheduler.add_job(
+            _nvidia_idle_rescore,
+            "interval",
+            minutes=30,
+            id="nvidia_idle_rescore",
+            replace_existing=True,
+        )
     # Watchlist scan: every 6 hours — search for jobs at target companies per user
     scheduler.add_job(
         _watchlist_scan,
@@ -457,28 +459,26 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
 def _backfill_score_fn():
     """Return the appropriate scoring function for backfill.
 
-    NVIDIA-first (changed 27.05.2026): Gemini's free tier (500 RPD) is chronically
-    exhausted by the real-time push path, so its breaker is open most of the day.
-    Picking Gemini first for backfill wasted whole 2h cycles on 429 retries before
-    falling through. NVIDIA Build (separate free quota) is the reliable bulk drainer;
-    Gemini stays dedicated to the real-time ``_score_and_notify`` push.
+    Gemini-first (changed 29.07.2026): the current Gemini 3.5 Flash Lite quota
+    has enough headroom for both real-time and backfill scoring, while NVIDIA
+    Build has become unreliable under bulk load (503s and read timeouts).
 
     Priority:
-      1. NVIDIA Build (free, separate quota) — primary backfill drainer.
-      2. Gemini Flash (free) — only if NVIDIA key absent AND breaker closed.
-      3. Claude (paid)       — last resort.
+      1. Gemini Flash Lite — primary scorer while its circuit breaker is closed.
+      2. NVIDIA Build      — automatic fallback when Gemini is unavailable.
+      3. Claude            — last resort.
     """
-    if settings.nvidia_api_key:
-        from app.scoring.nvidia_matcher import score_jobs_nvidia  # noqa: PLC0415
-        logger.debug("Backfill scorer: using NVIDIA Build (%s)", settings.nvidia_model)
-        return score_jobs_nvidia
-
     if settings.gemini_api_key:
         from app.scoring.gemini_matcher import is_gemini_available, score_jobs_gemini  # noqa: PLC0415
         if is_gemini_available():
             logger.debug("Backfill scorer: using Gemini (%s)", settings.gemini_scoring_model)
             return score_jobs_gemini
-        logger.warning("Backfill scorer: Gemini breaker open — falling back to Claude")
+        logger.warning("Backfill scorer: Gemini breaker open — trying NVIDIA fallback")
+
+    if settings.nvidia_api_key:
+        from app.scoring.nvidia_matcher import score_jobs_nvidia  # noqa: PLC0415
+        logger.debug("Backfill scorer: using NVIDIA fallback (%s)", settings.nvidia_model)
+        return score_jobs_nvidia
 
     logger.debug("Backfill scorer: using Claude (%s)", settings.claude_model)
     return score_jobs
@@ -767,7 +767,7 @@ async def _nvidia_idle_rescore():
       (a) recheck pre-filter rejects (score=0, ai_analysis IS NULL)
       (b) refresh stale successful scores (score > 0, scored_at older than N days)
     """
-    if not settings.nvidia_api_key:
+    if not settings.nvidia_idle_rescore_enabled or not settings.nvidia_api_key:
         return
 
     from app.scoring.nvidia_matcher import idle_rescore_for_user  # noqa: PLC0415

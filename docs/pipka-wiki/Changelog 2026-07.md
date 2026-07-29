@@ -2,6 +2,17 @@
 
 # Changelog июль 2026
 
+## 29 июля 2026 — массовый скоринг снова Gemini-first
+
+- Production-аудит за 24 часа: NVIDIA исчерпал все повторы в 105 пакетах
+  (`503`/`ReadTimeout`), тогда как Gemini 3.5 Flash Lite имел свободную
+  квоту.
+- Backfill переключён на цепочку Gemini 3.5 Flash Lite → NVIDIA при открытом
+  Gemini breaker → Claude.
+- 30-минутный NVIDIA idle-rescore стал opt-in и по умолчанию выключен;
+  fallback остаётся активным при наличии `NVIDIA_API_KEY`.
+- Добавлены регрессионные тесты приоритета и fallback.
+
 ## 28 июля 2026 — история SMM-инфографики
 
 - `/api/public/stats` отдаёт два сопоставимых среза: последние 30 дней и всё

@@ -22,8 +22,11 @@ class Settings(BaseSettings):
     gemini_analysis_max_output_tokens: int = 4096
     gemini_batch_delay: float = 4.0
 
-    # NVIDIA Build (optional — idle rescorer, runs only when Gemini queue drained)
+    # NVIDIA Build (optional fallback when the Gemini circuit breaker is open).
     # Get key at https://build.nvidia.com → set NVIDIA_API_KEY in .env to enable.
+    # The periodic idle rescorer is disabled by default: NVIDIA Build can be
+    # unstable under bulk load, while fallback scoring remains available.
+    nvidia_idle_rescore_enabled: bool = False
     nvidia_api_key: str = ""
     # google/gemma-4-31b-it was decommissioned from NVIDIA Build (404 / hangs).
     # llama-3.3-70b-instruct is live, free, non-reasoning, fast (~30s/8 jobs) and
