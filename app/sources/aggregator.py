@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -14,6 +14,17 @@ from app.models.job import Job
 from app.sources.base import JobSource, RawJob, SearchParams, is_fuzzy_duplicate
 
 logger = logging.getLogger(__name__)
+
+
+def _normalise_posted_at(value: datetime | None) -> datetime | None:
+    """Return a UTC-naive timestamp suitable for ``TIMESTAMP WITHOUT TIME ZONE``.
+
+    Source APIs mix naive values with ISO timestamps carrying offsets. Keeping
+    an aware value until the bulk insert makes asyncpg reject the entire scan.
+    """
+    if value is None or value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
 
 NEGATIVE_KEYWORDS = [
     "ausbildung", "student", "praktikum", "azubi", "trainee",
@@ -230,10 +241,9 @@ class JobAggregator:
             logger.info("After fuzzy dedup: %d jobs (removed %d near-duplicates)", len(fuzzy_deduped), removed)
         unique = fuzzy_deduped
 
-        # Filter with stats. cutoff is naive (server-local UTC); some sources
-        # (jobspy, jooble, wttj) leak tz-aware datetimes from upstream ISO strings,
-        # which crashes the comparison below. Normalise to naive at the compare site
-        # so we don't have to chase every source individually.
+        # Filter with stats. Some sources leak tz-aware datetimes from upstream
+        # ISO strings. Normalise the RawJob itself so both the comparison and
+        # the later PostgreSQL bulk insert receive a UTC-naive value.
         cutoff = datetime.now() - timedelta(days=params.max_age_days)
         # Non-European regions the users explicitly opted into via profile
         # countries — activates their markers in the location filter.
@@ -248,9 +258,8 @@ class JobAggregator:
             if _is_negative(job):
                 rejected_negative += 1
                 continue
+            job.posted_at = _normalise_posted_at(job.posted_at)
             posted = job.posted_at
-            if posted is not None and posted.tzinfo is not None:
-                posted = posted.replace(tzinfo=None)
             if posted is not None and posted < cutoff:
                 rejected_old += 1
                 continue

@@ -123,7 +123,7 @@ Settings содержит вторую сетку стран — `#s-hidden-coun
 const S = {
   page: 1,
   perPage: 50,
-  sort: 'score',
+  sort: 'date',              // newest publication first
   order: 'desc',
   totalPages: 1,
   tabStatus: '',           // 'new' / 'applied' / 'rejected' / ''

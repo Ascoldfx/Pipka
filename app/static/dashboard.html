@@ -670,7 +670,7 @@ function applyLang() {
         <col style="width:110px">
       </colgroup>
       <thead><tr>
-        <th data-sort="score" class="sorted"><span data-i18n="th.score">Score</span> <span class="arrow">&#9660;</span></th>
+        <th data-sort="score"><span data-i18n="th.score">Score</span> <span class="arrow"></span></th>
         <th data-sort="title"><span data-i18n="th.job">Job</span></th>
         <th data-sort="company"><span data-i18n="th.company">Company</span></th>
         <th><span data-i18n="th.location">Location</span></th>
@@ -959,7 +959,7 @@ function applyLang() {
 
 <script>
 /* ── State ── */
-const S = { page:1, perPage:50, sort:'score', order:'desc', totalPages:1, tabStatus:'', role:'guest', authenticated:false, activeTab:'jobs', opsWindow:24 };
+const S = { page:1, perPage:50, sort:'date', order:'desc', totalPages:1, tabStatus:'', role:'guest', authenticated:false, activeTab:'jobs', opsWindow:24 };
 const $ = id => document.getElementById(id);
 
 /* ── Language Picker ── */

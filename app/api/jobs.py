@@ -91,7 +91,7 @@ async def get_jobs(
     request: Request,
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=10, le=200),
-    sort: str = Query("score"),
+    sort: str = Query("date"),
     order: str = Query("desc"),
     min_score: int = Query(0, ge=0, le=100),
     source: str | None = Query(None),
@@ -238,15 +238,27 @@ async def get_jobs(
         }.get(sort, JobScore.score)
 
         if semantic_ids:
-            order_clause = case(
+            order_clauses = [case(
                 {job_id: idx for idx, job_id in enumerate(semantic_ids)},
                 value=Job.id,
                 else_=len(semantic_ids),
-            )
+            )]
         elif search_rank is not None and sort == "relevance":
-            order_clause = desc(search_rank).nulls_last()
+            order_clauses = [desc(search_rank).nulls_last(), desc(Job.posted_at).nulls_last(), desc(Job.id)]
+        elif sort == "date":
+            direction = asc if order == "asc" else desc
+            # Publication date is the user-facing source of truth. Rows whose
+            # source provides no publication date stay at the end, ordered by
+            # collection time. Job.id makes pagination deterministic when
+            # several boards publish the same day.
+            order_clauses = [
+                direction(Job.posted_at).nulls_last(),
+                direction(Job.scraped_at).nulls_last(),
+                direction(Job.id),
+            ]
         else:
             order_clause = asc(sort_col).nulls_last() if order == "asc" else desc(sort_col).nulls_last()
+            order_clauses = [order_clause, desc(Job.posted_at).nulls_last(), desc(Job.id)]
 
         stmt = (
             select(
@@ -261,7 +273,7 @@ async def get_jobs(
         )
         if filters:
             stmt = stmt.where(*filters)
-        stmt = stmt.order_by(order_clause).offset((page - 1) * per_page).limit(per_page)
+        stmt = stmt.order_by(*order_clauses).offset((page - 1) * per_page).limit(per_page)
 
         rows = (await session.execute(stmt)).all()
 

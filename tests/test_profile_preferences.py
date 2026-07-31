@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -7,7 +9,7 @@ from app.api import jobs as jobs_api
 from app.api.profile import _parse_country_codes, _parse_exclusion_list
 from app.models import Base
 from app.models.application import Application
-from app.models.job import Job
+from app.models.job import Job, JobScore
 from app.models.user import User, UserProfile
 import app.scoring.profile_hash as profile_hash_module
 from app.scoring.profile_hash import compute_profile_hash
@@ -133,5 +135,60 @@ async def test_hidden_country_affects_feed_but_not_explicit_filter_or_history(mo
     applied_history = await _get_jobs(request, status="applied")
     assert [job["country"] for job in applied_history["jobs"]] == ["sg"]
     assert applied_history["hidden_countries_applied"] == []
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_scored_feed_defaults_to_newest_publication_not_highest_score(monkeypatch):
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    now = datetime(2026, 7, 31, 12, 0, 0)
+    async with factory() as session:
+        user = User(id=1, name="Test", profile=UserProfile())
+        older_high_score = Job(
+            external_id="old-high",
+            source="test",
+            title="Older 99-point role",
+            country="de",
+            posted_at=now - timedelta(days=10),
+            dedup_hash="old-high",
+        )
+        newer_lower_score = Job(
+            external_id="new-lower",
+            source="test",
+            title="Newer 70-point role",
+            country="de",
+            posted_at=now - timedelta(days=1),
+            dedup_hash="new-lower",
+        )
+        session.add_all([user, older_high_score, newer_lower_score])
+        await session.flush()
+        session.add_all([
+            JobScore(user_id=user.id, job_id=older_high_score.id, score=99),
+            JobScore(user_id=user.id, job_id=newer_lower_score.id, score=70),
+        ])
+        await session.commit()
+
+    monkeypatch.setattr(jobs_api, "async_session", factory)
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/jobs",
+            "headers": [],
+            "query_string": b"",
+            "session": {"user_id": 1},
+        }
+    )
+
+    by_date = await _get_jobs(request, min_score=1)
+    assert [job["id"] for job in by_date["jobs"]] == [newer_lower_score.id, older_high_score.id]
+
+    by_score = await _get_jobs(request, min_score=1, sort="score")
+    assert [job["id"] for job in by_score["jobs"]] == [older_high_score.id, newer_lower_score.id]
 
     await engine.dispose()

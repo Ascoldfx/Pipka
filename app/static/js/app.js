@@ -1,5 +1,5 @@
 /* ── State ── */
-const S = { page:1, perPage:50, sort:'score', order:'desc', totalPages:1, tabStatus:'', role:'guest', authenticated:false, activeTab:'jobs', opsWindow:24 };
+const S = { page:1, perPage:50, sort:'date', order:'desc', totalPages:1, tabStatus:'', role:'guest', authenticated:false, activeTab:'jobs', opsWindow:24 };
 const $ = id => document.getElementById(id);
 
 /* ── CSRF: read JS-readable cookie set by CSRFMiddleware and inject the

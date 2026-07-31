@@ -40,6 +40,11 @@
 
 `semantic=1` — pre-rank через cosine-similarity к embedding профиля ([[Поиск и индексация]]); top-`SEMANTIC_SEARCH_LIMIT` (default 500) кандидатов сортируются по близости. Без флага — обычный SQL-сорт по `sort` колонке.
 
+Дефолтная сортировка — `sort=date&order=desc`: уже оценённые вакансии
+показываются от новой даты публикации к старой независимо от score. Вакансии
+без `posted_at` идут в конце по `scraped_at`; `id` стабилизирует пагинацию.
+Явный `sort=score` по-прежнему доступен.
+
 `search=…` на PostgreSQL использует tsvector + `websearch_to_tsquery`. На SQLite (dev) — fallback `ILIKE`.
 
 > **Значения `source`:** `adzuna`, `linkedin`, `indeed`, `glassdoor`, `arbeitnow`, `remotive`, `arbeitsagentur`, `xing`, `berlinstartupjobs`, `wttj`, `jooble`, `watchlist`
