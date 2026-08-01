@@ -19,7 +19,7 @@ import aiohttp
 from dateutil import parser as dateparser
 from defusedxml import ElementTree as ET
 
-from app.sources.base import JobSource, RawJob, SearchParams
+from app.sources.base import JobSource, RawJob, SearchParams, normalise_posted_at
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +190,7 @@ class BerlinStartupJobsSource(JobSource):
                 posted_at: datetime | None = None
                 if pub_date_str:
                     try:
-                        posted_at = dateparser.parse(pub_date_str).replace(tzinfo=None)
+                        posted_at = normalise_posted_at(dateparser.parse(pub_date_str))
                     except (OverflowError, TypeError, ValueError) as exc:
                         logger.debug("BSJ invalid publication date %r: %s", pub_date_str, exc)
 

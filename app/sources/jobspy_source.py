@@ -4,7 +4,7 @@ import asyncio
 import logging
 from datetime import datetime
 
-from app.sources.base import RawJob, SearchParams
+from app.sources.base import RawJob, SearchParams, normalise_posted_at
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +170,9 @@ class JobSpySource:
                 posted = None
                 if row.get("date_posted"):
                     try:
-                        posted = datetime.fromisoformat(str(row["date_posted"]))
+                        posted = normalise_posted_at(
+                            datetime.fromisoformat(str(row["date_posted"]))
+                        )
                     except (ValueError, TypeError):
                         pass
 

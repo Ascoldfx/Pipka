@@ -20,7 +20,7 @@ import aiohttp
 from dateutil import parser as dateparser
 
 from app.config import settings
-from app.sources.base import JobSource, RawJob, SearchParams
+from app.sources.base import JobSource, RawJob, SearchParams, normalise_posted_at
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ def _parse_date(value):
         return None
     try:
         parsed = dateparser.parse(str(value))
-        return parsed.replace(tzinfo=None) if parsed else None
+        return normalise_posted_at(parsed)
     except (TypeError, ValueError, OverflowError):
         return None
 

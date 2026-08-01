@@ -6,7 +6,7 @@ import aiohttp
 from dateutil import parser as dateparser
 
 from app.config import settings
-from app.sources.base import RawJob, SearchParams
+from app.sources.base import RawJob, SearchParams, normalise_posted_at
 
 logger = logging.getLogger(__name__)
 
@@ -70,12 +70,14 @@ class ArbeitsagenturSource:
                 posted = None
                 if item.get("eintrittsdatum"):
                     try:
-                        posted = dateparser.parse(item["eintrittsdatum"]).replace(tzinfo=None)
+                        posted = normalise_posted_at(dateparser.parse(item["eintrittsdatum"]))
                     except Exception:
                         pass
                 if not posted and item.get("aktuelleVeroeffentlichungsdatum"):
                     try:
-                        posted = dateparser.parse(item["aktuelleVeroeffentlichungsdatum"]).replace(tzinfo=None)
+                        posted = normalise_posted_at(
+                            dateparser.parse(item["aktuelleVeroeffentlichungsdatum"])
+                        )
                     except Exception:
                         pass
 

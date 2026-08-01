@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -12,7 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import async_session
 from app.models.job import Job
-from app.sources.base import JobSource, RawJob, SearchParams, is_fuzzy_duplicate
+from app.sources.base import (
+    JobSource,
+    RawJob,
+    SearchParams,
+    is_fuzzy_duplicate,
+    normalise_posted_at,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +29,7 @@ def _normalise_posted_at(value: datetime | None) -> datetime | None:
     Source APIs mix naive values with ISO timestamps carrying offsets. Keeping
     an aware value until the bulk insert makes asyncpg reject the entire scan.
     """
-    if value is None or value.tzinfo is None:
-        return value
-    return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return normalise_posted_at(value)
 
 NEGATIVE_KEYWORDS = [
     "ausbildung", "student", "praktikum", "azubi", "trainee",
@@ -204,7 +208,7 @@ class JobAggregator:
 
         logger.info("Aggregated %d raw jobs from %d sources", len(raw_jobs), len(active_sources))
 
-        # Pass 1 — exact dedup by SHA-256(title+company)
+        # Pass 1 — exact dedup by title + company + country + location.
         seen_hashes: set[str] = set()
         unique: list[RawJob] = []
         for job in raw_jobs:

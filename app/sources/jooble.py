@@ -20,7 +20,7 @@ from datetime import datetime
 import aiohttp
 
 from app.config import settings
-from app.sources.base import JobSource, RawJob, SearchParams
+from app.sources.base import JobSource, RawJob, SearchParams, normalise_posted_at
 
 logger = logging.getLogger(__name__)
 
@@ -191,8 +191,8 @@ class JoobleSource(JobSource):
                 posted_at: datetime | None = None
                 if updated:
                     try:
-                        posted_at = datetime.fromisoformat(
-                            str(updated).replace("Z", "+00:00")
+                        posted_at = normalise_posted_at(
+                            datetime.fromisoformat(str(updated).replace("Z", "+00:00"))
                         )
                     except Exception:
                         pass

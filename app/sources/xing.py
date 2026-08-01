@@ -16,7 +16,7 @@ from datetime import datetime
 
 import aiohttp
 
-from app.sources.base import JobSource, RawJob, SearchParams
+from app.sources.base import JobSource, RawJob, SearchParams, normalise_posted_at
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +166,9 @@ class XingSource(JobSource):
             raw_date = val.get(date_field)
             if raw_date:
                 try:
-                    posted_at = datetime.fromisoformat(raw_date.replace("Z", "+00:00")).replace(tzinfo=None)
+                    posted_at = normalise_posted_at(
+                        datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+                    )
                     if date_field != "activeUntil":
                         break
                 except (ValueError, AttributeError):
@@ -236,7 +238,9 @@ class XingSource(JobSource):
             posted_at = None
             if refreshed:
                 try:
-                    posted_at = datetime.fromisoformat(refreshed.replace("Z", "+00:00")).replace(tzinfo=None)
+                    posted_at = normalise_posted_at(
+                        datetime.fromisoformat(refreshed.replace("Z", "+00:00"))
+                    )
                 except ValueError:
                     pass
 

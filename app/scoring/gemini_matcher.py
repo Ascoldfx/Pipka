@@ -374,6 +374,8 @@ async def score_jobs_gemini(
             where=or_(
                 JobScore.profile_hash.is_(None),
                 JobScore.profile_hash != stmt.excluded.profile_hash,
+                JobScore.model_version.is_(None),
+                JobScore.model_version != stmt.excluded.model_version,
             ),
         ).returning(JobScore.id, JobScore.job_id)
         try:

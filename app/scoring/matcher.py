@@ -147,12 +147,14 @@ async def score_jobs(
     cache_cutoff = datetime.now() - timedelta(hours=settings.score_cache_hours)
     job_ids = [j.id for j in jobs]
     current_hash = compute_profile_hash(profile)
+    current_model = MODEL_CLAUDE()
     cached_result = await session.execute(
         select(JobScore).where(
             JobScore.job_id.in_(job_ids),
             JobScore.user_id == user.id,
             JobScore.scored_at > cache_cutoff,
             JobScore.profile_hash == current_hash,
+            JobScore.model_version == current_model,
         )
     )
     cached_map = {s.job_id: s for s in cached_result.scalars().all()}
@@ -283,6 +285,8 @@ async def _score_batch(
         where=or_(
             JobScore.profile_hash.is_(None),
             JobScore.profile_hash != stmt.excluded.profile_hash,
+            JobScore.model_version.is_(None),
+            JobScore.model_version != stmt.excluded.model_version,
         ),
     ).returning(JobScore.id, JobScore.job_id)
 

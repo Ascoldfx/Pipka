@@ -24,13 +24,31 @@ from app.models.user import UserProfile
 
 # Increment whenever deterministic pre-filter semantics change. This makes
 # existing JobScore rows stale even when the user did not edit their profile.
-SCORING_RULES_VERSION = "2026-07-28.2"
+SCORING_RULES_VERSION = "2026-08-01.1"
 
 # Backend identifiers — pulled from settings so an env-only model bump
 # automatically invalidates downstream caches without code changes.
 MODEL_GEMINI = lambda: f"gemini:{settings.gemini_scoring_model}"   # noqa: E731
 MODEL_CLAUDE = lambda: f"claude:{settings.claude_model}"           # noqa: E731
 MODEL_NVIDIA = lambda: f"nvidia:{settings.nvidia_model}"           # noqa: E731
+
+
+def current_primary_model_version() -> str:
+    """Return the configured authoritative scorer for cache validation.
+
+    A temporary NVIDIA fallback must not make current Gemini scores stale.
+    Conversely, fallback scores return to the queue once Gemini recovers.
+    """
+    if settings.gemini_api_key:
+        return MODEL_GEMINI()
+    if settings.nvidia_api_key:
+        return MODEL_NVIDIA()
+    return MODEL_CLAUDE()
+
+
+def valid_score_model_versions() -> tuple[str, str]:
+    """Models that make a current-profile score cacheable."""
+    return ("prefilter", current_primary_model_version())
 
 # The set of profile attributes that influence scoring. Order is fixed so
 # the resulting JSON serialisation is deterministic across runs.

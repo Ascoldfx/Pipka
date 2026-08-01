@@ -7,7 +7,7 @@ import aiohttp
 from dateutil import parser as dateparser
 
 from app.config import settings
-from app.sources.base import RawJob, SearchParams
+from app.sources.base import RawJob, SearchParams, normalise_posted_at
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +151,7 @@ class AdzunaSource:
         jobs: list[RawJob] = []
         for item in data.get("results", []):
             try:
-                posted = dateparser.parse(item["created"]).replace(tzinfo=None) if item.get("created") else None
+                posted = normalise_posted_at(dateparser.parse(item["created"])) if item.get("created") else None
                 title = item.get("title", "").replace("<b>", "").replace("</b>", "")
                 area = item.get("location", {}).get("display_name", "")
 

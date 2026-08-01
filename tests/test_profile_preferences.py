@@ -12,7 +12,7 @@ from app.models.application import Application
 from app.models.job import Job, JobScore
 from app.models.user import User, UserProfile
 import app.scoring.profile_hash as profile_hash_module
-from app.scoring.profile_hash import compute_profile_hash
+from app.scoring.profile_hash import compute_profile_hash, valid_score_model_versions
 
 
 def test_country_codes_are_normalised_and_deduplicated():
@@ -55,6 +55,18 @@ def test_scoring_rules_version_invalidates_profile_hash(monkeypatch):
     )
 
     assert compute_profile_hash(profile) != previous_hash
+
+
+def test_score_cache_tracks_the_configured_primary_model(monkeypatch):
+    monkeypatch.setattr(profile_hash_module.settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(profile_hash_module.settings, "gemini_scoring_model", "gemini-new")
+    monkeypatch.setattr(profile_hash_module.settings, "nvidia_api_key", "fallback-key")
+
+    assert valid_score_model_versions() == ("prefilter", "gemini:gemini-new")
+
+    monkeypatch.setattr(profile_hash_module.settings, "gemini_api_key", "")
+    monkeypatch.setattr(profile_hash_module.settings, "nvidia_model", "nvidia-new")
+    assert valid_score_model_versions() == ("prefilter", "nvidia:nvidia-new")
 
 
 def test_exclusion_parser_drops_placeholders_and_deduplicates():

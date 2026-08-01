@@ -6,7 +6,7 @@ import urllib.parse
 import aiohttp
 from dateutil import parser as dateparser
 
-from app.sources.base import JobSource, RawJob, SearchParams
+from app.sources.base import JobSource, RawJob, SearchParams, normalise_posted_at
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,11 @@ class RemotiveSource(JobSource):
                 if not location_ok:
                     continue
 
-                posted = dateparser.parse(item["publication_date"]).replace(tzinfo=None) if item.get("publication_date") else None
+                posted = (
+                    normalise_posted_at(dateparser.parse(item["publication_date"]))
+                    if item.get("publication_date")
+                    else None
+                )
                 jobs.append(
                     RawJob(
                         external_id=f"remotive_{item.get('id')}",

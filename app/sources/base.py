@@ -4,7 +4,7 @@ import hashlib
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Protocol
 
 
@@ -27,8 +27,35 @@ class RawJob:
 
     @property
     def dedup_hash(self) -> str:
-        normalized = _normalize(f"{self.title}|{self.company_name or ''}")
-        return hashlib.sha256(normalized.encode()).hexdigest()
+        return build_dedup_hash(
+            self.title,
+            self.company_name,
+            self.country,
+            self.location,
+        )
+
+
+def normalise_posted_at(value: datetime | None) -> datetime | None:
+    """Store source timestamps as UTC-naive without discarding an offset."""
+    if value is None or value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def build_dedup_hash(
+    title: str,
+    company_name: str | None,
+    country: str | None,
+    location: str | None,
+) -> str:
+    """Stable v2 identity that preserves same-company roles by geography."""
+    components = (
+        _normalize(title),
+        _normalize(company_name or ""),
+        _normalize(country or ""),
+        _normalize(location or ""),
+    )
+    return hashlib.sha256(("v2|" + "|".join(components)).encode()).hexdigest()
 
 
 def _normalize(text: str) -> str:
@@ -148,7 +175,7 @@ def is_fuzzy_duplicate(a: "RawJob", b: "RawJob") -> bool:
     All three conditions must hold:
       1. Normalised title matches exactly.
       2. Company names are compatible (one is a refinement of the other).
-      3. Locations do NOT clearly conflict (different cities = different roles).
+      3. Countries and locations do NOT clearly conflict.
 
     The location guard prevents merging e.g.:
       "Head of Procurement" @ Siemens Energy, Frankfurt
@@ -157,6 +184,8 @@ def is_fuzzy_duplicate(a: "RawJob", b: "RawJob") -> bool:
     if _normalize(a.title) != _normalize(b.title):
         return False
     if not _are_same_company(a.company_name, b.company_name):
+        return False
+    if a.country and b.country and _normalize(a.country) != _normalize(b.country):
         return False
     if _locations_conflict(a.location, b.location):
         return False

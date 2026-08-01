@@ -18,9 +18,8 @@ from app.database import async_session
 from app.models.application import Application
 from app.models.job import Job, JobScore
 from app.models.user import User, UserProfile
-from app.scoring.gemini_matcher import score_jobs_gemini
 from app.scoring.matcher import score_jobs
-from app.scoring.profile_hash import compute_profile_hash
+from app.scoring.profile_hash import compute_profile_hash, valid_score_model_versions
 from app.scoring.rules import matches_explicit_target_title, pre_filter
 from app.services.backup_service import run_backup
 from app.services.ops_service import record_ops_event
@@ -318,6 +317,7 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
         select(JobScore.job_id).where(
             JobScore.user_id == user.id,
             JobScore.profile_hash == profile_hash,
+            JobScore.model_version.in_(valid_score_model_versions()),
         )
     )
     already_scored_ids = {row[0] for row in scored_result.fetchall()}
@@ -366,11 +366,9 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
     # permanently marked as scored.
     to_score = prioritized_jobs[:80]
 
-    if settings.gemini_api_key:
-        logger.info("Using Gemini for real-time scoring")
-        scores = await score_jobs_gemini(to_score, user, session)
-    else:
-        scores = await score_jobs(to_score, user, session)
+    score_fn = _backfill_score_fn()
+    logger.info("Using %s for real-time scoring", score_fn.__name__)
+    scores = await score_fn(to_score, user, session)
 
     # Find top results to push. Hidden countries are still collected and
     # scored for an auditable pilot, but must not leak into automatic
@@ -606,6 +604,7 @@ async def _backfill_score():
                     select(JobScore.job_id).where(
                         JobScore.user_id == user.id,
                         JobScore.profile_hash == profile_hash,
+                        JobScore.model_version.in_(valid_score_model_versions()),
                     )
                 )
                 already_scored_ids = {row[0] for row in scored_result.fetchall()}
@@ -659,6 +658,8 @@ async def _backfill_score():
                         where=or_(
                             JobScore.profile_hash.is_(None),
                             JobScore.profile_hash != stmt.excluded.profile_hash,
+                            JobScore.model_version.is_(None),
+                            JobScore.model_version != stmt.excluded.model_version,
                         ),
                     )
                     await session.execute(stmt)

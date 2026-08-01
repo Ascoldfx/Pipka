@@ -11,7 +11,7 @@ import aiohttp
 from dateutil import parser as dateparser
 
 from app.config import settings
-from app.sources.base import RawJob, SearchParams
+from app.sources.base import RawJob, SearchParams, normalise_posted_at
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +115,7 @@ class WatchlistSource:
             posted_at = None
             if item.get("created"):
                 try:
-                    posted_at = dateparser.parse(item["created"])
+                    posted_at = normalise_posted_at(dateparser.parse(item["created"]))
                 except Exception:
                     pass
 
