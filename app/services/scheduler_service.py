@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
 from app.bot.formatters import format_job_card
@@ -16,11 +17,11 @@ from app.config import settings
 from app.database import async_session
 from app.models.application import Application
 from app.models.job import Job, JobScore
-from app.models.user import User
+from app.models.user import User, UserProfile
 from app.scoring.gemini_matcher import score_jobs_gemini
 from app.scoring.matcher import score_jobs
 from app.scoring.profile_hash import compute_profile_hash
-from app.scoring.rules import pre_filter
+from app.scoring.rules import matches_explicit_target_title, pre_filter
 from app.services.backup_service import run_backup
 from app.services.ops_service import record_ops_event
 from app.services.tracker_service import get_hidden_dedup_hashes, get_hidden_job_ids
@@ -349,31 +350,21 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
 
     logger.info("Scoring %d new jobs for user %s", len(new_jobs), user.telegram_id)
 
-    # Score only new jobs (max 80 per run to control costs/limits)
-    to_score = new_jobs[:80]
-
-    # Phase 3 hybrid: same semantic skip path as in _backfill_score. Filters
-    # out clearly-not-a-fit candidates BEFORE the AI call so we don't burn
-    # Gemini RPD on jobs whose embedding cosine to the profile is below
-    # ``semantic_skip_threshold``. Falls through (no skips) when either side
-    # has no embedding yet.
-    to_score, skipped = await _semantic_skip_filter(session, user, profile_hash, to_score)
-    if skipped:
+    # Similarity is a ranking hint, never a rejection. Explicit target-title
+    # matches lead even when an embedding is misleading.
+    prioritized_jobs, deprioritized = await _semantic_priority_filter(
+        session, user, profile_hash, new_jobs
+    )
+    if deprioritized:
         logger.info(
-            "Real-time semantic-skip: %d jobs flagged below cosine %.2f for user %s",
-            skipped, settings.semantic_skip_threshold, user.telegram_id,
+            "Real-time semantic-priority: %d jobs placed after stronger candidates "
+            "(cosine < %.2f) for user %s",
+            deprioritized, settings.semantic_skip_threshold, user.telegram_id,
         )
 
-    if not to_score:
-        logger.info("All %d candidates short-circuited by semantic_skip for user %s", skipped, user.telegram_id)
-        return {
-            "user_id": user.id,
-            "telegram_id": user.telegram_id,
-            "eligible_jobs": len(new_jobs),
-            "scored_jobs": skipped,
-            "top_results": 0,
-            "pushed": 0,
-        }
+    # Low-similarity jobs stay eligible for a later run instead of being
+    # permanently marked as scored.
+    to_score = prioritized_jobs[:80]
 
     if settings.gemini_api_key:
         logger.info("Using Gemini for real-time scoring")
@@ -484,27 +475,51 @@ def _backfill_score_fn():
     return score_jobs
 
 
-async def _semantic_skip_filter(
+def _order_by_semantic_priority(
+    candidates: list[Job],
+    similarities: dict[int, float],
+    threshold: float,
+    profile: UserProfile | None,
+) -> tuple[list[Job], int]:
+    """Order candidates without removing any of them.
+
+    Exact targets lead, then sufficiently similar jobs, jobs awaiting an
+    embedding, and finally low-similarity jobs. Input order breaks ties.
+    """
+    decorated: list[tuple[int, float, int, Job]] = []
+    low_count = 0
+    for index, job in enumerate(candidates):
+        similarity = similarities.get(job.id)
+        if matches_explicit_target_title(job.title, profile):
+            group = 0
+        elif similarity is not None and similarity >= threshold:
+            group = 1
+        elif similarity is None:
+            group = 2
+        else:
+            group = 3
+            low_count += 1
+        decorated.append((group, -(similarity or 0.0), index, job))
+
+    decorated.sort(key=lambda item: item[:3])
+    return [item[3] for item in decorated], low_count
+
+
+async def _semantic_priority_filter(
     session,
     user: User,
     profile_hash: str | None,
     candidates: list[Job],
 ) -> tuple[list[Job], int]:
-    """Pre-filter candidates by cosine-similarity to user's profile embedding.
+    """Prioritise candidates by cosine similarity without rejecting any.
 
-    Jobs whose embedding is below ``semantic_skip_threshold`` are marked with
-    ``score=0, model_version="semantic_skip"`` and removed from the AI queue.
-    Saves AI quota — typical Gemini-tier user spends 50%+ of daily RPD on
-    backfill that could be answered by cheap vector math.
-
-    Returns ``(jobs_to_score, skipped_count)``. Falls through (no-op) when:
+    Returns ``(ordered_jobs, low_similarity_count)``. Falls through when:
     * feature disabled (``semantic_skip_enabled=False``)
     * user profile has no embedding yet
     * not on PostgreSQL (no pgvector)
     * candidate list is empty
 
-    On any error — logs and returns the input unchanged. We never want this
-    optimisation to bring down backfill.
+    On a database error it returns the input unchanged.
     """
     if not settings.semantic_skip_enabled or not candidates:
         return candidates, 0
@@ -532,10 +547,7 @@ async def _semantic_skip_filter(
     job_ids = [j.id for j in candidates]
     threshold = settings.semantic_skip_threshold
 
-    # pgvector cosine distance: ``<=>`` returns 0 for identical, 1 for
-    # orthogonal, 2 for opposite. We want similarity (1 - distance/2 ≈ cosine).
-    # Practically: distance <= 1 - threshold filters jobs that are similar
-    # enough to keep. Below = skip via semantic.
+    # pgvector cosine distance is 1 - cosine similarity.
     try:
         result = await session.execute(
             text(
@@ -551,58 +563,11 @@ async def _semantic_skip_filter(
             {"pid": profile.id, "ids": job_ids},
         )
         sims = {row[0]: float(row[1]) for row in result.all()}
-    except Exception as exc:
-        logger.warning("semantic_skip query failed for user %s: %s", user.id, exc)
+    except SQLAlchemyError as exc:
+        logger.warning("semantic priority query failed for user %s: %s", user.id, exc)
         return candidates, 0
 
-    keep: list[Job] = []
-    skip_rows: list[dict] = []
-    for job in candidates:
-        sim = sims.get(job.id)
-        if sim is None:
-            # Job has no embedding yet — let AI score it normally; embed_index
-            # will catch up. Don't false-skip.
-            keep.append(job)
-            continue
-        if sim >= threshold:
-            keep.append(job)
-        else:
-            skip_rows.append({
-                "job_id": job.id,
-                "user_id": user.id,
-                "score": 0,
-                "ai_analysis": f"semantic skip (cosine={sim:.2f})",
-                "profile_hash": profile_hash,
-                "model_version": "semantic_skip",
-            })
-
-    if skip_rows:
-        # Same UPSERT pattern as elsewhere — overwrite stale rows (including
-        # legacy NULL hashes), while leaving matching ones alone.
-        stmt = pg_insert(JobScore).values(skip_rows)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["job_id", "user_id"],
-            set_={
-                "score": stmt.excluded.score,
-                "ai_analysis": stmt.excluded.ai_analysis,
-                "scored_at": func.now(),
-                "profile_hash": stmt.excluded.profile_hash,
-                "model_version": stmt.excluded.model_version,
-            },
-            where=or_(
-                JobScore.profile_hash.is_(None),
-                JobScore.profile_hash != stmt.excluded.profile_hash,
-            ),
-        )
-        try:
-            await session.execute(stmt)
-            await session.commit()
-        except Exception as exc:
-            await session.rollback()
-            logger.warning("semantic_skip UPSERT failed for user %s: %s", user.id, exc)
-            return candidates, 0
-
-    return keep, len(skip_rows)
+    return _order_by_semantic_priority(candidates, sims, threshold, profile)
 
 
 async def _backfill_score():
@@ -703,19 +668,19 @@ async def _backfill_score():
                         len(capped), user.telegram_id,
                     )
 
-                # Phase 3 hybrid: split off "obviously not a fit" via cosine
-                # similarity to profile-embedding BEFORE the expensive AI call.
-                # See _semantic_skip_filter for details.
-                need_ai_t1, t1_skipped = await _semantic_skip_filter(
+                # Similarity only orders candidates; it cannot discard them.
+                need_ai_t1, t1_deprioritized = await _semantic_priority_filter(
                     session, user, profile_hash, need_ai_t1
                 )
-                need_ai_t2, t2_skipped = await _semantic_skip_filter(
+                need_ai_t2, t2_deprioritized = await _semantic_priority_filter(
                     session, user, profile_hash, need_ai_t2
                 )
-                if t1_skipped + t2_skipped:
+                if t1_deprioritized + t2_deprioritized:
                     logger.info(
-                        "Backfill semantic-skip [%s]: %d t1 + %d t2 jobs flagged below cosine %.2f for user %s",
-                        backend, t1_skipped, t2_skipped, settings.semantic_skip_threshold, user.telegram_id,
+                        "Backfill semantic-priority [%s]: %d t1 + %d t2 jobs placed after "
+                        "stronger candidates (cosine < %.2f) for user %s",
+                        backend, t1_deprioritized, t2_deprioritized,
+                        settings.semantic_skip_threshold, user.telegram_id,
                     )
 
                 # Tier 1 first: director / head of / VP

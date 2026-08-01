@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -28,7 +29,7 @@ def _normalise_posted_at(value: datetime | None) -> datetime | None:
 
 NEGATIVE_KEYWORDS = [
     "ausbildung", "student", "praktikum", "azubi", "trainee",
-    "werkstudent", "junior", "intern", "duales studium",
+    "werkstudent", "junior", "duales studium",
     "specialist", "analyst", "coordinator", "assistant", "clerk",
     "sachbearbeiter", "referent", "mitarbeiter", "fachkraft",
     "dispatcher", "planner",
@@ -43,6 +44,8 @@ NEGATIVE_KEYWORDS = [
     "executivo de negócios", "executivo de negocios",
     "gerente comercial", "gerente de vendas", "key account",
 ]
+
+INTERN_TITLE_PATTERN = re.compile(r"\bintern(?:ship)?s?\b", re.IGNORECASE)
 
 # Foreign language requirements (not EN/DE) → reject
 FOREIGN_LANG_REQUIRED = [
@@ -650,6 +653,8 @@ def _is_negative(job: RawJob) -> bool:
     title_lower = job.title.lower()
     desc_lower = (job.description or "").lower()
     text = f"{title_lower} {desc_lower}"
+    if INTERN_TITLE_PATTERN.search(title_lower):
+        return True
     if any(kw in title_lower for kw in NEGATIVE_KEYWORDS):
         return True
     if any(phrase in text for phrase in EXCLUSION_PHRASES):

@@ -34,7 +34,7 @@ REJECT_TITLE_KEYWORDS = [
     "specialist", "analyst", "coordinator", "assistant", "clerk",
     "sachbearbeiter", "referent", "mitarbeiter", "fachkraft",
     "junior", "trainee", "werkstudent", "praktikant", "azubi",
-    "intern", "student",
+    "student",
     "buyer",  # operational buyer, not strategic
     "dispatcher", "planner",  # too operational
     "merchandiser",  # retail/marketing
@@ -70,6 +70,8 @@ REJECT_TITLE_KEYWORDS = [
     "consultant", "consulting", "berater", "beratung",
     "advisory", "advisor",
 ]
+
+INTERN_TITLE_PATTERN = re.compile(r"\bintern(?:ship)?s?\b", re.IGNORECASE)
 
 DOMAIN_KEYWORDS = [
     "supply chain", "procurement", "einkauf", "beschaffung", "logistics",
@@ -208,8 +210,9 @@ CORE_FUNCTION_TITLE_PATTERN = re.compile(
     r"suprimentos|compras|logística|abastecimento)\b"
 )
 
-COO_TITLE_PATTERN = re.compile(
-    r"\bcoo\b|\bchief\s+(?:operating|operations)\s+officer\b"
+COO_ROLE_PATTERN = re.compile(
+    r"^(?:(?:group|regional|global|interim|acting|deputy|country|division|"
+    r"apac|emea|mena)\s+)*(?:coo|chief\s+(?:operating|operations)\s+officer)(?:\b|$)"
 )
 
 TARGET_TITLE_FILLER_TOKENS = {
@@ -308,13 +311,13 @@ def is_commercial_function_title(title: str) -> bool:
 
 
 def is_non_target_coo(title: str, profile: UserProfile | None) -> bool:
-    """Reject COO unless that direction is explicitly present in target roles."""
-    if not COO_TITLE_PATTERN.search(_normalise_title(title)):
+    """Reject COO as the advertised role, not incidental mentions of a COO."""
+    if not COO_ROLE_PATTERN.search(_normalise_title(title)):
         return False
     if profile is None or not profile.target_titles:
         return True
     return not any(
-        COO_TITLE_PATTERN.search(_normalise_title(target))
+        COO_ROLE_PATTERN.search(_normalise_title(target))
         for target in profile.target_titles
         if target
     )
@@ -358,6 +361,11 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     desc_lower = (job.description or "").lower()
     text = f"{title_lower} {desc_lower}"
     explicit_target_match = matches_explicit_target_title(job.title, profile)
+
+    # Match the complete word so "International" and "Internal" are not
+    # mistaken for internships. An actual internship remains a hard reject.
+    if INTERN_TITLE_PATTERN.search(title_lower):
+        return False, "low"
 
     # COO was deliberately removed from this candidate's target directions.
     # Keep the rule profile-driven so a future user can opt in explicitly.

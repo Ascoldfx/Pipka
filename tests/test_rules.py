@@ -226,6 +226,23 @@ def test_coo_can_be_explicitly_enabled_in_target_roles():
 @pytest.mark.parametrize(
     "title",
     [
+        "Head of COO Supply Chain Solutions",
+        "Director, COO Transformation Office",
+        "Head of Operations — COO Organisation",
+    ],
+)
+def test_coo_mention_is_not_mistaken_for_the_advertised_role(title):
+    profile = UserProfile(target_titles=["Director Operations"])
+    assert is_non_target_coo(title, profile) is False
+    assert pre_filter(
+        Job(title=title, description="Lead international supply chain transformation."),
+        profile,
+    )[0] is True
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
         "Director of Retail Supply Chain",
         "Commercial Procurement Director",
         "Head of Sourcing — Retail",
@@ -350,3 +367,26 @@ def test_salary_is_ignored(salary_min):
     passed, bucket = pre_filter(job, UserProfile())
     assert passed is True
     assert bucket == "high"
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "International Supply Chain Director",
+        "International Head of Procurement",
+        "Head of Internal Operations",
+    ],
+)
+def test_international_and_internal_are_not_mistaken_for_internships(title):
+    assert pre_filter(
+        Job(title=title, description="Lead global supply chain operations."),
+        UserProfile(),
+    )[0] is True
+
+
+@pytest.mark.parametrize("title", ["Supply Chain Intern", "Procurement Internship"])
+def test_actual_internships_are_still_rejected(title):
+    assert pre_filter(
+        Job(title=title, description="Support global supply chain operations."),
+        UserProfile(),
+    ) == (False, "low")
