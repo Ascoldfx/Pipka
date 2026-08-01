@@ -1,7 +1,8 @@
 import logging
 import secrets
-from contextlib import asynccontextmanager
 import time
+from contextlib import asynccontextmanager
+from typing import ClassVar
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
@@ -23,6 +24,7 @@ from app.api.stats import router as stats_router
 from app.config import settings
 from app.database import init_db
 from app.services.ops_service import record_ops_event
+
 _access_log = logging.getLogger("pipka.access")
 
 # Sentry — initialise BEFORE FastAPI() so the SDK can install its hooks on
@@ -38,24 +40,26 @@ if settings.sentry_dsn:
     # We log resume_text + email through Python ``logger.exception`` in several
     # places — without this filter, a 500 in update_profile would ship the
     # entire resume to Sentry's servers.
-    _SENTRY_PII_KEYS = frozenset({
-        "resume_text",
-        "target_companies",
-        "excluded_keywords",
-        "excluded_companies",
-        "email",
-        "user_email",
-        "name",
-        "user_name",
-        "avatar_url",
-        "user_avatar",
-        "telegram_id",
-        "google_sub",
-        "csrf_token",
-        "session_secret",
-        "Authorization",
-        "Cookie",
-    })
+    _SENTRY_PII_KEYS = frozenset(
+        {
+            "resume_text",
+            "target_companies",
+            "excluded_keywords",
+            "excluded_companies",
+            "email",
+            "user_email",
+            "name",
+            "user_name",
+            "avatar_url",
+            "user_avatar",
+            "telegram_id",
+            "google_sub",
+            "csrf_token",
+            "session_secret",
+            "Authorization",
+            "Cookie",
+        }
+    )
 
     def _scrub(obj):
         """Recursively replace PII values with '[redacted]'.
@@ -144,9 +148,10 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         is_exempt = any(path.startswith(p) for p in _CSRF_EXEMPT_PREFIXES)
 
-        # Lazily mint a per-session token. Must run AFTER SessionMiddleware
-        # populates request.session — that's guaranteed because Starlette
-        # walks middlewares outside-in (SessionMiddleware added first → outer).
+        # Lazily mint a per-session token. SessionMiddleware must wrap this
+        # middleware so ``scope["session"]`` already exists here. Starlette's
+        # last-added middleware is outermost; the registration block below is
+        # intentionally written from innermost to outermost.
         try:
             session = request.session
         except AssertionError:
@@ -160,11 +165,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                 token = secrets.token_urlsafe(32)
                 session["csrf_token"] = token
 
-        if (
-            request.method in _UNSAFE_METHODS
-            and not is_exempt
-            and session is not None
-        ):
+        if request.method in _UNSAFE_METHODS and not is_exempt and session is not None:
             sent = request.headers.get("x-csrf-token", "")
             if not sent or not secrets.compare_digest(sent, token or ""):
                 return JSONResponse(
@@ -209,8 +210,8 @@ class MaxBodySizeMiddleware(BaseHTTPMiddleware):
     """
 
     MAX_BYTES = 12 * 1024 * 1024  # 12 MB
-    UNSAFE_METHODS = {"POST", "PUT", "PATCH"}
-    EXEMPT_PREFIXES = ("/auth/google/",)
+    UNSAFE_METHODS: ClassVar[frozenset[str]] = frozenset({"POST", "PUT", "PATCH"})
+    EXEMPT_PREFIXES: ClassVar[tuple[str, ...]] = ("/auth/google/",)
 
     async def dispatch(self, request: Request, call_next):
         if request.method in self.UNSAFE_METHODS and not any(
@@ -251,7 +252,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     # the inline JS into static files and convert onclick= attrs to
     # event delegation, with a UI regression pass. Risk too high for a
     # 1-day-pre-launch change.
-    CSP = (
+    CSP: ClassVar[str] = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline'; "
@@ -264,7 +265,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         "object-src 'none'"
     )
 
-    HEADERS = {
+    HEADERS: ClassVar[dict[str, str]] = {
         "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
         "X-Frame-Options": "DENY",
         "X-Content-Type-Options": "nosniff",
@@ -304,18 +305,21 @@ class NoCacheAPIMiddleware(BaseHTTPMiddleware):
                 )
             raise
 
-        if path == "/" or path.startswith("/api/") or path.startswith("/auth/"):
+        if path == "/" or path.startswith(("/api/", "/auth/")):
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
             response.headers["Pragma"] = "no-cache"
             # Log to access log for 4xx/5xx and all mutating methods (debug aid)
             if response.status_code >= 400 or request.method in ("POST", "DELETE", "PATCH"):
                 try:
                     user_id = request.session.get("user_id", "anon")
-                except Exception:
+                except AssertionError:
                     user_id = "?"
                 _access_log.warning(
                     "%s %s → %s (user=%s)",
-                    request.method, path, response.status_code, user_id,
+                    request.method,
+                    path,
+                    response.status_code,
+                    user_id,
                 )
             # Record ops events ONLY for real errors (≥400), not successful POSTs
             if response.status_code >= 400 and path.startswith("/api"):
@@ -347,7 +351,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         app.state.ratelimit_cleanup_task.cancel()
-        from app.scoring.gemini_client import close_gemini_client  # noqa: PLC0415
+        from app.scoring.gemini_client import close_gemini_client
 
         await close_gemini_client()
 
@@ -356,23 +360,16 @@ app = FastAPI(title="Pipka API", version="0.1.0", lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
-# TrustedHost — added FIRST so it ends up OUTERMOST (Starlette wraps in
-# reverse-add-order). Rejects requests with a forged/unexpected ``Host``
-# header before SessionMiddleware allocates any state. Without this,
-# host-header injection can poison session-cookie cache layers and
-# password-reset URLs. Cloudflare sets Host=pipka.net for us.
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=["pipka.net", "*.pipka.net", "localhost", "127.0.0.1"],
-)
-# Per-IP rate limit — second-outermost so a botnet hammering /api/* with
-# fake X-CSRF-Token gets 429'd before we burn cycles parsing session
-# cookies and validating CSRF.
-app.add_middleware(RateLimitMiddleware)
-# Body-size cap — checked from Content-Length header before Starlette's
-# form/JSON parsers buffer the body into memory. Rejects 500 MB POSTs
-# regardless of which endpoint they target.
-app.add_middleware(MaxBodySizeMiddleware)
+# Starlette's LAST-added middleware is outermost. Register from innermost to
+# outermost so the actual incoming request order is:
+# SecurityHeaders → TrustedHost → RateLimit → MaxBodySize → Session → NoCache
+# → CSRF → routes.
+#
+# Session MUST wrap CSRF: SessionMiddleware creates ``request.session`` before
+# CSRFMiddleware validates unsafe requests. The previous order put CSRF outside
+# Session, so its defensive AssertionError branch silently disabled validation.
+app.add_middleware(CSRFMiddleware)
+app.add_middleware(NoCacheAPIMiddleware)
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret,
@@ -381,14 +378,17 @@ app.add_middleware(
     same_site="lax",
     https_only=True,
 )
-# Starlette wraps middleware so the FIRST one added is outermost (runs first
-# on incoming requests). Order: Session → CSRF → NoCache → SecurityHeaders → routes.
-# SecurityHeaders is innermost so it runs LAST on response, after NoCache has
-# already stamped its Cache-Control — the headers don't conflict, but keeping
-# SecurityHeaders innermost guarantees its values land on every response,
-# including ones that bypass NoCache (e.g. /static).
-app.add_middleware(CSRFMiddleware)
-app.add_middleware(NoCacheAPIMiddleware)
+# Body-size cap runs before the session and route layers parse request data.
+app.add_middleware(MaxBodySizeMiddleware)
+# Rate limiting runs before sessions/CSRF to reject abusive traffic cheaply.
+app.add_middleware(RateLimitMiddleware)
+# Reject forged Host headers before application/session processing.
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["pipka.net", "*.pipka.net", "localhost", "127.0.0.1"],
+)
+# Outermost so headers are added even to responses generated by the security
+# middleware above (403 CSRF, 413 body limit, 429 rate limit, 400 bad host).
 app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(auth_router)
