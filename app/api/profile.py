@@ -1,11 +1,17 @@
 """User profile + resume upload endpoints."""
+
 from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
+import sys
+from pathlib import Path
+from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from sqlalchemy import select
 
 from app.api._helpers import VALID_WORK_MODES, get_user
 from app.api.stats import invalidate_stats_cache
@@ -27,14 +33,54 @@ MAX_RESUME_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 # ``compute_profile_hash`` (sha256 over JSON of every entry), the per-job
 # pre_filter loop (O(jobs × keywords)), and the watchlist scanner
 # (Adzuna call per company × per country).
-MAX_PROFILE_LIST = 50          # target_titles, countries, exclusions, target_companies
-MAX_PROFILE_FIELD_LEN = 200    # one entry's max length
+MAX_PROFILE_LIST = 50  # target_titles, countries, exclusions, target_companies
+MAX_PROFILE_FIELD_LEN = 200  # one entry's max length
 
-# Hard wall on parse time. pdfminer can spin forever on a maliciously-crafted
-# font-metrics table; XML parsing on a deeply-nested document.xml the same.
-# We run the parser in a thread so the asyncio loop stays responsive, and
-# kill the request after this many seconds.
+# Hard wall on parse time. Parsing happens in a resource-bounded subprocess,
+# not a thread: cancelling ``asyncio.to_thread`` would leave hostile parser
+# code running in the web process after the request timed out.
 RESUME_PARSE_TIMEOUT_SECONDS = 30
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+class ResumeParseError(ValueError):
+    """The isolated parser rejected or could not decode the uploaded file."""
+
+
+async def _parse_resume_isolated(kind: str, content: bytes) -> str:
+    """Run the PDF/DOCX parser without passing application secrets to it."""
+    parser_env = {
+        "PATH": os.environ.get("PATH", ""),
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PYTHONUNBUFFERED": "1",
+    }
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
+        "app.services.resume_parser",
+        kind,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=PROJECT_ROOT,
+        env=parser_env,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(content),
+            timeout=RESUME_PARSE_TIMEOUT_SECONDS,
+        )
+    except TimeoutError:
+        process.kill()
+        await process.communicate()
+        raise
+
+    if process.returncode != 0:
+        error = stderr.decode("utf-8", errors="replace").strip()[:500]
+        raise ResumeParseError(error or f"Parser exited with status {process.returncode}")
+    return stdout.decode("utf-8", errors="replace")
 
 
 def _parse_country_codes(raw: str, field_name: str) -> list[str]:
@@ -78,17 +124,19 @@ async def get_profile(request: Request):
         p = user.profile
         if not p:
             return {"profile": None}
-        return {"profile": {
-            "resume_text": p.resume_text or "",
-            "target_titles": p.target_titles or [],
-            "work_mode": p.work_mode or "any",
-            "preferred_countries": p.preferred_countries or [],
-            "hidden_countries": p.hidden_countries or [],
-            "excluded_keywords": p.excluded_keywords or [],
-            "excluded_companies": getattr(p, "excluded_companies", None) or [],
-            "english_only": getattr(p, "english_only", False) or False,
-            "target_companies": getattr(p, "target_companies", None) or [],
-        }}
+        return {
+            "profile": {
+                "resume_text": p.resume_text or "",
+                "target_titles": p.target_titles or [],
+                "work_mode": p.work_mode or "any",
+                "preferred_countries": p.preferred_countries or [],
+                "hidden_countries": p.hidden_countries or [],
+                "excluded_keywords": p.excluded_keywords or [],
+                "excluded_companies": getattr(p, "excluded_companies", None) or [],
+                "english_only": getattr(p, "english_only", False) or False,
+                "target_companies": getattr(p, "target_companies", None) or [],
+            }
+        }
 
 
 @router.post("/api/profile")
@@ -167,8 +215,15 @@ async def update_profile(
 
 
 @router.post("/api/profile/resume")
-async def upload_resume(request: Request, file: UploadFile = File(...)):
+async def upload_resume(request: Request, file: Annotated[UploadFile, File()]):
     """Upload resume file and extract text (PDF, DOCX, TXT)."""
+    # Authenticate before reading or parsing attacker-controlled content.
+    async with async_session() as session:
+        user = await get_user(request, session)
+        if not user:
+            raise HTTPException(status_code=401, detail="Login required")
+        user_id = user.id
+
     # Stream the upload chunk-by-chunk so a 1 GB blob doesn't OOM the
     # container before the size check fires. ``await file.read()`` would
     # buffer the whole body first — bad on 5k-user prod where someone WILL
@@ -202,68 +257,24 @@ async def upload_resume(request: Request, file: UploadFile = File(...)):
         if not content[:4].startswith(_MAGIC[ext]):
             raise HTTPException(status_code=400, detail="File content does not match declared format")
 
-    if filename.endswith(".pdf"):
+    if filename.endswith((".pdf", ".docx")):
+        kind = "pdf" if filename.endswith(".pdf") else "docx"
         try:
-            import io
-            from pdfminer.high_level import extract_text as pdf_extract
-
-            def _parse_pdf() -> str:
-                return pdf_extract(io.BytesIO(content))
-
-            text = await asyncio.wait_for(
-                asyncio.to_thread(_parse_pdf),
-                timeout=RESUME_PARSE_TIMEOUT_SECONDS,
+            text = await _parse_resume_isolated(kind, content)
+        except TimeoutError:
+            logger.warning(
+                "%s parse timeout (>%ds): filename=%s",
+                kind.upper(),
+                RESUME_PARSE_TIMEOUT_SECONDS,
+                filename,
             )
-        except asyncio.TimeoutError:
-            logger.warning("PDF parse timeout (>%ds): filename=%s", RESUME_PARSE_TIMEOUT_SECONDS, filename)
-            raise HTTPException(status_code=400, detail=f"PDF parsing exceeded {RESUME_PARSE_TIMEOUT_SECONDS}s — file too complex")
-        except Exception:
-            logger.exception("PDF parse failed: filename=%s", filename)
-            raise HTTPException(status_code=400, detail="Could not parse PDF")
-
-    elif filename.endswith(".docx"):
-        try:
-            import io
-            import zipfile
-            import xml.etree.ElementTree as ET
-            zf = zipfile.ZipFile(io.BytesIO(content))
-            # Zip-bomb defense: a 50 KB DOCX can declare a 5 GB document.xml.
-            # Refuse to extract anything where ``file_size`` (uncompressed)
-            # blows past 5× our text limit. 5 × 100 000 chars × ~5 bytes/char
-            # for UTF-8 + XML markup = roughly 2.5 MB; cap at 8 MB to give
-            # legitimate large CVs headroom.
-            try:
-                info = zf.getinfo("word/document.xml")
-            except KeyError:
-                raise HTTPException(status_code=400, detail="DOCX missing document.xml")
-            if info.file_size > 8 * 1024 * 1024:
-                raise HTTPException(
-                    status_code=400,
-                    detail="DOCX content too large (decompressed > 8 MB) — possible zip bomb"
-                )
-
-            def _parse_docx() -> str:
-                xml_content = zf.read("word/document.xml")
-                tree = ET.fromstring(xml_content)
-                paragraphs = []
-                for p in tree.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p"):
-                    texts = [t.text for t in p.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t") if t.text]
-                    if texts:
-                        paragraphs.append("".join(texts))
-                return "\n".join(paragraphs)
-
-            text = await asyncio.wait_for(
-                asyncio.to_thread(_parse_docx),
-                timeout=RESUME_PARSE_TIMEOUT_SECONDS,
+            raise HTTPException(
+                status_code=400,
+                detail=f"{kind.upper()} parsing exceeded {RESUME_PARSE_TIMEOUT_SECONDS}s — file too complex",
             )
-        except asyncio.TimeoutError:
-            logger.warning("DOCX parse timeout (>%ds): filename=%s", RESUME_PARSE_TIMEOUT_SECONDS, filename)
-            raise HTTPException(status_code=400, detail=f"DOCX parsing exceeded {RESUME_PARSE_TIMEOUT_SECONDS}s")
-        except HTTPException:
-            raise
-        except Exception:
-            logger.exception("DOCX parse failed: filename=%s", filename)
-            raise HTTPException(status_code=400, detail="Could not parse DOCX")
+        except ResumeParseError as exc:
+            logger.warning("%s parse rejected: filename=%s error=%s", kind.upper(), filename, exc)
+            raise HTTPException(status_code=400, detail=f"Could not parse {kind.upper()}")
 
     elif filename.endswith(".txt"):
         text = content.decode("utf-8", errors="ignore")
@@ -279,12 +290,9 @@ async def upload_resume(request: Request, file: UploadFile = File(...)):
 
     async with async_session() as session:
         try:
-            user = await get_user(request, session)
-            if not user:
-                raise HTTPException(status_code=401, detail="Login required")
-            p = user.profile
+            p = await session.scalar(select(UserProfile).where(UserProfile.user_id == user_id))
             if not p:
-                p = UserProfile(user_id=user.id)
+                p = UserProfile(user_id=user_id)
                 session.add(p)
             p.resume_text = text
             await session.flush()

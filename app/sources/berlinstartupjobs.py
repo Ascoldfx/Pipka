@@ -8,15 +8,16 @@ only ~200 chars, too short for AI scoring).
 URL pattern: https://berlinstartupjobs.com/<category>/feed/
 Title format in feed: "Job Title // Company Name"
 """
+
 from __future__ import annotations
 
 import logging
 import re
-import xml.etree.ElementTree as ET
 from datetime import datetime
 
 import aiohttp
 from dateutil import parser as dateparser
+from defusedxml import ElementTree as ET
 
 from app.sources.base import JobSource, RawJob, SearchParams
 
@@ -31,11 +32,27 @@ FEEDS = [
 
 # Quick title-level keyword filter — fetch full page only for these
 TITLE_KEYWORDS = [
-    "operations", "supply chain", "procurement", "logistics", "coo",
-    "chief operating", "head of ops", "vp ops", "director", "head of",
-    "sourcing", "purchasing", "warehouse", "fulfillment", "inventory",
-    "managing director", "general manager", "business operations",
-    "category", "vendor", "distribution",
+    "operations",
+    "supply chain",
+    "procurement",
+    "logistics",
+    "coo",
+    "chief operating",
+    "head of ops",
+    "vp ops",
+    "director",
+    "head of",
+    "sourcing",
+    "purchasing",
+    "warehouse",
+    "fulfillment",
+    "inventory",
+    "managing director",
+    "general manager",
+    "business operations",
+    "category",
+    "vendor",
+    "distribution",
 ]
 
 
@@ -67,18 +84,14 @@ def _strip_html(html: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-async def _fetch_full_description(
-    session: aiohttp.ClientSession, url: str
-) -> str | None:
+async def _fetch_full_description(session: aiohttp.ClientSession, url: str) -> str | None:
     """Fetch the job detail page and extract the description text."""
     try:
-        async with session.get(
-            url, timeout=aiohttp.ClientTimeout(total=12)
-        ) as resp:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=12)) as resp:
             if resp.status != 200:
                 return None
             html = await resp.text()
-    except Exception as exc:
+    except (aiohttp.ClientError, TimeoutError, UnicodeError) as exc:
         logger.debug("BSJ detail fetch failed for %s: %s", url, exc)
         return None
 
@@ -88,12 +101,12 @@ async def _fetch_full_description(
         r'class="entry-content"[^>]*>(.*?)</div>',
         r'<div[^>]+class="[^"]*description[^"]*"[^>]*>(.*?)</div>',
     ]:
-        m = re.search(pattern, html, re.S | re.I)
+        m = re.search(pattern, html, re.DOTALL | re.IGNORECASE)
         if m:
             return _strip_html(m.group(1))[:4000]
 
     # Last resort: grab the largest <p> block
-    paragraphs = re.findall(r"<p[^>]*>(.*?)</p>", html, re.S)
+    paragraphs = re.findall(r"<p[^>]*>(.*?)</p>", html, re.DOTALL)
     if paragraphs:
         longest = max(paragraphs, key=len)
         if len(longest) > 100:
@@ -111,9 +124,7 @@ class BerlinStartupJobsSource(JobSource):
         seen: set[str] = set()
 
         headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (compatible; pipka-bot/1.0; job aggregator)"
-            ),
+            "User-Agent": ("Mozilla/5.0 (compatible; pipka-bot/1.0; job aggregator)"),
             "Accept": "application/rss+xml, application/xml, text/xml",
         }
 
@@ -135,14 +146,12 @@ class BerlinStartupJobsSource(JobSource):
         params: SearchParams,
     ) -> list[RawJob]:
         try:
-            async with session.get(
-                feed_url, timeout=aiohttp.ClientTimeout(total=15)
-            ) as resp:
+            async with session.get(feed_url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                 if resp.status != 200:
                     logger.warning("BSJ feed %s returned %s", feed_url, resp.status)
                     return []
                 text = await resp.text()
-        except Exception as exc:
+        except (aiohttp.ClientError, TimeoutError, UnicodeError) as exc:
             logger.error("BSJ feed fetch failed (%s): %s", feed_url, exc)
             return []
 
@@ -182,8 +191,8 @@ class BerlinStartupJobsSource(JobSource):
                 if pub_date_str:
                     try:
                         posted_at = dateparser.parse(pub_date_str).replace(tzinfo=None)
-                    except Exception:
-                        pass
+                    except (OverflowError, TypeError, ValueError) as exc:
+                        logger.debug("BSJ invalid publication date %r: %s", pub_date_str, exc)
 
                 # Short RSS description as fallback
                 short_desc = _strip_html(desc_html)
@@ -209,7 +218,7 @@ class BerlinStartupJobsSource(JobSource):
                         raw_data={"feed_url": feed_url, "raw_title": raw_title},
                     )
                 )
-            except Exception as exc:
+            except (AttributeError, KeyError, TypeError, ValueError) as exc:
                 logger.debug("BSJ item parse error: %s", exc)
 
         return jobs
