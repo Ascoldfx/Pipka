@@ -66,21 +66,42 @@ def _v2_hash(row: dict) -> str:
     return hashlib.sha256(("v2|" + "|".join(components)).encode()).hexdigest()
 
 
+def _build_updates(rows: list[dict]) -> list[dict]:
+    grouped: dict[str, list[dict]] = {}
+    for row in rows:
+        grouped.setdefault(_v2_hash(row), []).append(row)
+
+    updates: list[dict] = []
+    for canonical_hash, duplicates in grouped.items():
+        duplicates.sort(key=lambda row: row["id"])
+        for index, row in enumerate(duplicates):
+            dedup_hash = canonical_hash
+            if index:
+                dedup_hash = hashlib.sha256(
+                    f"{canonical_hash}|legacy|{row['dedup_hash']}".encode()
+                ).hexdigest()
+            updates.append({"id": row["id"], "dedup_hash": dedup_hash})
+    return updates
+
+
 def upgrade() -> None:
     bind = op.get_bind()
     rows = bind.execute(
         sa.text(
-            "SELECT id, title, company_name, country, location FROM jobs"
+            "SELECT id, title, company_name, country, location, dedup_hash FROM jobs"
         )
     ).mappings().all()
     if not rows:
         return
+
+    # Historical v1 normalisation occasionally allowed duplicate records that
+    # collapse to the same v2 identity. Preserve every referenced row: the
+    # oldest becomes canonical for future collector matches, while additional
+    # rows receive deterministic legacy identities. Deleting/merging them here
+    # could discard job scores, applications or user hide decisions.
     bind.execute(
         sa.text("UPDATE jobs SET dedup_hash = :dedup_hash WHERE id = :id"),
-        [
-            {"id": row["id"], "dedup_hash": _v2_hash(dict(row))}
-            for row in rows
-        ],
+        _build_updates([dict(row) for row in rows]),
     )
 
 
