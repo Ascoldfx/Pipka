@@ -1255,12 +1255,13 @@ function sourceCell(j) {
     // Show primary source + compact "+N" badge, tooltip lists all
     const others = ms.filter(s => s !== j.source);
     const tip = ms.join(' · ').toUpperCase();
-    return `<span class="source-tag merged" title="${tip}">${esc(j.source)} +${others.length}</span>`;
+    return `<span class="source-tag merged" title="${attr(tip)}">${esc(j.source)} +${others.length}</span>`;
   }
   return `<span class="source-tag">${esc(j.source)}</span>`;
 }
 
 function jobRow(j){
+  const jobId = Number.isSafeInteger(Number(j.id)) ? Number(j.id) : 0;
   const sc=j.score>=70?'high':j.score>=40?'mid':j.score!=null?'low':'none';
   const date=j.posted_at?new Date(j.posted_at).toLocaleDateString('de-DE'):'';
   const dq=j.data_quality||'partial';
@@ -1282,12 +1283,21 @@ function jobRow(j){
     <td>${sourceCell(j)}</td>
     <td><div class="actions-wrap">
       ${S.authenticated ? `
-      <button onclick="doAction(${j.id},'applied',this)" title="Applied"${j.status==='applied'?' class="active"':''}>&#10004;</button>
-      <button onclick="doAction(${j.id},'reject',this)" title="Reject"${j.status==='rejected'?' class="active"':''}>&#10006;</button>
-      <button onclick="showAnalysis(${j.id},'${esc(j.title).replace(/'/g,"\\'")}')">&#129302;</button>
+      <button type="button" data-job-id="${jobId}" data-job-action="applied" title="Applied"${j.status==='applied'?' class="active"':''}>&#10004;</button>
+      <button type="button" data-job-id="${jobId}" data-job-action="reject" title="Reject"${j.status==='rejected'?' class="active"':''}>&#10006;</button>
+      <button type="button" data-job-id="${jobId}" data-job-analysis="1" data-job-title="${attr(j.title)}">&#129302;</button>
       ` : `<span style="font-size:10px; color:var(--muted)">Sign in to act</span>`}
     </div></td></tr>`;
 }
+
+$('jobs-body').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-job-id]');
+  if(!btn || !$('jobs-body').contains(btn)) return;
+  const jobId = Number(btn.dataset.jobId);
+  if(!Number.isSafeInteger(jobId) || jobId <= 0) return;
+  if(btn.dataset.jobAction) doAction(jobId, btn.dataset.jobAction, btn);
+  else if(btn.dataset.jobAnalysis) showAnalysis(jobId, btn.dataset.jobTitle || '');
+});
 
 /* ── Excluded-keyword chips ── */
 let _excludedKws = [];
@@ -1443,8 +1453,9 @@ $('modal').addEventListener('click',e=>{if(e.target===$('modal'))closeModal()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
 
 
-function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
-function safeUrl(u){if(!u)return'#';try{const p=new URL(u);if(p.protocol==='https:'||p.protocol==='http:')return u;}catch(e){}return'#';}
+function esc(s){if(s===null||s===undefined)return'';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
+function attr(s){return String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function safeUrl(u){if(!u)return'#';try{const p=new URL(String(u));if(p.protocol==='https:'||p.protocol==='http:')return attr(p.href);}catch(e){}return'#';}
 
 // jsq — used inside an HTML attribute value (single-quoted) that's then
 // re-parsed as a JS string by the browser when the user clicks. The
@@ -1873,7 +1884,7 @@ async function loadDedupPanel() {
         <tbody>
           ${jobs.map(j => `
             <tr>
-              <td><a href="${esc(j.url || '#')}" target="_blank" rel="noopener">${esc(j.title)}</a></td>
+              <td><a href="${safeUrl(j.url)}" target="_blank" rel="noopener noreferrer">${esc(j.title)}</a></td>
               <td>${esc(j.company)}</td>
               <td>${esc(j.location)}</td>
               <td><div class="dedup-sources">${(j.sources || []).map(s => `<span class="dedup-src">${esc(s)}</span>`).join('')}</div></td>

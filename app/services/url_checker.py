@@ -28,14 +28,17 @@ Concurrency
   Indeed actively rate-limit and a 200-job burst against a single host would
   trigger captchas or IP blocks.
 """
+
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
+import socket
 import time
 from collections import defaultdict
-from datetime import datetime, timedelta
-from urllib.parse import urlparse
+from datetime import UTC, datetime, timedelta
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from sqlalchemy import or_, select
@@ -50,6 +53,13 @@ logger = logging.getLogger(__name__)
 # tell you're a bot rather than a hijacked browser; this also makes the
 # requests trivially blockable if any owner asks.
 USER_AGENT = "Pipka-Liveness/1.0 (+https://pipka.net)"
+MAX_URL_LENGTH = 4096
+MAX_REDIRECTS = 5
+
+
+def _utcnow_naive() -> datetime:
+    """UTC timestamp matching the database's existing naive datetime columns."""
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 # Per-host throttling state — shared across the whole process so multiple
@@ -110,6 +120,98 @@ def _registered_domain(host: str) -> str:
     return host.lower()
 
 
+class UnsafeURL(ValueError):
+    """Raised when a liveness URL could reach a non-public network target."""
+
+
+async def _resolve_host_addresses(host: str, port: int) -> set[ipaddress.IPv4Address | ipaddress.IPv6Address]:
+    """Resolve every address for ``host`` without blocking the event loop."""
+    try:
+        literal = ipaddress.ip_address(host)
+    except ValueError:
+        loop = asyncio.get_running_loop()
+        try:
+            infos = await loop.getaddrinfo(
+                host,
+                port,
+                type=socket.SOCK_STREAM,
+                proto=socket.IPPROTO_TCP,
+            )
+        except OSError as exc:
+            raise UnsafeURL(f"DNS resolution failed for {host}") from exc
+        addresses = {ipaddress.ip_address(info[4][0]) for info in infos}
+        if not addresses:
+            raise UnsafeURL(f"DNS returned no addresses for {host}")
+        return addresses
+    return {literal}
+
+
+async def _validate_public_url(url: str) -> tuple[str, str]:
+    """Validate scheme, credentials, port and all resolved target addresses.
+
+    Returns ``(url, host)`` for a public HTTP(S) target. Validation is repeated
+    for every redirect immediately before the request, preventing ordinary
+    redirect-based SSRF and blocking loopback/private/link-local destinations.
+    """
+    if not isinstance(url, str) or not url or len(url) > MAX_URL_LENGTH:
+        raise UnsafeURL("URL is empty or too long")
+
+    try:
+        parsed = urlparse(url)
+        port = parsed.port
+    except ValueError as exc:
+        raise UnsafeURL("Malformed URL") from exc
+
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise UnsafeURL("Only absolute HTTP(S) URLs are allowed")
+    if parsed.username is not None or parsed.password is not None:
+        raise UnsafeURL("Credentials in URLs are not allowed")
+
+    effective_port = port or (443 if parsed.scheme == "https" else 80)
+    if effective_port not in {80, 443}:
+        raise UnsafeURL("Non-standard URL ports are not allowed")
+
+    host = parsed.hostname.rstrip(".").lower()
+    addresses = await _resolve_host_addresses(host, effective_port)
+    if any(not address.is_global for address in addresses):
+        raise UnsafeURL(f"Non-public address rejected for {host}")
+
+    return url, host
+
+
+async def _fetch_public_body(url: str, client: httpx.AsyncClient) -> tuple[int, bytes]:
+    """GET at most 50 KB while validating every redirect destination."""
+    current = url
+    for redirect_count in range(MAX_REDIRECTS + 1):
+        current, host = await _validate_public_url(current)
+        await _pace_host(host)
+
+        async with client.stream(
+            "GET",
+            current,
+            follow_redirects=False,
+            timeout=settings.url_check_timeout_seconds * 2,
+        ) as resp:
+            if 300 <= resp.status_code < 400:
+                location = resp.headers.get("location")
+                if not location or redirect_count == MAX_REDIRECTS:
+                    return resp.status_code, b""
+                current = urljoin(current, location)
+                continue
+
+            if resp.status_code != 200:
+                return resp.status_code, b""
+
+            body_bytes = bytearray()
+            async for chunk in resp.aiter_bytes(chunk_size=4096):
+                body_bytes.extend(chunk)
+                if len(body_bytes) >= 50_000:
+                    break
+            return resp.status_code, bytes(body_bytes[:50_000])
+
+    return 310, b""
+
+
 def _classify_redirect(target: str | None) -> str:
     """Return ``'closed'`` if ``target`` looks like a job-board "vacancy gone"
     fallback (root, /jobs, /search, /careers without ID), else ``'active'``.
@@ -130,9 +232,16 @@ def _classify_redirect(target: str | None) -> str:
 
     # Generic listing endpoints — exact match (no job-id appended)
     GENERIC_LANDINGS = {
-        "/jobs", "/careers", "/search", "/job-search",
-        "/career", "/opportunities", "/positions",
-        "/de/jobs", "/en/jobs", "/uk/jobs",
+        "/jobs",
+        "/careers",
+        "/search",
+        "/job-search",
+        "/career",
+        "/opportunities",
+        "/positions",
+        "/de/jobs",
+        "/en/jobs",
+        "/uk/jobs",
     }
     if path.lower() in GENERIC_LANDINGS:
         return "closed"
@@ -140,16 +249,12 @@ def _classify_redirect(target: str | None) -> str:
     # Heuristic: a "real" job URL almost always carries a numeric or
     # UUID-shaped token somewhere in the path. /search?q=... doesn't count.
     has_id_token = any(
-        seg.isdigit() or len(seg) >= 8 and any(c.isdigit() for c in seg)
-        for seg in path.split("/")
-        if seg
+        seg.isdigit() or len(seg) >= 8 and any(c.isdigit() for c in seg) for seg in path.split("/") if seg
     )
     return "active" if has_id_token else "closed"
 
 
-async def _soft_404_body_check(
-    url: str, host: str, client: httpx.AsyncClient
-) -> bool:
+async def _soft_404_body_check(url: str, host: str, client: httpx.AsyncClient) -> bool:
     """Stream first 50 KB of GET body, return True iff a known soft-404
     marker for ``host``'s registered domain matches.
 
@@ -165,25 +270,15 @@ async def _soft_404_body_check(
     if not markers:
         return False
 
-    await _pace_host(host)
     try:
-        async with client.stream(
-            "GET",
-            url,
-            follow_redirects=True,
-            timeout=settings.url_check_timeout_seconds * 2,  # GET slower than HEAD
-        ) as resp:
-            if resp.status_code != 200:
-                return False
-            body_bytes = bytearray()
-            async for chunk in resp.aiter_bytes(chunk_size=4096):
-                body_bytes.extend(chunk)
-                if len(body_bytes) >= 50_000:
-                    break
+        status, body_bytes = await _fetch_public_body(url, client)
+        if status != 200:
+            return False
         body = body_bytes.decode("utf-8", errors="ignore").lower()
-    except (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError):
+    except UnsafeURL as exc:
+        logger.warning("blocked unsafe soft-404 URL %s: %s", url, exc)
         return False
-    except Exception as exc:
+    except httpx.HTTPError as exc:
         logger.debug("soft-404 GET failed %s: %s", url, exc)
         return False
 
@@ -212,11 +307,9 @@ async def check_url(url: str, client: httpx.AsyncClient) -> tuple[str, bool, boo
                              by a body-marker match. For Ops counters only.
     """
     try:
-        host = urlparse(url).netloc
-    except Exception:
-        return "closed", False, False  # malformed URL → treat as gone
-
-    if not host:
+        url, host = await _validate_public_url(url)
+    except UnsafeURL as exc:
+        logger.warning("blocked unsafe liveness URL %s: %s", url, exc)
         return "closed", False, False
 
     await _pace_host(host)
@@ -258,7 +351,7 @@ async def check_url(url: str, client: httpx.AsyncClient) -> tuple[str, bool, boo
         # hammering. Treat unknown as active rather than bogus-closing it.
         try:
             resp = await client.get(url, follow_redirects=False)
-        except Exception:
+        except httpx.RequestError:
             return "unreachable", True, False
         if 200 <= resp.status_code < 300:
             if await _soft_404_body_check(url, host, client):
@@ -287,7 +380,7 @@ async def run_url_check_pass(session: AsyncSession) -> dict[str, int]:
     if not settings.url_check_enabled:
         return {"checked": 0, "active": 0, "closed": 0, "unreachable": 0, "skipped": 0}
 
-    cutoff = datetime.now() - timedelta(hours=settings.url_check_recheck_hours)
+    cutoff = _utcnow_naive() - timedelta(hours=settings.url_check_recheck_hours)
 
     # Picker:
     #   * Skip jobs without a URL (nothing to ping).
@@ -313,7 +406,13 @@ async def run_url_check_pass(session: AsyncSession) -> dict[str, int]:
     timeout = httpx.Timeout(settings.url_check_timeout_seconds)
     headers = {"User-Agent": USER_AGENT, "Accept": "*/*"}
 
-    async with httpx.AsyncClient(timeout=timeout, headers=headers, http2=False) as client:
+    async with httpx.AsyncClient(
+        timeout=timeout,
+        headers=headers,
+        http2=False,
+        trust_env=False,
+    ) as client:
+
         async def _one(job: Job) -> None:
             async with semaphore:
                 try:
@@ -323,7 +422,7 @@ async def run_url_check_pass(session: AsyncSession) -> dict[str, int]:
                     counts["skipped"] += 1
                     return
 
-                now = datetime.now()
+                now = _utcnow_naive()
                 if transient:
                     job.url_check_failures = (job.url_check_failures or 0) + 1
                     if job.url_check_failures >= settings.url_check_max_failures:

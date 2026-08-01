@@ -169,6 +169,7 @@ async function loadJobs(){
 }
 
 function jobRow(j){
+  const jobId = Number.isSafeInteger(Number(j.id)) ? Number(j.id) : 0;
   const sc=j.score>=70?'high':j.score>=40?'mid':j.score!=null?'low':'none';
   const date=j.posted_at?new Date(j.posted_at).toLocaleDateString('de-DE'):'';
   return `<tr>
@@ -179,12 +180,21 @@ function jobRow(j){
     <td><span class="source-tag">${esc(j.source)}</span></td>
     <td><div class="actions-wrap">
       ${S.authenticated ? `
-      <button onclick="doAction(${j.id},'applied',this)" title="Applied"${j.status==='applied'?' class="active"':''}>&#10004;</button>
-      <button onclick="doAction(${j.id},'reject',this)" title="Reject"${j.status==='rejected'?' class="active"':''}>&#10006;</button>
-      <button onclick="showAnalysis(${j.id},'${esc(j.title).replace(/'/g,"\\'")}')">&#129302;</button>
+      <button type="button" data-job-id="${jobId}" data-job-action="applied" title="Applied"${j.status==='applied'?' class="active"':''}>&#10004;</button>
+      <button type="button" data-job-id="${jobId}" data-job-action="reject" title="Reject"${j.status==='rejected'?' class="active"':''}>&#10006;</button>
+      <button type="button" data-job-id="${jobId}" data-job-analysis="1" data-job-title="${attr(j.title)}">&#129302;</button>
       ` : `<span style="font-size:10px; color:var(--muted)">Sign in to act</span>`}
     </div></td></tr>`;
 }
+
+$('jobs-body').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-job-id]');
+  if(!btn || !$('jobs-body').contains(btn)) return;
+  const jobId = Number(btn.dataset.jobId);
+  if(!Number.isSafeInteger(jobId) || jobId <= 0) return;
+  if(btn.dataset.jobAction) doAction(jobId, btn.dataset.jobAction, btn);
+  else if(btn.dataset.jobAnalysis) showAnalysis(jobId, btn.dataset.jobTitle || '');
+});
 
 /* ── Settings / Profile ── */
 async function loadProfile(){
@@ -287,8 +297,9 @@ $('modal').addEventListener('click',e=>{if(e.target===$('modal'))closeModal()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
 
 
-function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
-function safeUrl(u){if(!u)return'#';try{const p=new URL(u);if(p.protocol==='https:'||p.protocol==='http:')return u;}catch(e){}return'#';}
+function esc(s){if(s===null||s===undefined)return'';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
+function attr(s){return String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function safeUrl(u){if(!u)return'#';try{const p=new URL(String(u));if(p.protocol==='https:'||p.protocol==='http:')return attr(p.href);}catch(e){}return'#';}
 function jsq(s){return String(s ?? '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
 
 /* Interactivity */

@@ -22,9 +22,11 @@ unique IPs would leave dead buckets in ``_buckets`` forever. The
 ``start_bucket_cleanup_task`` lifespan hook runs hourly and drops fully
 expired buckets.
 """
+
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 import time
 from collections import defaultdict, deque
@@ -78,7 +80,8 @@ async def _bucket_cleanup_loop():
             if removed:
                 logger.info(
                     "rate-limit cleanup: removed %d stale buckets, %d alive",
-                    removed, len(_buckets),
+                    removed,
+                    len(_buckets),
                 )
         except asyncio.CancelledError:
             return
@@ -128,32 +131,30 @@ def check_rate_limit(*, user_id: int, key: str, limit: int, window_s: int) -> No
 _TRUSTED_PROXY_HOSTS = frozenset({"127.0.0.1", "::1"})
 
 
+def _normalise_ip(value: str | None) -> str | None:
+    """Return a canonical IP string, rejecting names and arbitrary tokens."""
+    if not value:
+        return None
+    try:
+        return ipaddress.ip_address(value.strip()).compressed
+    except ValueError:
+        return None
+
+
 def _client_ip(request: Request) -> str:
-    """Best-effort client IP behind nginx + Cloudflare.
+    """Return the client IP supplied by the trusted local nginx proxy.
 
-    Trust model: forwarded headers are honoured ONLY when the immediate
-    socket peer is loopback (i.e. the request reached us via local nginx,
-    not directly). Otherwise an attacker who can hit the app port directly
-    could spoof ``CF-Connecting-IP: <random-uuid>`` per request and dodge
-    the rate limiter — every call would look like a fresh IP.
+    nginx validates Cloudflare peers with ``set_real_ip_from`` and overwrites
+    ``X-Real-IP`` with its resulting ``$remote_addr``. The application trusts
+    only that sanitised header and only when its direct peer is loopback.
 
-    Order when peer is loopback:
-        1. ``CF-Connecting-IP`` — Cloudflare's authoritative client IP.
-        2. ``X-Forwarded-For[0]`` — nginx-supplied first hop.
-        3. peer address itself (loopback — degraded, but better than '?').
-
-    Order when peer is non-loopback:
-        - peer address only. Headers ignored.
+    Raw ``CF-Connecting-IP`` and ``X-Forwarded-For`` are deliberately ignored:
+    clients can supply both headers themselves when an origin firewall or
+    reverse-proxy rule is accidentally relaxed.
     """
-    direct = request.client.host if request.client else None
+    direct = _normalise_ip(request.client.host if request.client else None)
     if direct in _TRUSTED_PROXY_HOSTS:
-        cf = request.headers.get("cf-connecting-ip")
-        if cf and cf.strip():
-            return cf.strip()
-        xff = request.headers.get("x-forwarded-for")
-        if xff:
-            return xff.split(",", 1)[0].strip()
-        return direct
+        return _normalise_ip(request.headers.get("x-real-ip")) or direct
     return direct or "unknown"
 
 
@@ -163,9 +164,9 @@ def _client_ip(request: Request) -> str:
 # separate, much tighter bucket.
 _IP_LIMITS: tuple[tuple[str, int, int, tuple[str, ...]], ...] = (
     # (key,                                limit, window_s, path-prefixes)
-    ("auth-write",                            10,    60,   ("/auth/google/login", "/auth/logout")),
-    ("profile-write",                         20,    60,   ("/api/profile",)),
-    ("api-global",                           300,    60,   ("/api/",)),
+    ("auth-write", 10, 60, ("/auth/google/login", "/auth/logout")),
+    ("profile-write", 20, 60, ("/api/profile",)),
+    ("api-global", 300, 60, ("/api/",)),
 )
 
 
