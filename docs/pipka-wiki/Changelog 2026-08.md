@@ -35,6 +35,7 @@
 - Dumps пишутся атомарно в worker thread. Каждое воскресенье full restore в disposable DB проверяет, что бэкап действительно восстанавливается.
 - Restore-тест выявил несовместимость `pg_dump 17` с сервером PostgreSQL 16. Runtime закреплён на `postgresql-client-16`, а backup теперь проверяет совпадение major-версий до создания dump.
 - Добавлен `.dockerignore`: серверный `.env`, приватные ключи, локальные данные и служебные каталоги больше не могут попасть в Docker image.
+- Dashboard снова подключает CSRF fetch-wrapper до application JS: сохранение профиля, job actions, scan и logout передают `X-CSRF-Token`, а health/static probes больше не создают session cookies.
 
 ### Verification
 

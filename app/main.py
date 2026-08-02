@@ -122,13 +122,11 @@ if settings.sentry_dsn:
 # Methods that mutate server state and therefore require a CSRF token.
 _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
-# Endpoints that are exempt from CSRF.
-# /auth/google/* — OAuth flow uses Google-supplied ``state`` for CSRF;
-#                  redirects from Google land here as top-level GETs.
-# /health        — public probe, no state mutation.
-# /auth/logout   — POST, MUST require CSRF (was GET, exploitable via
-#                  forced-logout images). Not in this list.
-_CSRF_EXEMPT_PREFIXES = ("/auth/google/", "/health")
+# Public read-only probes/assets do not need a session and must not create a
+# fresh session/CSRF cookie on every monitoring request. OAuth endpoints are
+# GET-only and still rely on Authlib's signed ``state`` validation.
+_CSRF_SESSIONLESS_PATHS = frozenset({"/health", "/health/live", "/infographic", "/llms.txt"})
+_CSRF_SESSIONLESS_PREFIXES = ("/static/", "/auth/google/")
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
@@ -146,17 +144,21 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        is_exempt = any(path.startswith(p) for p in _CSRF_EXEMPT_PREFIXES)
+        is_sessionless = path in _CSRF_SESSIONLESS_PATHS or any(
+            path.startswith(prefix) for prefix in _CSRF_SESSIONLESS_PREFIXES
+        )
 
         # Lazily mint a per-session token. SessionMiddleware must wrap this
         # middleware so ``scope["session"]`` already exists here. Starlette's
         # last-added middleware is outermost; the registration block below is
         # intentionally written from innermost to outermost.
-        try:
-            session = request.session
-        except AssertionError:
-            # No session middleware on this path (shouldn't happen post-mount)
-            session = None
+        session = None
+        if not is_sessionless:
+            try:
+                session = request.session
+            except AssertionError:
+                # No session middleware on this path (shouldn't happen post-mount)
+                session = None
 
         token = None
         if session is not None:
@@ -165,7 +167,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                 token = secrets.token_urlsafe(32)
                 session["csrf_token"] = token
 
-        if request.method in _UNSAFE_METHODS and not is_exempt and session is not None:
+        if request.method in _UNSAFE_METHODS and session is not None:
             sent = request.headers.get("x-csrf-token", "")
             if not sent or not secrets.compare_digest(sent, token or ""):
                 return JSONResponse(

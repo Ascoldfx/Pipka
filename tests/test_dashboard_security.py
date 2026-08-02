@@ -24,3 +24,13 @@ def test_source_tooltip_is_attribute_escaped() -> None:
     dashboard = (ROOT / "app/static/dashboard.html").read_text()
 
     assert 'title="${attr(tip)}"' in dashboard
+
+
+def test_dashboard_loads_csrf_fetch_wrapper_before_inline_application_code() -> None:
+    dashboard = (ROOT / "app/static/dashboard.html").read_text()
+    security_js = (ROOT / "app/static/js/security.js").read_text()
+
+    assert '<script src="/static/js/security.js"></script>' in dashboard
+    assert dashboard.index('/static/js/security.js') < dashboard.index('<script>')
+    assert "X-CSRF-Token" in security_js
+    assert "window.fetch" in security_js

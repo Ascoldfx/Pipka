@@ -38,6 +38,15 @@ def test_csrf_accepts_matching_session_token() -> None:
     assert response.json() == {"ok": True}
 
 
+def test_health_probe_does_not_create_session_or_csrf_cookies() -> None:
+    client = TestClient(app, base_url="https://localhost")
+
+    response = client.get("/health/live")
+
+    assert response.status_code == 200
+    assert "set-cookie" not in response.headers
+
+
 def test_security_headers_cover_csrf_rejections() -> None:
     client = TestClient(app, base_url="https://localhost")
     client.get("/api/me")
