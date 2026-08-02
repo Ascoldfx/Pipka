@@ -38,7 +38,7 @@ State: `dict[(user_id, key), deque[float]]` под `threading.Lock`. Ключ �
 
 ### Per-IP middleware (`RateLimitMiddleware`)
 
-Day-2 фикс (май 2026). Глобальный sliding-window-per-IP в `_ratelimit.py`. Применяется как middleware — не нужно встраивать чек в каждый router. Client IP резолвится через `CF-Connecting-IP` → `X-Forwarded-For[0]` → socket-host fallback.
+Day-2 фикс (май 2026), hardened в августе. Глобальный sliding-window-per-IP в `_ratelimit.py`. Client IP берётся из nginx-sanitized `X-Real-IP` только когда socket-peer — loopback; иначе из socket host. Raw `CF-Connecting-IP`/`X-Forwarded-For` приложением не доверяются.
 
 | Префикс | key | limit | window |
 |---------|-----|-------|--------|

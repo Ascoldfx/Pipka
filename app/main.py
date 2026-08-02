@@ -356,7 +356,14 @@ async def lifespan(app: FastAPI):
         await close_gemini_client()
 
 
-app = FastAPI(title="Pipka API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(
+    title="Pipka API",
+    version="0.1.0",
+    lifespan=lifespan,
+    docs_url="/docs" if settings.api_docs_enabled else None,
+    redoc_url="/redoc" if settings.api_docs_enabled else None,
+    openapi_url="/openapi.json" if settings.api_docs_enabled else None,
+)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 

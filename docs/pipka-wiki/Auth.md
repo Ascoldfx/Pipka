@@ -19,6 +19,8 @@ GET /auth/google/callback?code=...
     ↓
 authlib.oauth.google.authorize_access_token() — обмен code → token + userinfo
     ↓
+email_verified == true; обязательны sub + email
+    ↓
 get_or_create_google_user(google_sub, email, name, avatar, session)
     ↓
 request.session["user_id"] = user.id
@@ -28,6 +30,8 @@ RedirectResponse("/")
 ```
 
 В проде `redirect_uri` принудительно переписывается с `http://` на `https://` — иначе Cloudflare-proxy за ним сломает callback.
+
+Callback отклоняет identity без `sub`, email или без булева `email_verified=true`. Неподтверждённый email не может быть связан с существующим user/admin.
 
 **Session fixation defense (Day-1 фикс, май 2026):** в callback'е до записи `user_id` вызывается `request.session.clear()`. Если атакующий до login'а подсунул жертве `pipka_session` cookie (через subdomain XSS / MITM), его plant'нутая сессия теряет identity на login.
 

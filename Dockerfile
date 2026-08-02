@@ -5,7 +5,9 @@ WORKDIR /app
 # System deps for JobSpy (headless Chrome for LinkedIn scraping)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium chromium-driver curl postgresql-client \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 pipka \
+    && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin pipka
 
 # Install Python deps first (cache layer)
 COPY pyproject.toml .
@@ -17,10 +19,13 @@ RUN pip install --no-cache-dir . \
     && pip install --no-cache-dir gunicorn \
     && pip install --no-cache-dir --no-deps markdownify==0.14.1
 
-COPY . .
+COPY --chown=10001:10001 . .
+RUN mkdir -p /app/data && chown -R 10001:10001 /app/data
+
+USER 10001:10001
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 CMD ["python", "run.py"]

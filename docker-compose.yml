@@ -1,6 +1,14 @@
 services:
   app:
     build: .
+    user: "10001:10001"
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    shm_size: "256m"
     env_file: .env
     ports:
       - "127.0.0.1:8000:8000"
@@ -12,6 +20,9 @@ services:
       DATABASE_URL: postgresql+asyncpg://pipka:${POSTGRES_PASSWORD}@db:5432/pipka
     volumes:
       - app_data:/app/data
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=512m,uid=10001,gid=10001
+      - /home/pipka:rw,nosuid,noexec,size=128m,uid=10001,gid=10001
     logging:
       driver: json-file
       options:

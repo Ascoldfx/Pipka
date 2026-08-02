@@ -5,13 +5,16 @@ and optionally uploads to Backblaze B2 (set B2_KEY_ID / B2_APP_KEY / B2_BUCKET i
 """
 from __future__ import annotations
 
+import asyncio
 import gzip
 import logging
 import os
-import re
 import subprocess
 from datetime import datetime
 from pathlib import Path
+
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
 
 from app.config import settings
 
@@ -23,20 +26,24 @@ KEEP_LAST = 7
 
 def _parse_db_url(url: str) -> dict:
     """Extract connection components from postgresql+asyncpg://user:pass@host:port/dbname."""
-    # Strip SQLAlchemy driver prefix
-    url = re.sub(r"^postgresql\+\w+://", "postgresql://", url)
-    m = re.match(
-        r"postgresql://([^:@]+)(?::([^@]*))?@([^:/]+)(?::(\d+))?/(\w+)",
-        url,
-    )
-    if not m:
-        raise ValueError(f"Cannot parse DATABASE_URL: {url!r}")
+    try:
+        parsed = make_url(url)
+    except ArgumentError:
+        # Never echo a malformed URL: it may contain a database password.
+        raise ValueError("Cannot parse PostgreSQL DATABASE_URL") from None
+    if (
+        parsed.get_backend_name() != "postgresql"
+        or not parsed.username
+        or not parsed.host
+        or not parsed.database
+    ):
+        raise ValueError("Cannot parse PostgreSQL DATABASE_URL")
     return {
-        "user": m.group(1),
-        "password": m.group(2) or "",
-        "host": m.group(3),
-        "port": m.group(4) or "5432",
-        "dbname": m.group(5),
+        "user": parsed.username,
+        "password": parsed.password or "",
+        "host": parsed.host,
+        "port": str(parsed.port or 5432),
+        "dbname": parsed.database,
     }
 
 
@@ -50,9 +57,23 @@ async def run_backup() -> str:
         logger.info("Backup skipped — not a PostgreSQL database (%s)", settings.database_url[:30])
         return ""
 
+    backup_path = await asyncio.to_thread(_create_local_backup)
+
+    _rotate_backups()
+
+    # B2 upload is best-effort — a failed upload does NOT fail the backup
+    if settings.b2_key_id and settings.b2_app_key and settings.b2_bucket:
+        await _upload_b2(backup_path)
+
+    return str(backup_path)
+
+
+def _create_local_backup() -> Path:
+    """Create one atomic local dump outside the event loop."""
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_path = BACKUP_DIR / f"pipka_{timestamp}.sql.gz"
+    temporary_path = Path(f"{backup_path}.tmp")
 
     db = _parse_db_url(settings.database_url)
     env = os.environ.copy()
@@ -68,25 +89,129 @@ async def run_backup() -> str:
     ]
 
     logger.info("DB backup starting → %s", backup_path.name)
-    result = subprocess.run(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    result = subprocess.run(
+        cmd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=300,
+        check=False,
+    )
 
     if result.returncode != 0:
         err = result.stderr.decode(errors="replace")[:500]
         raise RuntimeError(f"pg_dump failed (exit {result.returncode}): {err}")
 
-    with gzip.open(backup_path, "wb") as gz:
-        gz.write(result.stdout)
+    try:
+        with gzip.open(temporary_path, "wb") as gz:
+            gz.write(result.stdout)
+        temporary_path.replace(backup_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
 
     size_kb = backup_path.stat().st_size / 1024
     logger.info("DB backup saved: %s (%.1f KB compressed)", backup_path.name, size_kb)
 
-    _rotate_backups()
+    return backup_path
 
-    # B2 upload is best-effort — a failed upload does NOT fail the backup
-    if settings.b2_key_id and settings.b2_app_key and settings.b2_bucket:
-        await _upload_b2(backup_path)
 
-    return str(backup_path)
+async def verify_latest_backup_restore() -> str:
+    """Restore the newest local backup into a disposable PostgreSQL DB."""
+    backups = sorted(BACKUP_DIR.glob("pipka_*.sql.gz"))
+    if not backups:
+        raise RuntimeError("No local backup is available for restore verification")
+    path = backups[-1]
+    await asyncio.to_thread(_verify_backup_restore, path)
+    return str(path)
+
+
+def _verify_backup_restore(path: Path) -> None:
+    """Perform a real restore and validate core tables, then always drop it."""
+    db = _parse_db_url(settings.database_url)
+    env = os.environ.copy()
+    env["PGPASSWORD"] = db["password"]
+    check_db = f"pipka_restorecheck_{datetime.now().strftime('%Y%m%d%H%M%S')}_{os.getpid()}"
+    common = ["-h", db["host"], "-p", db["port"], "-U", db["user"], "--no-password"]
+    created = False
+
+    try:
+        archive_check = subprocess.run(
+            ["gzip", "-t", str(path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=120,
+            check=False,
+        )
+        if archive_check.returncode:
+            raise RuntimeError("Backup gzip integrity check failed")
+
+        create = subprocess.run(
+            ["createdb", *common, check_db],
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=60,
+            check=False,
+        )
+        if create.returncode:
+            raise RuntimeError(
+                f"restore-check createdb failed: {create.stderr.decode(errors='replace')[:300]}"
+            )
+        created = True
+
+        decompressor = subprocess.Popen(
+            ["gzip", "-dc", str(path)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        assert decompressor.stdout is not None
+        restore = subprocess.Popen(
+            ["psql", *common, "-v", "ON_ERROR_STOP=1", "-d", check_db],
+            env=env,
+            stdin=decompressor.stdout,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+        decompressor.stdout.close()
+        try:
+            _, restore_stderr = restore.communicate(timeout=600)
+            gzip_stderr = decompressor.stderr.read() if decompressor.stderr else b""
+            gzip_code = decompressor.wait(timeout=30)
+        except subprocess.TimeoutExpired as exc:
+            restore.kill()
+            decompressor.kill()
+            restore.wait()
+            decompressor.wait()
+            raise RuntimeError("Backup restore check timed out") from exc
+
+        if restore.returncode or gzip_code:
+            detail = (restore_stderr or gzip_stderr).decode(errors="replace")[:500]
+            raise RuntimeError(f"Backup restore check failed: {detail}")
+
+        verify = subprocess.run(
+            [
+                "psql", *common, "-At", "-d", check_db, "-c",
+                "SELECT count(*) FROM information_schema.tables "
+                "WHERE table_schema='public' AND table_name IN ('jobs','users','job_scores');",
+            ],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=60,
+            check=False,
+        )
+        if verify.returncode or verify.stdout.strip() != b"3":
+            raise RuntimeError("Restored backup is missing one or more core tables")
+    finally:
+        if created:
+            subprocess.run(
+                ["dropdb", *common, "--if-exists", "--force", check_db],
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                timeout=60,
+                check=False,
+            )
 
 
 def _rotate_backups() -> None:

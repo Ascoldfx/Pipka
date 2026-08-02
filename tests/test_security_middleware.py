@@ -3,6 +3,12 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
+def test_api_schema_is_not_public_by_default() -> None:
+    client = TestClient(app, base_url="https://localhost")
+    assert client.get("/openapi.json").status_code == 404
+    assert client.get("/docs").status_code == 404
+
+
 def test_csrf_rejects_missing_and_invalid_tokens() -> None:
     client = TestClient(app, base_url="https://localhost")
 

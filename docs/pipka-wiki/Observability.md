@@ -13,7 +13,7 @@ Docker-логи json-file driver, ротация `10MB × 3` файла на к�
 Просмотр в реальном времени:
 
 ```bash
-ssh root@217.76.61.28 -i ~/.ssh/id_ed25519
+ssh pipkaops@217.76.61.28 -i ~/.ssh/id_ed25519
 docker logs -f pipka-app-1 --since 5m
 docker logs -f pipka-app-1 --since 5m 2>&1 | grep -E 'ERROR|Traceback|Scan finished'
 ```
@@ -89,7 +89,7 @@ Mounted innermost — заголовки попадают и на `/static/*` т
 ## Метрики, которых пока нет
 
 - **Prometheus `/metrics`** — пункт [[Roadmap]]. Базовый набор `http_requests_total{path,status}`, `gemini_calls_total{result}`, `scan_duration_seconds`.
-- **Healthcheck "deep"** — сейчас `/health` возвращает фиксированный `{"status":"ok"}`, не проверяет БД/планировщик. Apt for: добавить `db_ping`, `scheduler_alive`, `last_scan_age_seconds`.
+- **Healthcheck:** `/health` отдаёт DB ping, scheduler state, `last_scan_at` и `last_scan_age_seconds`; `/health/live` — liveness процесса.
 - **Tracing** — Sentry traces покрывают; OpenTelemetry не настраивали.
 
 → [[Ops панель]] → [[Настройки#sentry-опционально]] → [[Безопасность]]

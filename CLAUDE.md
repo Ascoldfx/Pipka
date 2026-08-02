@@ -2,7 +2,7 @@
 
 Stack: Python 3.12, FastAPI, PostgreSQL 16, asyncpg, APScheduler, Docker Compose.
 Repo: github.com/Ascoldfx/Pipka, ветка `main`.
-Сервер: Contabo VPS, `root@217.76.61.28`, директория `/opt/pipka`.
+Сервер: Contabo VPS, `pipkaops@217.76.61.28` (sudo), директория `/opt/pipka`.
 SSH ключ: `~/.ssh/id_ed25519`.
 
 ## Структура
@@ -27,8 +27,8 @@ SSH ключ: `~/.ssh/id_ed25519`.
 git add <files> && git commit -m "..." && git push origin main
 
 # На сервере:
-ssh root@217.76.61.28 -i ~/.ssh/id_ed25519
-cd /opt/pipka && git pull && docker compose up -d --build
+ssh pipkaops@217.76.61.28 -i ~/.ssh/id_ed25519
+cd /opt/pipka && sudo git pull && sudo docker compose up -d --build
 ```
 Всегда `--build` — без него Docker использует старый image.
 
@@ -39,7 +39,7 @@ cd /opt/pipka && git pull && docker compose up -d --build
 
 ## Скоринг — текущий backend
 - **Реальное время** (`_score_and_notify` → Telegram push): Gemini `gemini-3.5-flash-lite`, если задан `GEMINI_API_KEY`; иначе Claude.
-- **Backfill** (APScheduler, каждые 2ч): NVIDIA → Gemini `gemini-3.5-flash-lite` → Claude.
+- **Backfill** (APScheduler, каждые 2ч): Gemini `gemini-3.5-flash-lite` → NVIDIA при открытом breaker → Claude.
 - **Детальный анализ** (`analyze_single_job`, кнопка «AI-анализ»): Gemini `gemini-3.6-flash`, если задан ключ; иначе Claude.
 - Google SDK: только `google-genai`; legacy `google-generativeai` не использовать.
 

@@ -29,7 +29,7 @@
 ## Эксплуатация
 
 - [[Деплой]] — сервер, Docker, цикл выкатки
-- [[Миграции]] — Alembic, актуальный head `0007_excluded_companies`
+- [[Миграции]] — Alembic, актуальный head `0009_geographic_dedup_hash`
 - [[Бэкапы]] — pg_dump → gzip → local + Backblaze B2
 - [[Настройки]] — все env-переменные
 
@@ -48,6 +48,7 @@
 
 ## Changelog
 
+- [[Changelog 2026-08]] — security audit, фильтры, AI-cache, географический dedup, backup restore-test
 - [[Changelog 2026-07]] — Gemini 3.5/3.6, скрытые страны, удаление salary-фильтра
 - [[Changelog 2026-05]] — URL liveness, full-text search, pgvector embeddings
 - [[Changelog 2026-04]] — wiki expansion, Phase 2 (profile_hash), CSRF, Sentry, dashboard refactor, JSONB
@@ -72,5 +73,5 @@
 
 - Прод: https://pipka.net
 - GitHub: https://github.com/Ascoldfx/Pipka
-- Сервер: `ssh root@217.76.61.28` (ключ `~/.ssh/id_ed25519`)
+- Сервер: `ssh pipkaops@217.76.61.28` (ключ `~/.ssh/id_ed25519`, далее `sudo`)
 - Каталог: `/opt/pipka`

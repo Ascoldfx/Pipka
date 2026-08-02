@@ -120,6 +120,7 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = "INFO"
+    api_docs_enabled: bool = False
 
     # Sentry — error tracking. Empty DSN disables Sentry entirely (no SDK init).
     sentry_dsn: str = ""

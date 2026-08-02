@@ -25,6 +25,17 @@ oauth.register(
 )
 
 
+def _verified_google_identity(userinfo) -> tuple[str, str] | None:
+    """Return the immutable subject/email only for a verified Google email."""
+    if not userinfo:
+        return None
+    google_sub = str(userinfo.get("sub", "")).strip()
+    email = str(userinfo.get("email", "")).strip()
+    if not google_sub or not email or userinfo.get("email_verified") is not True:
+        return None
+    return google_sub, email
+
+
 @router.get("/auth/google/login")
 async def google_login(request: Request):
     """Redirect user to Google OAuth consent screen."""
@@ -48,8 +59,11 @@ async def google_callback(request: Request):
     if not userinfo:
         return RedirectResponse(url="/?error=no_userinfo")
 
-    google_sub = userinfo["sub"]
-    email = userinfo.get("email", "")
+    identity = _verified_google_identity(userinfo)
+    if identity is None:
+        logger.warning("OAuth rejected an incomplete or unverified Google identity")
+        return RedirectResponse(url="/?error=unverified_email")
+    google_sub, email = identity
     name = userinfo.get("name", "")
     avatar = userinfo.get("picture", "")
 

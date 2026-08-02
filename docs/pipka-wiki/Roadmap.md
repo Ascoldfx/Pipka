@@ -60,7 +60,7 @@ Pre-launch блокеры из глубокого аудита:
 High-severity пункты из аудита (severity 6-7):
 
 - **TrustedHostMiddleware** outermost — отбивает forged `Host:` headers до session-state allocation. Allowed: `pipka.net`, `*.pipka.net`, `localhost`, `127.0.0.1`.
-- **Per-IP rate-limit middleware** — sliding-window per IP, three buckets: `auth-write 10/min`, `profile-write 20/min`, `api-global 300/min`. Client IP через `CF-Connecting-IP` → `X-Forwarded-For[0]` → socket. См. [[Rate limiting#per-ip-middleware]].
+- **Per-IP rate-limit middleware** — sliding-window per IP, three buckets; IP только из sanitized `X-Real-IP` от loopback nginx или socket. См. [[Rate limiting#per-ip-middleware]].
 - **`?search=` length cap** — `Query(None, max_length=200)` против 1MB substring-attack под `statement_timeout=30s`.
 - **Profile-list size limits** — 50 entries × 200 chars per list (`target_titles`/`preferred_countries`/`excluded_keywords`/`target_companies`); 20-key dict с 50-char key/value для `languages`. JSON-bomb path закрыт.
 - **Sentry PII filter** — `_sentry_before_send` рекурсивно scrub'ит 13 ключей (resume_text, email, telegram_id, google_sub, csrf_token, ...) из stack-frame locals, breadcrumb data, request headers/body, extra context. См. [[Observability#3-sentry]] и [[Безопасность#day-2-фиксы]].
@@ -86,22 +86,19 @@ Medium-severity (4-5):
 - Structured JSON Schema для Gemini batch scoring.
 - Зарплата полностью удалена как preference/scoring signal.
 - `hidden_countries`: постоянное скрытие стран из основной ленты без остановки сбора и скоринга.
-- Alembic head `0007_excluded_companies`; fresh и upgrade `0006 → 0007` SQLite migration-path проверен.
+- Alembic head `0009_geographic_dedup_hash`; semantic hard-reject удалён, geographic dedup применён к production.
 
 ## 🟡 В работе / следующий приоритет
 
-### P0 — безопасный production rollout
+### P0 — оставшиеся production-риски
 
-1. Выкатить `0006` и Gemini SDK/model migration одним релизом.
-2. Сразу проверить `alembic current`, `/health`, один Gemini structured-score batch и один detailed analysis.
-3. 24 часа наблюдать `gemini_429`, `gemini_exhausted`, breaker и распределение score; сравнить с прежней моделью на фиксированной выборке.
-4. При деградации модель откатывается env-переменной, схема профиля остаётся совместимой.
-5. После подтверждения актуального `/opt/pipka/.env` удалить устаревшие `.env.bak*` с сервера или перенести их в закрытое хранилище секретов; `.gitignore` лишь скрывает их из status, но не удаляет.
+1. Включить off-site Backblaze B2 с write-only application key; локальный volume не защищает от потери VPS.
+2. Удалить с VPS устаревшие `.env.bak*` после ручного подтверждения актуального `.env`.
+3. Убрать CSP `unsafe-inline` после выноса inline dashboard JS/CSS в static assets.
 
 ### P1 — качество и стоимость pipeline
 
-1. Сделать `target_titles` разрешающим сигналом в pre-filter: сейчас AI-промпт уже следует профилю, но старый domain gate может не пропустить AI/interim/crisis-роли до модели.
-2. Добавить golden dataset из 50–100 вручную размеченных вакансий и regression-метрики precision@20 / false-negative rate.
+1. Добавить golden dataset из 50–100 вручную размеченных вакансий и regression-метрики precision@20 / false-negative rate.
 3. Ввести per-backend latency/token/cost counters и вывести их в Ops.
 4. Кэшировать detailed analysis по `(user, job, profile_hash, analysis_model)` с TTL; идею из старого `pipka-latest` реализовать заново в текущих роутерах, не переносить устаревший монолит.
 5. Разделить AI-квоты real-time и backfill, чтобы массовая очередь не вытесняла пользовательский анализ.
@@ -115,10 +112,9 @@ Medium-severity (4-5):
 
 ### P2 — эксплуатация
 
-1. Deep healthcheck: DB ping, scheduler heartbeat, возраст последнего успешного scan.
-2. Еженедельный restore-test бэкапа в disposable DB.
-3. Retention для `ops_events`.
-4. Distributed scheduler lock и Redis rate limiter — только перед multi-replica.
+1. Retention для `ops_events`.
+2. Внешний alert на `backup_restore/error` и stale scan, а не только Ops UI.
+3. Distributed scheduler lock и Redis rate limiter — только перед multi-replica.
 
 ## ⏳ Отложено (high value, по запросу)
 

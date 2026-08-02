@@ -66,7 +66,7 @@ APScheduler @ 6h tick → _watchlist_scan(bot_app)
 
 ## Дедупликация с основным сканом
 
-Aggregator использует общий `dedup_hash` (sha256 от title+company), значит вакансия появившаяся в обоих сканах:
+Aggregator использует общий v2 `dedup_hash` (title+company+country+location), значит вакансия появившаяся в обоих сканах:
 
 - Сохраняется один раз с `source="adzuna"` (основной скан был быстрее)
 - В `raw_data.merged_sources` появляется `["adzuna", "watchlist"]`

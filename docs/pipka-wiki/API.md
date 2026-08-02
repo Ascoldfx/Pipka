@@ -124,9 +124,10 @@ excluded_keywords, excluded_companies, english_only (0/1), target_companies
 
 | Метод | Путь | Ответ |
 |-------|------|-------|
-| GET | `/health` | `{"status": "ok", "service": "pipka"}` |
+| GET | `/health/live` | Shallow process liveness |
+| GET | `/health` | Readiness: DB, scheduler, `last_scan_at/age` |
 
-Сейчас это shallow check. Deep healthcheck — пункт [[Roadmap]].
+`/health` возвращает `503 degraded`, если БД недоступна или APScheduler ещё не запущен. `/docs`, `/redoc`, `/openapi.json` по умолчанию отключены; локально включаются `API_DOCS_ENABLED=true`.
 
 ## CSRF на mutating запросах
 

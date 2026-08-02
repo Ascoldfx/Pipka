@@ -21,7 +21,7 @@ from app.models.user import User, UserProfile
 from app.scoring.matcher import score_jobs
 from app.scoring.profile_hash import compute_profile_hash, valid_score_model_versions
 from app.scoring.rules import matches_explicit_target_title, pre_filter
-from app.services.backup_service import run_backup
+from app.services.backup_service import run_backup, verify_latest_backup_restore
 from app.services.ops_service import record_ops_event
 from app.services.tracker_service import get_hidden_dedup_hashes, get_hidden_job_ids
 from app.sources import (
@@ -107,6 +107,17 @@ def start_scheduler(bot_app):
         hour=2,
         minute=30,
         id="daily_backup",
+        replace_existing=True,
+    )
+    # Weekly proof that the newest dump can actually be restored. Runs after
+    # Sunday's daily backup and always removes the disposable database.
+    scheduler.add_job(
+        _weekly_backup_restore_check,
+        "cron",
+        day_of_week="sun",
+        hour=3,
+        minute=30,
+        id="weekly_backup_restore_check",
         replace_existing=True,
     )
     # Backfill scorer: every 2 hours — score existing unscored jobs for each user
@@ -946,6 +957,20 @@ async def _daily_backup():
     except Exception as e:
         logger.error("Daily backup failed: %s", e)
         await record_ops_event("backup", "error", message=str(e)[:250])
+
+
+async def _weekly_backup_restore_check():
+    """Restore the newest dump into a disposable DB and validate core tables."""
+    from pathlib import Path  # noqa: PLC0415
+
+    try:
+        path = await verify_latest_backup_restore()
+        name = Path(path).name
+        await record_ops_event("backup_restore", "success", message=name)
+        logger.info("Weekly backup restore check OK: %s", name)
+    except Exception as e:
+        logger.error("Weekly backup restore check failed: %s", e)
+        await record_ops_event("backup_restore", "error", message=str(e)[:250])
 
 
 async def _cleanup_old_jobs():

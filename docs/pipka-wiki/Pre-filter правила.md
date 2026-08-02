@@ -22,7 +22,7 @@ DE: `direktor`, `leiter`, `abteilungsleiter`, `bereichsleiter`, `geschäftsführ
 
 ### `REJECT_TITLE_KEYWORDS` — hard-reject по title
 
-Junior/operational: `specialist`, `analyst`, `coordinator`, `assistant`, `clerk`, `sachbearbeiter`, `referent`, `mitarbeiter`, `fachkraft`, `junior`, `trainee`, `werkstudent`, `praktikant`, `azubi`, `intern`, `student`, `buyer`, `dispatcher`, `planner`, `merchandiser`.
+Junior/operational: `specialist`, `analyst`, `coordinator`, `assistant`, `clerk`, `sachbearbeiter`, `referent`, `mitarbeiter`, `fachkraft`, `junior`, `trainee`, `werkstudent`, `praktikant`, `azubi`, `student`, `buyer`, `dispatcher`, `planner`, `merchandiser`. Internship проверяется отдельным whole-word regex `\bintern(?:ship)?s?\b`, чтобы `International`/`Internal` не становились false reject.
 
 Wrong function (не Supply Chain / Procurement / Operations): `marketing`, `sales director`, `business development`, `account executive/manager`, `hr director/manager`, `human resources`, `people operations/lead`, `talent`, `recruiting/recruitment`, `engineering manager`, `software`, `developer`, `data scientist`, `product manager/director/lead`, `finance director`, `financial controller`, `accounting`, `legal`, `compliance director`, `regulatory`, `creative director`, `design director`, `art director`, `editorial`, `content director`, `communications director`, `customer success/service`, `support manager`, `research director`, `r&d director`, `scientific`, `medical director`, `clinical`, `real estate`, `property`, `founding`, `co-founder`, `consultant`, `consulting`, `berater`, `beratung`, `advisory`, `advisor`.
 
@@ -47,7 +47,7 @@ Crisis-related: `crisis management`, `turnaround`, `transformation`, `restructur
 ## Порядок проверок
 
 1. **Protected target-title match** — нормализованное точное совпадение с `profile.target_titles` защищает вакансию от общих category/domain/seniority правил. Удаляются только служебное `of` и gender suffix `(m/w/d)`, но функциональные модификаторы сохраняются: `Director of Operations` совпадает с `Director Operations`, а `Director of Retail and Commercial Operations` — нет.
-2. **COO opt-in** — `COO`, `Chief Operating Officer`, `Chief Operations Officer` → `low`, если COO не присутствует явно в `profile.target_titles`.
+2. **COO opt-in** — только если `COO`/`Chief Operating Officer` является самой ролью в начале title, она получает `low` без opt-in. `Director, COO Transformation Office` и `Head of Operations — COO Organisation` не считаются COO-ролями.
 3. **Junior/wrong function** — `REJECT_TITLE_KEYWORDS` в title → `low`, кроме protected target-title. `Business Development` относится к коммерческой функции.
 4. **Commercial-function reject** — `commercial/retail/sales/revenue/store operations` и соответствующие Director/Head/Manager роли → `low`. Если в самом title явно есть `supply chain`, `procurement`, `sourcing`, `purchasing` или `logistics`, отраслевое слово `retail/commercial` не блокирует вакансию.
 5. **Foreign language required** — `FOREIGN_LANGUAGE_REQUIRED` в description → `low`, включая protected target-title.
@@ -85,6 +85,7 @@ Crisis-related: `crisis management`, `turnaround`, `transformation`, `restructur
 - **апрель 2026:** удалён salary-floor check.
 - **26 июля 2026:** зарплата полностью исключена и из AI-промптов/вердиктов: большинство источников её не отдаёт, поэтому сравнение было систематически неполным и несправедливым.
 - **27 июля 2026:** компании отделены от контентных стоп-фраз миграцией `0007`; `nan` очищается; English-only перешёл с marker-гейта на консервативное определение языка.
+- **1 августа 2026:** whole-word internship, primary-role COO detection и semantic priority закрыли false-negative классы `International`/COO-office/низкая embedding similarity.
 
 ## Куда не масштабируется
 
