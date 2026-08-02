@@ -92,9 +92,11 @@ Medium-severity (4-5):
 
 ### P0 — оставшиеся production-риски
 
-1. Включить off-site Backblaze B2 с write-only application key; локальный volume не защищает от потери VPS.
-2. Удалить с VPS устаревшие `.env.bak*` после ручного подтверждения актуального `.env`.
-3. Вынести inline CSS/`style=` из dashboard и убрать оставшийся `style-src 'unsafe-inline'`; JavaScript CSP уже nonce-only, event attributes запрещены.
+1. Отозвать ранее опубликованные Telegram/Adzuna credentials у providers; после ротации согласованно очистить public Git history.
+2. Включить off-site Backblaze B2 с write-only application key; локальный volume не защищает от потери VPS.
+3. Удалить с VPS устаревшие `.env.bak*` после ручного подтверждения актуального `.env`.
+4. Разделить application/migration/backup DB roles; текущий runtime role не должен быть PostgreSQL superuser.
+5. Вынести inline CSS/`style=` из dashboard и убрать оставшийся `style-src 'unsafe-inline'`; JavaScript CSP уже nonce-only, event attributes запрещены.
 
 ### P1 — качество и стоимость pipeline
 

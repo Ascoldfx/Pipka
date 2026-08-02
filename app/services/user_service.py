@@ -7,12 +7,37 @@ from sqlalchemy.orm import selectinload
 from app.models.user import User, UserProfile
 
 
+class UserAccessDenied(PermissionError):
+    """The identity is inactive or is not allowed to register."""
+
+
+def _csv_values(raw: str) -> set[str]:
+    return {value.strip().casefold() for value in raw.split(",") if value.strip()}
+
+
+def _allowed_telegram_ids() -> set[int]:
+    from app.config import settings
+
+    result: set[int] = set()
+    for value in settings.allowed_telegram_ids.split(","):
+        value = value.strip()
+        if value and value.lstrip("-").isdigit():
+            result.add(int(value))
+    return result
+
+
 async def get_or_create_user(telegram_id: int, name: str | None, session: AsyncSession) -> User:
     result = await session.execute(
         select(User).options(selectinload(User.profile)).where(User.telegram_id == telegram_id)
     )
     user = result.scalar_one_or_none()
+    if user is not None and not user.is_active:
+        raise UserAccessDenied("Account is inactive")
     if user is None:
+        from app.config import settings
+
+        if not settings.allow_public_registration and telegram_id not in _allowed_telegram_ids():
+            raise UserAccessDenied("Registration is closed")
         user = User(telegram_id=telegram_id, name=name)
         session.add(user)
         await session.flush()
@@ -40,10 +65,22 @@ async def get_or_create_google_user(
         if user:
             user.google_sub = google_sub  # link Google identity
 
-    # 3) Create new user
+    if user is not None and not user.is_active:
+        raise UserAccessDenied("Account is inactive")
+
+    admin_emails = _csv_values(settings.admin_emails)
+
+    # 3) Create new user only when registration policy permits it.
     if user is None:
-        admin_emails = [e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()]
-        role = "admin" if email.lower() in admin_emails else "user"
+        normalised_email = email.casefold()
+        invited_emails = _csv_values(settings.allowed_user_emails)
+        if (
+            not settings.allow_public_registration
+            and normalised_email not in admin_emails
+            and normalised_email not in invited_emails
+        ):
+            raise UserAccessDenied("Registration is closed")
+        role = "admin" if normalised_email in admin_emails else "user"
         user = User(
             google_sub=google_sub,
             email=email,

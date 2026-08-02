@@ -9,7 +9,7 @@ from fastapi.responses import RedirectResponse
 
 from app.config import settings
 from app.database import async_session
-from app.services.user_service import get_or_create_google_user
+from app.services.user_service import UserAccessDenied, get_or_create_google_user
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,12 @@ async def google_callback(request: Request):
     avatar = userinfo.get("picture", "")
 
     async with async_session() as session:
-        user = await get_or_create_google_user(google_sub, email, name, avatar, session)
+        try:
+            user = await get_or_create_google_user(google_sub, email, name, avatar, session)
+        except UserAccessDenied:
+            request.session.clear()
+            logger.warning("OAuth access denied by registration policy")
+            return RedirectResponse(url="/?error=access_denied")
 
         # Session-fixation defense: clear ANY pre-login state before writing
         # the authenticated identity. If an attacker pre-set ``pipka_session``

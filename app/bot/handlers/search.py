@@ -6,8 +6,10 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from app.api._ratelimit import get_user_rate_limit_retry_after
 from app.bot.formatters import format_job_card
 from app.bot.keyboards import job_actions, search_type_menu, show_more_button
+from app.config import settings
 from app.database import async_session
 from app.services.job_service import search_and_score
 from app.services.user_service import get_or_create_user
@@ -121,17 +123,11 @@ async def search_preset_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
     preset_key = query.data
     
-    if preset_key == "search_profile":
-        async with async_session() as session:
-            import sqlalchemy as sa
-            from app.models.user import User
-            from sqlalchemy.orm import selectinload
-            
-            user_res = await session.execute(
-                sa.select(User).options(selectinload(User.profile)).where(User.telegram_id == update.effective_user.id)
-            )
-            user = user_res.scalar_one_or_none()
-            
+    async with async_session() as session:
+        user = await get_or_create_user(query.from_user.id, query.from_user.full_name, session)
+        await session.commit()
+
+        if preset_key == "search_profile":
             if not user or not user.profile or not user.profile.preferred_countries or not user.profile.target_titles:
                 await query.edit_message_text(
                     "❌ Ваш профиль или настройки поиска не заполнены!\n\n"
@@ -145,36 +141,45 @@ async def search_preset_handler(update: Update, context: ContextTypes.DEFAULT_TY
                 "countries": user.profile.preferred_countries,
                 "locations": [],
             }
-    else:
-        preset = SEARCH_PRESETS.get(preset_key)
-        if not preset:
-            await query.edit_message_text("Неизвестный режим поиска.")
+        else:
+            preset = SEARCH_PRESETS.get(preset_key)
+            if not preset:
+                await query.edit_message_text("Неизвестный режим поиска.")
+                return
+
+        retry_after = get_user_rate_limit_retry_after(
+            user_id=user.id,
+            key="telegram_search",
+            limit=settings.telegram_search_limit_per_hour,
+            window_s=3600,
+        )
+        if retry_after is not None:
+            await query.edit_message_text(
+                f"Лимит поиска исчерпан. Повторите через {max(1, (retry_after + 59) // 60)} мин."
+            )
             return
 
-    await query.edit_message_text(
-        f"🚀 Ищу: {preset['label']}...\n"
-        f"Страны: {', '.join(preset['countries']).upper()}\n"
-        f"Запросы: {len(preset['queries'])} шт.\n\n"
-        "Источники: Adzuna, JobSpy, Arbeitnow, Remotive\n"
-        "Это может занять 1-3 минуты."
-    )
+        await query.edit_message_text(
+            f"🚀 Ищу: {preset['label']}...\n"
+            f"Страны: {', '.join(preset['countries']).upper()}\n"
+            f"Запросы: {len(preset['queries'])} шт.\n\n"
+            "Источники: Adzuna, JobSpy, Arbeitnow, Remotive\n"
+            "Это может занять 1-3 минуты."
+        )
 
-    country_queries = {
-        country: expand_queries_for_country(preset["queries"], country)
-        for country in preset["countries"]
-        if country == "br"
-    }
-    params = SearchParams(
-        queries=preset["queries"],
-        countries=preset["countries"],
-        locations=preset.get("locations", []),
-        country_queries=country_queries,
-    )
+        country_queries = {
+            country: expand_queries_for_country(preset["queries"], country)
+            for country in preset["countries"]
+            if country == "br"
+        }
+        params = SearchParams(
+            queries=preset["queries"],
+            countries=preset["countries"],
+            locations=preset.get("locations", []),
+            country_queries=country_queries,
+        )
 
-    aggregator = _build_aggregator()
-    async with async_session() as session:
-        user = await get_or_create_user(query.from_user.id, query.from_user.full_name, session)
-        await session.commit()
+        aggregator = _build_aggregator()
         results = await search_and_score(aggregator, params, user, session, max_results=100)
 
     if not results:
@@ -273,6 +278,17 @@ async def text_search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     async with async_session() as session:
         user = await get_or_create_user(update.effective_user.id, update.effective_user.full_name, session)
         await session.commit()
+        retry_after = get_user_rate_limit_retry_after(
+            user_id=user.id,
+            key="telegram_search",
+            limit=settings.telegram_search_limit_per_hour,
+            window_s=3600,
+        )
+        if retry_after is not None:
+            await update.message.reply_text(
+                f"Лимит поиска исчерпан. Повторите через {max(1, (retry_after + 59) // 60)} мин."
+            )
+            return
         results = await search_and_score(aggregator, params, user, session, max_results=100)
 
     if not results:

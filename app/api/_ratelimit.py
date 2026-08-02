@@ -119,13 +119,34 @@ def _check(subject: tuple, key: str, limit: int, window_s: int) -> int | None:
 def check_rate_limit(*, user_id: int, key: str, limit: int, window_s: int) -> None:
     """Endpoint-level limiter keyed on user_id. Raises ``HTTPException(429)``
     with ``Retry-After`` when the user crosses the cap."""
-    retry_after = _check(("user", user_id), key, limit, window_s)
+    retry_after = get_user_rate_limit_retry_after(
+        user_id=user_id,
+        key=key,
+        limit=limit,
+        window_s=window_s,
+    )
     if retry_after is not None:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=f"Rate limit exceeded ({limit} per {window_s}s)",
             headers={"Retry-After": str(retry_after)},
         )
+
+
+def get_user_rate_limit_retry_after(
+    *,
+    user_id: int,
+    key: str,
+    limit: int,
+    window_s: int,
+) -> int | None:
+    """Consume one user quota slot and return retry seconds when exhausted.
+
+    Bot handlers cannot use FastAPI's ``HTTPException`` response machinery,
+    so they call this lower-level variant and render a Telegram message.
+    Web endpoints keep using :func:`check_rate_limit` above.
+    """
+    return _check(("user", user_id), key, limit, window_s)
 
 
 _TRUSTED_PROXY_HOSTS = frozenset({"127.0.0.1", "::1"})

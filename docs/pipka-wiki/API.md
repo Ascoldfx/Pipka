@@ -115,10 +115,10 @@ excluded_keywords, excluded_companies, english_only (0/1), target_companies
 
 | Метод | Путь | Описание |
 |-------|------|---------|
-| GET | `/api/admin/user/{user_id}/profile` | Полный профиль + статистика по user'у |
-| DELETE | `/api/admin/user/{user_id}` | Soft-delete (`is_active=False`) |
+| GET | `/api/admin/user/{user_id}/profile` | Метаданные профиля + preview резюме до 1500 символов; полный `resume_text` не возвращается |
+| DELETE | `/api/admin/user/{user_id}` | Soft-delete (`is_active=False`); нельзя деактивировать себя или другого admin |
 
-Все требуют `require_admin` ([[Auth#хелперы]]).
+Все требуют `require_admin_async` ([[Auth#хелперы]]). Успешные просмотры/деактивации и запрещённые admin attempts пишутся в `ops_events` как `admin_action`.
 
 ## Health (`app/api/health.py`)
 

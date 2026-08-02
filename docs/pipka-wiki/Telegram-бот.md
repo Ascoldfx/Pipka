@@ -10,6 +10,7 @@ Library: `python-telegram-bot` 21. Long-polling, без webhook'ов. Подни
 
 `app/bot/bot.py:create_bot_app()` строит `Application` и регистрирует:
 
+- **TypeHandler group -1:** `_access_guard` до любого другого handler проверяет allowlist/active status пользователя.
 - **CommandHandler:** `/start`, `/help`, `/search`, `/profile`.
 - **CallbackQueryHandler** — для каждой inline-кнопки (см. [[#Keyboards]]).
 - **MessageHandler** — `_text_router` диспетчит текстовые сообщения по `context.user_data` (например, "пользователь сейчас редактирует поле профиля" → отдать в `profile_text_handler`).
@@ -24,6 +25,8 @@ Library: `python-telegram-bot` 21. Long-polling, без webhook'ов. Подни
 | `results.py` | `ai_analysis_handler`, `save_job_handler`, `applied_handler`, `reject_handler` | Кнопки действий под каждой карточкой вакансии. Дёргает [[Трекер]]. |
 | `tracker.py` | `my_jobs_handler`, `stats_handler`, `status_update_handler` | "Мои вакансии", статистика, переключение статуса (`saved → applied → interviewing → offer / rejected`). |
 | `settings.py` | `profile_menu_handler`, `profile_field_handler`, `profile_text_handler` | Редактирование профиля по полям через текстовые сообщения (state в `context.user_data["editing_profile_field"]`). |
+
+Search и detailed AI analysis имеют отдельные часовые квоты, потому что Telegram updates не проходят через FastAPI middleware. См. [[Rate limiting#telegram-per-user]]. Profile text ограничен теми же cap'ами, что web: до 50 target titles × 200 символов, 20 языков, location до 255 символов и resume до 100 000.
 
 ## Keyboards
 

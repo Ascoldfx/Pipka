@@ -28,6 +28,8 @@ State: `dict[(user_id, key), deque[float]]` под `threading.Lock`. Ключ �
 
 Память: O(limit × количество (user, key) пар). При limit=30 и 10 user'ах с одним key — 300 float в памяти. Не критично.
 
+Bot handlers используют низкоуровневый `get_user_rate_limit_retry_after(...)`: он потребляет тот же bucket, но возвращает число секунд вместо FastAPI `HTTPException`.
+
 ## Где используется
 
 ### Per-user (endpoint-level)
@@ -35,6 +37,15 @@ State: `dict[(user_id, key), deque[float]]` под `threading.Lock`. Ключ �
 | Эндпоинт | key | limit | window |
 |----------|-----|-------|--------|
 | `GET /api/jobs/{id}/analyze` | `"analyze"` | 30 | 3600s (1 час) |
+
+### Telegram (per-user)
+
+| Действие | key | Дефолт | window |
+|----------|-----|---------|--------|
+| Preset/custom search | `telegram_search` | `TELEGRAM_SEARCH_LIMIT_PER_HOUR=6` | 1 час |
+| Detailed AI analysis | `telegram_analysis` | `TELEGRAM_ANALYSIS_LIMIT_PER_HOUR=10` | 1 час |
+
+AI quota расходуется только после проверки, что job существует и профиль заполнен. Некорректный/stale callback не сжигает лимит.
 
 ### Per-IP middleware (`RateLimitMiddleware`)
 
@@ -61,7 +72,7 @@ Real-time `_score_and_notify` (3-часовой scan) и `_backfill_score` НЕ 
 ## Auth-side ограничения (out of scope)
 
 - Cloudflare DDoS protection — на уровне домена, не наш код.
-- Telegram bot долгополлинг — Telegram сам ограничивает 30 msg/sec до бота.
+- Telegram long polling не проходит через HTTP middleware, поэтому дорогие bot actions имеют собственные per-user buckets; обычные menu/callback updates ограничивает сам Telegram.
 - OAuth retry — authlib делает 3 попытки с back-off, отдельной квоты не считаем.
 
 ## Не делает

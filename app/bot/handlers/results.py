@@ -5,6 +5,8 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from app.api._ratelimit import get_user_rate_limit_retry_after
+from app.config import settings
 from app.database import async_session
 from app.models.job import Job
 from app.scoring.matcher import analyze_single_job
@@ -38,6 +40,23 @@ async def ai_analysis_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         profile = user.profile
         if not profile:
             await query.edit_message_text(text=f"{original_text}\n\n⚠️ Настройте профиль для анализа (/profile)")
+            return
+
+        # Consume quota only after validating the vacancy and profile. Bad or
+        # stale callback IDs must not burn a user's legitimate AI allowance.
+        retry_after = get_user_rate_limit_retry_after(
+            user_id=user.id,
+            key="telegram_analysis",
+            limit=settings.telegram_analysis_limit_per_hour,
+            window_s=3600,
+        )
+        if retry_after is not None:
+            await query.edit_message_text(
+                text=(
+                    f"{original_text}\n\n⚠️ Лимит AI-анализов исчерпан. "
+                    f"Повторите через {max(1, (retry_after + 59) // 60)} мин."
+                )
+            )
             return
 
         analysis = await analyze_single_job(job, profile)

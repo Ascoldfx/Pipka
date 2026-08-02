@@ -31,7 +31,7 @@ from tenacity import (
 from app.config import settings
 from app.models.job import Job, JobScore
 from app.models.user import User
-from app.scoring.matcher import SCORING_PROMPT, build_profile_text
+from app.scoring.matcher import SCORING_PROMPT, build_profile_text, validated_job_index
 from app.scoring.profile_hash import MODEL_NVIDIA, compute_profile_hash
 from app.services.ops_service import record_ops_event
 
@@ -184,8 +184,8 @@ def _parse_scores(raw: str, jobs: list[Job]) -> list[tuple[Job, int, str]]:
 
     output: list[tuple[Job, int, str]] = []
     for item in results:
-        idx = item.get("job_index", 0)
-        if idx >= len(jobs):
+        idx = validated_job_index(item, len(jobs))
+        if idx is None:
             continue
         output.append((
             jobs[idx],

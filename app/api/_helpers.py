@@ -128,11 +128,28 @@ async def require_admin_async(request: Request) -> None:
     """
     user_id = request.session.get("user_id")
     if not user_id:
+        from app.services.ops_service import record_ops_event
+
+        await record_ops_event(
+            "admin_action",
+            "denied",
+            source=request.url.path,
+            message="Unauthenticated admin API attempt",
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Login required"
         )
     role = await _resolve_role_from_db(user_id)
     if role != "admin":
+        from app.services.ops_service import record_ops_event
+
+        await record_ops_event(
+            "admin_action",
+            "denied",
+            source=request.url.path,
+            message="Non-admin API attempt",
+            payload={"actor_user_id": user_id},
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
         )

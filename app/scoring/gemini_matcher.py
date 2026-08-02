@@ -34,7 +34,7 @@ from app.config import settings
 from app.models.job import Job, JobScore
 from app.models.user import User
 from app.scoring.gemini_client import generate_gemini_content
-from app.scoring.matcher import SCORING_PROMPT, build_profile_text
+from app.scoring.matcher import SCORING_PROMPT, build_profile_text, validated_job_index
 from app.scoring.profile_hash import MODEL_GEMINI, compute_profile_hash
 from app.scoring.rules import pre_filter
 from app.services.ops_service import record_ops_event
@@ -297,10 +297,8 @@ async def _call_gemini_raw(
 
     output: list[tuple[Job, int, str]] = []
     for item in results:
-        if not isinstance(item, dict):
-            continue
-        idx = int(item.get("job_index", 0))
-        if idx < 0 or idx >= len(jobs):
+        idx = validated_job_index(item, len(jobs))
+        if idx is None:
             continue
         output.append((
             jobs[idx],

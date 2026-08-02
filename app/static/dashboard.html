@@ -1887,7 +1887,7 @@ async function viewAdminUserProfile(userId) {
     if(d.detail) throw new Error(d.detail);
     
     const p = d.profile || {};
-    const resumePreview = (p.resume_text || 'No resume text').substring(0, 1500);
+    const resumePreview = p.resume_preview || 'No resume text';
 
     $('modal-title').textContent = `User Profile: ${d.name || 'Unknown'}`;
     $('modal-body').innerHTML = `
@@ -1898,7 +1898,7 @@ async function viewAdminUserProfile(userId) {
         </div>
         
         <h4 style="margin:12px 0 6px; font-size:11px; text-transform:uppercase; color:var(--muted)">Resume Preview</h4>
-        <pre style="background:var(--badge); padding:10px; border-radius:8px; font-size:11px; max-height:200px; overflow:auto; margin-bottom:12px; white-space:pre-wrap">${esc(resumePreview)}${p.resume_text && p.resume_text.length > 1500 ? '\n...' : ''}</pre>
+        <pre style="background:var(--badge); padding:10px; border-radius:8px; font-size:11px; max-height:200px; overflow:auto; margin-bottom:12px; white-space:pre-wrap">${esc(resumePreview)}${p.resume_truncated ? '\n...' : ''}</pre>
         
         <h4 style="margin:12px 0 6px; font-size:11px; text-transform:uppercase; color:var(--muted)">Search Settings</h4>
         <div class="mini-list">

@@ -2,7 +2,7 @@ import re
 
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.main import _scrub, app
 
 
 def test_api_schema_is_not_public_by_default() -> None:
@@ -84,3 +84,22 @@ def test_non_html_responses_do_not_allow_inline_scripts() -> None:
     assert "script-src 'self';" in csp
     assert "script-src-attr 'none'" in csp
     assert "nonce-" not in csp
+
+
+def test_sentry_scrubber_is_case_insensitive_and_redacts_secret_shapes() -> None:
+    scrubbed = _scrub(
+        {
+            "authorization": "Bearer secret-value",
+            "COOKIE": "pipka_session=signed-value",
+            "nested": {
+                "Google-Client-Secret": "client-secret",
+                "message": "contact person@example.com or use 123456789:abcdefghijklmnopqrstuvwxyz_123456",  # secret-scan: allow
+            },
+        }
+    )
+
+    assert scrubbed["authorization"] == "[redacted]"
+    assert scrubbed["COOKIE"] == "[redacted]"
+    assert scrubbed["nested"]["Google-Client-Secret"] == "[redacted]"
+    assert "person@example.com" not in scrubbed["nested"]["message"]
+    assert "123456789:" not in scrubbed["nested"]["message"]

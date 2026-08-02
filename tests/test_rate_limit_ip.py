@@ -1,6 +1,7 @@
 from starlette.requests import Request
 
-from app.api._ratelimit import _client_ip
+from app.api import _ratelimit
+from app.api._ratelimit import _client_ip, get_user_rate_limit_retry_after
 
 
 def _request(peer: str, **headers: str) -> Request:
@@ -41,3 +42,19 @@ def test_non_proxy_peer_cannot_spoof_forwarded_headers() -> None:
     request = _request("198.51.100.20", **{"x-real-ip": "203.0.113.42"})
 
     assert _client_ip(request) == "198.51.100.20"
+
+
+def test_bot_and_web_can_share_bounded_user_quota() -> None:
+    _ratelimit._buckets.clear()
+
+    assert get_user_rate_limit_retry_after(
+        user_id=42, key="telegram_search", limit=2, window_s=3600
+    ) is None
+    assert get_user_rate_limit_retry_after(
+        user_id=42, key="telegram_search", limit=2, window_s=3600
+    ) is None
+    assert get_user_rate_limit_retry_after(
+        user_id=42, key="telegram_search", limit=2, window_s=3600
+    ) is not None
+
+    _ratelimit._buckets.clear()

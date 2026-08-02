@@ -41,9 +41,14 @@ Callback отклоняет identity без `sub`, email или без буле�
 
 1. Ищем существующего по `google_sub` → нашли → обновляем `avatar_url`, return.
 2. Не нашли по sub → ищем по `email` (legacy: пользователь мог зарегаться через Telegram, потом добавить Google) → нашли → привязываем `google_sub`, return.
-3. Никого не нашли → создаём нового. Роль:
-   - `admin` если `email.lower() in ADMIN_EMAILS` (env, comma-sep).
-   - `user` иначе.
+3. Если найденный пользователь имеет `is_active=false` → вход запрещён, сессия очищается.
+4. Никого не нашли → регистрация разрешена только если выполнено одно из условий:
+   - `ALLOW_PUBLIC_REGISTRATION=true`;
+   - email есть в `ALLOWED_USER_EMAILS`;
+   - email есть в `ADMIN_EMAILS` (первичное создание владельца).
+5. Роль нового пользователя: `admin` для `ADMIN_EMAILS`, иначе `user`.
+
+Public registration по умолчанию закрыта. Telegram следует той же политике: существующий active user проходит, новый Telegram ID должен быть в `ALLOWED_TELEGRAM_IDS` либо `ALLOW_PUBLIC_REGISTRATION=true`. Перед любым Telegram handler выполняется общий access guard, поэтому inactive user не может обойти revoke через pagination/cached callbacks.
 
 ## Сессия
 
@@ -81,7 +86,8 @@ Callback отклоняет identity без `sub`, email или без буле�
 ## Safety / связи
 
 - CSRF на POST/PUT/PATCH/DELETE — см. [[Безопасность#csrf]].
-- `admin_emails` — единственный механизм назначения роли admin при первом логине. После логина роль кэшируется в БД и в session — изменение env не понизит уже-admin'а до user.
+- `admin_emails` — единственный механизм назначения роли admin при первом логине. После логина роль хранится в БД; изменение env не понизит уже-admin'а до user.
+- `is_active=false` блокирует и Google login, и все Telegram updates.
 - Сессия не привязывается к IP, поэтому работает из мобильного приложения / разных устройств. Подмена cookie невозможна без `SESSION_SECRET`.
 
 → [[API#auth]] → [[Безопасность]] → [[Настройки#google-oauth]]

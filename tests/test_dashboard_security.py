@@ -46,3 +46,10 @@ def test_dashboard_uses_csp_safe_event_delegation() -> None:
     assert "data-action" in dashboard
     assert "closest('[data-action]')" in events_js
     assert not (ROOT / "app/static/js/app.js").exists()
+
+
+def test_admin_profile_ui_uses_only_server_truncated_resume_preview() -> None:
+    dashboard = (ROOT / "app/static/dashboard.html").read_text()
+
+    assert "p.resume_preview || 'No resume text'" in dashboard
+    assert "p.resume_text && p.resume_text.length" not in dashboard

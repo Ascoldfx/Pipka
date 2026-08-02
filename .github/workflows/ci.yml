@@ -54,6 +54,9 @@ jobs:
           ruff check --select F,E9 app tests alembic
           pytest -q
 
+      - name: Reject committed credentials
+        run: python scripts/check_secrets.py
+
       - name: Validate browser JavaScript and CSP contracts
         run: node scripts/check_inline_js.mjs
 

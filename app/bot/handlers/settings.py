@@ -3,6 +3,7 @@ from __future__ import annotations
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from app.api.profile import MAX_PROFILE_FIELD_LEN, MAX_PROFILE_LIST, MAX_RESUME_CHARS
 from app.bot.keyboards import main_menu, profile_menu
 from app.database import async_session
 from app.services.user_service import ensure_profile, get_or_create_user, update_profile
@@ -55,19 +56,47 @@ async def profile_text_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data.pop("editing_profile_field")
     text = update.message.text.strip()
 
+    if not text:
+        await update.message.reply_text("Поле не может быть пустым.", reply_markup=main_menu())
+        return
+    if field_name == "resume_text" and len(text) > MAX_RESUME_CHARS:
+        await update.message.reply_text("Текст резюме слишком длинный.", reply_markup=main_menu())
+        return
+    if field_name == "base_location" and len(text) > 255:
+        await update.message.reply_text("Название локации слишком длинное.", reply_markup=main_menu())
+        return
+
     async with async_session() as session:
         user = await get_or_create_user(update.effective_user.id, update.effective_user.full_name, session)
 
         # Parse field values
         if field_name == "target_titles":
-            value = [t.strip() for t in text.split(",") if t.strip()]
+            value = [
+                t.strip()[:MAX_PROFILE_FIELD_LEN]
+                for t in text.split(",")
+                if t.strip()
+            ]
+            if len(value) > MAX_PROFILE_LIST:
+                await update.message.reply_text(
+                    f"Можно указать не более {MAX_PROFILE_LIST} должностей.",
+                    reply_markup=main_menu(),
+                )
+                return
         elif field_name == "languages":
             value = {}
             for part in text.split(","):
                 part = part.strip()
                 if ":" in part:
                     lang, level = part.split(":", 1)
-                    value[lang.strip().lower()] = level.strip().upper()
+                    lang = lang.strip().lower()[:20]
+                    level = level.strip().upper()[:20]
+                    if lang and level:
+                        value[lang] = level
+            if len(value) > 20:
+                await update.message.reply_text(
+                    "Можно указать не более 20 языков.", reply_markup=main_menu()
+                )
+                return
         else:
             value = text
 

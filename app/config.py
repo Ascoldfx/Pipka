@@ -114,6 +114,19 @@ class Settings(BaseSettings):
     # Admin emails (comma-separated) — these Google accounts get admin role
     admin_emails: str = ""
 
+    # Registration is closed by default. Existing active users can continue
+    # to sign in; new Google/Telegram identities must be explicitly invited.
+    # Admin emails are always allowed to create their first account.
+    allow_public_registration: bool = False
+    allowed_user_emails: str = ""
+    allowed_telegram_ids: str = ""
+
+    # Per-user Telegram budgets. Telegram updates do not pass through the
+    # FastAPI rate-limit middleware, so expensive bot actions need their own
+    # caps to protect scraper and AI-provider quotas.
+    telegram_search_limit_per_hour: int = 6
+    telegram_analysis_limit_per_hour: int = 10
+
     # Search
     default_results_limit: int = 50
     job_max_age_days: int = 45

@@ -62,7 +62,7 @@ if settings.sentry_dsn:
 Что НЕ попадает (для приватности):
 - session cookies, IP, headers (через `send_default_pii=False`).
 - payload из `OpsEvent` (только то, что попадает в exception).
-- **PII в stack-frame locals + breadcrumbs** — `_sentry_before_send` (Day-2 фикс, май 2026) рекурсивно скрабит ключи из `_SENTRY_PII_KEYS` frozenset'а: `resume_text`, `target_companies`, `excluded_keywords`, `email`, `user_email`, `name`, `user_name`, `avatar_url`, `user_avatar`, `telegram_id`, `google_sub`, `csrf_token`, `session_secret`, `Authorization`, `Cookie`. Без этого `attach_stacktrace=True` + `logger.exception("update_profile failed")` отгружал в Sentry весь resume-text как local var. Walk depth-limit 6 защищает от циклических структур. См. [[Безопасность#day-2-фиксы]].
+- **PII в stack-frame locals + breadcrumbs** — `_sentry_before_send` рекурсивно скрабит ключи case-insensitive: profile/resume fields, identity, cookies/authorization, DB/provider secrets и любой ключ с `password/secret/api_key/access_token/refresh_token`. Secret-shaped Telegram/Bearer tokens и emails редактируются также внутри произвольных строк и breadcrumb messages. Walk depth-limit 6 защищает от циклических структур. См. [[Безопасность]].
 
 См. [[Настройки#sentry-опционально]] для всех env-параметров.
 

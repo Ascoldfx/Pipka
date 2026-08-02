@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.api._helpers import _drop_role_cache, require_admin_async
 from app.database import async_session
 from app.models.user import User
+from app.services.ops_service import record_ops_event
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ router = APIRouter()
 
 @router.get("/api/admin/user/{user_id}/profile")
 async def admin_get_user_profile(request: Request, user_id: int):
-    """Admin only: fetch full profile and user info for a specific user ID."""
+    """Admin only: fetch bounded profile metadata for a specific user ID."""
     await require_admin_async(request)
     async with async_session() as session:
         result = await session.execute(
@@ -29,7 +30,8 @@ async def admin_get_user_profile(request: Request, user_id: int):
             raise HTTPException(status_code=404, detail="User not found")
 
         p = user.profile
-        return {
+        resume_text = p.resume_text if p and p.resume_text else ""
+        response = {
             "id": user.id,
             "email": user.email,
             "name": user.name,
@@ -37,7 +39,11 @@ async def admin_get_user_profile(request: Request, user_id: int):
             "is_active": user.is_active,
             "joined": user.created_at.isoformat() if user.created_at else None,
             "profile": {
-                "resume_text": p.resume_text if p else None,
+                # The admin UI only renders a short preview. Returning the
+                # entire resume needlessly expands the impact of an admin
+                # session leak or browser-extension compromise.
+                "resume_preview": resume_text[:1500],
+                "resume_truncated": len(resume_text) > 1500,
                 "target_titles": p.target_titles if p else [],
                 "work_mode": p.work_mode if p else "any",
                 "preferred_countries": p.preferred_countries if p else [],
@@ -48,20 +54,58 @@ async def admin_get_user_profile(request: Request, user_id: int):
                 "target_companies": p.target_companies if p else [],
             } if p else None,
         }
+    await record_ops_event(
+        "admin_action",
+        "success",
+        source="user_profile_view",
+        message="Admin viewed user profile",
+        payload={
+            "actor_user_id": request.session.get("user_id"),
+            "target_user_id": user_id,
+        },
+    )
+    return response
 
 
 @router.delete("/api/admin/user/{user_id}")
 async def admin_delete_user(request: Request, user_id: int):
     """Admin only: soft-delete a user (sets ``is_active=False``)."""
     await require_admin_async(request)
+    actor_user_id = request.session.get("user_id")
+    if actor_user_id == user_id:
+        await record_ops_event(
+            "admin_action",
+            "denied",
+            source="user_deactivate",
+            message="Administrator tried to deactivate own account",
+            payload={"actor_user_id": actor_user_id, "target_user_id": user_id},
+        )
+        raise HTTPException(status_code=409, detail="Administrators cannot deactivate themselves")
+
     async with async_session() as session:
         result = await session.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
+        if user.role == "admin":
+            await record_ops_event(
+                "admin_action",
+                "denied",
+                source="user_deactivate",
+                message="Administrator tried to deactivate another administrator",
+                payload={"actor_user_id": actor_user_id, "target_user_id": user_id},
+            )
+            raise HTTPException(status_code=409, detail="Administrators cannot deactivate another admin")
         user.is_active = False
         await session.commit()
         # Drop the cached role for the deactivated user so a stale "admin"
         # entry doesn't survive in another worker's _ROLE_CACHE.
         _drop_role_cache(user_id)
-        return {"ok": True}
+    await record_ops_event(
+        "admin_action",
+        "success",
+        source="user_deactivate",
+        message="Admin deactivated user",
+        payload={"actor_user_id": actor_user_id, "target_user_id": user_id},
+    )
+    return {"ok": True}

@@ -1,4 +1,5 @@
 import logging
+import re
 import secrets
 import time
 from contextlib import asynccontextmanager
@@ -28,59 +29,85 @@ from app.services.ops_service import record_ops_event
 
 _access_log = logging.getLogger("pipka.access")
 
+# PII keys and secret-shaped values are scrubbed even when their casing differs
+# from the exact spelling used by our code. ASGI/Sentry headers are commonly
+# lower-case, so an exact ``Authorization``/``Cookie`` comparison is unsafe.
+_SENTRY_PII_KEYS = frozenset(
+    {
+        "resume_text",
+        "resume_preview",
+        "target_companies",
+        "excluded_keywords",
+        "excluded_companies",
+        "email",
+        "user_email",
+        "name",
+        "user_name",
+        "avatar_url",
+        "user_avatar",
+        "telegram_id",
+        "google_sub",
+        "csrf_token",
+        "session_secret",
+        "authorization",
+        "cookie",
+        "set_cookie",
+        "database_url",
+        "postgres_password",
+        "telegram_bot_token",
+        "anthropic_api_key",
+        "gemini_api_key",
+        "nvidia_api_key",
+        "adzuna_app_key",
+        "google_client_secret",
+        "b2_app_key",
+    }
+)
+_SENSITIVE_KEY_PARTS = ("password", "secret", "api_key", "access_token", "refresh_token")
+_TELEGRAM_TOKEN_RE = re.compile(r"\b\d{8,12}:[A-Za-z0-9_-]{25,}\b")
+_BEARER_RE = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/-]+=*\b")
+_EMAIL_RE = re.compile(r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b")
+
+
+def _sensitive_sentry_key(key: object) -> bool:
+    if not isinstance(key, str):
+        return False
+    normalised = key.casefold().replace("-", "_")
+    return normalised in _SENTRY_PII_KEYS or any(part in normalised for part in _SENSITIVE_KEY_PARTS)
+
+
+def _scrub_string(value: str) -> str:
+    value = _TELEGRAM_TOKEN_RE.sub("[redacted-token]", value)
+    value = _BEARER_RE.sub("Bearer [redacted]", value)
+    return _EMAIL_RE.sub("[redacted-email]", value)
+
+
+def _scrub(obj):
+    """Recursively replace PII values with ``[redacted]``."""
+    return _scrub_inner(obj, 0)
+
+
+def _scrub_inner(obj, depth: int):
+    if depth > 6:
+        return "[depth-limit]"
+    if isinstance(obj, dict):
+        return {
+            k: ("[redacted]" if _sensitive_sentry_key(k) else _scrub_inner(v, depth + 1))
+            for k, v in obj.items()
+        }
+    if isinstance(obj, (list, tuple)):
+        return type(obj)(_scrub_inner(x, depth + 1) for x in obj)
+    if isinstance(obj, str):
+        return _scrub_string(obj)
+    return obj
+
+
 # Sentry — initialise BEFORE FastAPI() so the SDK can install its hooks on
 # the ASGI app. Skipped entirely when SENTRY_DSN is empty.
 if settings.sentry_dsn:
     import sentry_sdk
     from sentry_sdk.integrations.asyncio import AsyncioIntegration
     from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
-
-    # PII keys to scrub from any event reaching Sentry. ``send_default_pii=False``
-    # filters Sentry's auto-captured PII (cookies, IP, request bodies) but does
-    # NOT touch local-variable snapshots in stack frames or breadcrumb data.
-    # We log resume_text + email through Python ``logger.exception`` in several
-    # places — without this filter, a 500 in update_profile would ship the
-    # entire resume to Sentry's servers.
-    _SENTRY_PII_KEYS = frozenset(
-        {
-            "resume_text",
-            "target_companies",
-            "excluded_keywords",
-            "excluded_companies",
-            "email",
-            "user_email",
-            "name",
-            "user_name",
-            "avatar_url",
-            "user_avatar",
-            "telegram_id",
-            "google_sub",
-            "csrf_token",
-            "session_secret",
-            "Authorization",
-            "Cookie",
-        }
-    )
-
-    def _scrub(obj):
-        """Recursively replace PII values with '[redacted]'.
-
-        Walks dict/list/tuple structures depth-first. Strings, ints, etc.
-        pass through. Bound at depth 6 to avoid pathological structures.
-        """
-        return _scrub_inner(obj, 0)
-
-    def _scrub_inner(obj, depth: int):
-        if depth > 6:
-            return "[depth-limit]"
-        if isinstance(obj, dict):
-            return {
-                k: ("[redacted]" if (isinstance(k, str) and k in _SENTRY_PII_KEYS) else _scrub_inner(v, depth + 1))
-                for k, v in obj.items()
-            }
-        if isinstance(obj, (list, tuple)):
-            return type(obj)(_scrub_inner(x, depth + 1) for x in obj)
-        return obj
 
     def _sentry_before_send(event, hint):
         """Strip PII from stack-frame locals, breadcrumb data, and request
@@ -94,6 +121,8 @@ if settings.sentry_dsn:
         for crumb in event.get("breadcrumbs", {}).get("values", []) or []:
             if "data" in crumb:
                 crumb["data"] = _scrub(crumb["data"])
+            if "message" in crumb:
+                crumb["message"] = _scrub(crumb["message"])
         # 3. Request context (headers, query params)
         if "request" in event:
             req = event["request"]

@@ -2,6 +2,17 @@
 
 # Changelog — август 2026
 
+## 2 августа — access control и credential hardening
+
+- Public Google/Telegram registration закрыта по умолчанию; добавлены email/Telegram allowlists. Inactive users блокируются в обоих каналах.
+- Telegram получил общий pre-handler access guard, 6 search/hour и 10 detailed AI analysis/hour. Невалидная vacancy/profile больше не расходует AI quota.
+- Telegram profile editor получил те же размерные cap'ы, что web.
+- Admin API отдаёт только 1500-character resume preview, запрещает деактивацию себя/другого admin и пишет success/denied actions в `ops_events`.
+- AI prompts явно маркируют profile/job text как untrusted data; model instructions из вакансии игнорируются. Невалидные/negative job indexes из model JSON отбрасываются единым validator'ом.
+- Sentry scrub стал case-insensitive и редактирует secret-shaped tokens/emails даже в произвольных строках и breadcrumb messages. Raw model response при JSON parse error больше не логируется.
+- CI получил tracked-file credential scan (`scripts/check_secrets.py`).
+- Добавлены security regression tests; полный suite: 192 passed.
+
 ## 1 августа — полный code/security audit и production hardening
 
 ### Фильтры без ложных отсечений
