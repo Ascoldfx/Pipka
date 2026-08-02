@@ -94,7 +94,7 @@ Medium-severity (4-5):
 
 1. Включить off-site Backblaze B2 с write-only application key; локальный volume не защищает от потери VPS.
 2. Удалить с VPS устаревшие `.env.bak*` после ручного подтверждения актуального `.env`.
-3. Убрать CSP `unsafe-inline` после выноса inline dashboard JS/CSS в static assets.
+3. Вынести inline CSS/`style=` из dashboard и убрать оставшийся `style-src 'unsafe-inline'`; JavaScript CSP уже nonce-only, event attributes запрещены.
 
 ### P1 — качество и стоимость pipeline
 
@@ -106,9 +106,8 @@ Medium-severity (4-5):
 
 ### P1 — frontend/UX
 
-1. Убрать двойной источник JS: сейчас рабочая логика в `dashboard.html`, а `static/js/app.js` частично устарел.
-2. Добавить UI-toggle semantic search и показывать, когда скрытые страны применены к ленте.
-3. Перейти с offset pagination на keyset при росте таблицы.
+1. Добавить UI-toggle semantic search и показывать, когда скрытые страны применены к ленте.
+2. Перейти с offset pagination на keyset при росте таблицы.
 
 ### P2 — эксплуатация
 

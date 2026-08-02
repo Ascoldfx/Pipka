@@ -573,12 +573,12 @@ function applyLang() {
 <header>
   <h1>pipka<span>.net</span></h1>
   <div style="display:flex;align-items:center;gap:10px">
-    <button id="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
-    <button id="scan-btn" onclick="triggerScan()" style="display:none">
+    <button id="theme-toggle" data-action="toggle-theme" title="Toggle dark mode">🌙</button>
+    <button id="scan-btn" data-action="trigger-scan" style="display:none">
       <span id="scan-btn-label">▶ Scan</span>
       <span class="scan-sub" id="scan-btn-sub"></span>
     </button>
-    <button id="user-btn" onclick="toggleLogin()" style="display:flex;align-items:center;gap:7px;background:none;border:1.5px solid var(--border);border-radius:999px;padding:4px 10px 4px 5px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;color:var(--fg);transition:border-color .18s;" title="Account">
+    <button id="user-btn" data-action="toggle-login" style="display:flex;align-items:center;gap:7px;background:none;border:1.5px solid var(--border);border-radius:999px;padding:4px 10px 4px 5px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;color:var(--fg);transition:border-color .18s;" title="Account">
       <img id="user-avatar" src="" style="width:22px;height:22px;border-radius:50%;display:none;flex-shrink:0;" />
       <span id="user-avatar-icon" style="width:22px;height:22px;border-radius:50%;background:var(--hover);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">👤</span>
       <span id="role-badge">Guest</span>
@@ -591,31 +591,31 @@ function applyLang() {
      notifications stopped silently). Hidden by default; initApp() shows it. -->
 <div id="tg-unlinked-banner" class="banner banner-warning" style="display:none">
   <span data-i18n="banner.tgUnlinked">⚠️ Telegram-уведомления отключены — вы заблокировали бота. Чтобы возобновить, отправьте <code>/start</code> в @pipka_bot.</span>
-  <button type="button" class="banner-x" onclick="document.getElementById('tg-unlinked-banner').style.display='none'" aria-label="dismiss">×</button>
+  <button type="button" class="banner-x" data-action="dismiss-telegram-banner" aria-label="dismiss">×</button>
 </div>
 
 <div class="tabs" id="stats">
   <div class="tabs-left">
-    <div class="tab active" data-tab="jobs" onclick="switchTab('jobs')">
+    <div class="tab active" data-tab="jobs" data-action="switch-tab">
       <span class="t-num" id="stat-total">—</span>
       <span class="t-lbl" data-i18n="nav.jobs">All Jobs</span>
     </div>
-    <div class="tab auth-only" data-tab="inbox" onclick="switchTab('inbox')" style="display:none">
+    <div class="tab auth-only" data-tab="inbox" data-action="switch-tab" style="display:none">
       <span class="t-num" id="tab-inbox-count">—</span>
       <span class="t-lbl" data-i18n="nav.inbox">Inbox</span>
     </div>
-    <div class="tab auth-only" data-tab="applied" onclick="switchTab('applied')" style="display:none">
+    <div class="tab auth-only" data-tab="applied" data-action="switch-tab" style="display:none">
       <span class="t-num" id="tab-applied-count">—</span>
       <span class="t-lbl" data-i18n="nav.applied">Applied</span>
     </div>
-    <div class="tab auth-only" data-tab="rejected" onclick="switchTab('rejected')" style="display:none">
+    <div class="tab auth-only" data-tab="rejected" data-action="switch-tab" style="display:none">
       <span class="t-num" id="tab-rejected-count">—</span>
       <span class="t-lbl" data-i18n="nav.rejected">Rejected</span>
     </div>
   </div>
   <div style="flex:1"></div>
-  <div class="tab tab-plain auth-only" data-tab="settings" onclick="switchTab('settings')" style="display:none"><span data-i18n="nav.settings">Settings</span></div>
-  <div class="tab tab-plain auth-only" data-tab="ops" id="tab-ops" onclick="switchTab('ops')" style="display:none">Ops</div>
+  <div class="tab tab-plain auth-only" data-tab="settings" data-action="switch-tab" style="display:none"><span data-i18n="nav.settings">Settings</span></div>
+  <div class="tab tab-plain auth-only" data-tab="ops" data-action="switch-tab" id="tab-ops" style="display:none">Ops</div>
 </div>
 
 <!-- TAB: ALL JOBS -->
@@ -634,13 +634,13 @@ function applyLang() {
     </select>
     <label data-i18n="filter.country">Country</label>
     <div class="ms-wrap" id="country-wrap">
-      <button class="ms-btn" id="f-country-btn" type="button" onclick="toggleCountryDrop(event)">
+      <button class="ms-btn" id="f-country-btn" type="button" data-action="toggle-country-drop">
         <span id="f-country-label" data-default="1" data-i18n="filter.allCountries">All Countries</span><span class="ms-arrow">▾</span>
       </button>
       <div class="ms-drop" id="f-country-drop">
         <div class="ms-actions">
-          <button type="button" onclick="msAll(event)" data-i18n="filter.all">All</button>
-          <button type="button" onclick="msNone(event)">None</button>
+          <button type="button" data-action="country-all" data-i18n="filter.all">All</button>
+          <button type="button" data-action="country-none">None</button>
         </div>
         <div id="ms-list"><!-- populated by loadCountries() --></div>
       </div>
@@ -697,7 +697,7 @@ function applyLang() {
 
     <h3 data-i18n="settings.resume">Resume</h3>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-      <button class="resume-upload-btn" id="upload-zone" onclick="document.getElementById('resume-file').click()">
+      <button class="resume-upload-btn" id="upload-zone" data-action="upload-resume">
         <span class="ru-icon">📎</span>
         <span id="resume-upload-label" data-i18n="btn.upload">Upload Resume</span>
       </button>
@@ -746,16 +746,16 @@ function applyLang() {
       <div class="field span2">
         <label data-i18n="settings.workMode">Work mode</label>
         <div class="wm-wrap" id="wm-wrap">
-          <button class="wm-pill" id="wm-pill-btn" onclick="toggleWMDrop(event)">
+          <button class="wm-pill" id="wm-pill-btn" data-action="toggle-work-mode-drop">
             <span id="wm-pill-icon">🌐</span>
             <span id="wm-pill-label" data-i18n="settings.workAny">Any</span>
             <span class="wm-arrow">▾</span>
           </button>
           <div class="wm-drop" id="wm-drop">
-            <div class="wm-di active" data-mode="any" onclick="setWorkMode('any');closeWMDrop()"><span class="wm-di-icon">🌐</span><span data-i18n="settings.workAny">Any</span><span class="wm-di-chk">✓</span></div>
-            <div class="wm-di" data-mode="onsite" onclick="setWorkMode('onsite');closeWMDrop()"><span class="wm-di-icon">🏢</span><span data-i18n="settings.workOnsite">Office</span><span class="wm-di-chk">✓</span></div>
-            <div class="wm-di" data-mode="hybrid" onclick="setWorkMode('hybrid');closeWMDrop()"><span class="wm-di-icon">🔀</span><span data-i18n="settings.workHybrid">Hybrid</span><span class="wm-di-chk">✓</span></div>
-            <div class="wm-di" data-mode="remote" onclick="setWorkMode('remote');closeWMDrop()"><span class="wm-di-icon">🏠</span><span data-i18n="settings.workRemote">Remote</span><span class="wm-di-chk">✓</span></div>
+            <div class="wm-di active" data-mode="any" data-action="set-work-mode"><span class="wm-di-icon">🌐</span><span data-i18n="settings.workAny">Any</span><span class="wm-di-chk">✓</span></div>
+            <div class="wm-di" data-mode="onsite" data-action="set-work-mode"><span class="wm-di-icon">🏢</span><span data-i18n="settings.workOnsite">Office</span><span class="wm-di-chk">✓</span></div>
+            <div class="wm-di" data-mode="hybrid" data-action="set-work-mode"><span class="wm-di-icon">🔀</span><span data-i18n="settings.workHybrid">Hybrid</span><span class="wm-di-chk">✓</span></div>
+            <div class="wm-di" data-mode="remote" data-action="set-work-mode"><span class="wm-di-icon">🏠</span><span data-i18n="settings.workRemote">Remote</span><span class="wm-di-chk">✓</span></div>
           </div>
         </div>
       </div>
@@ -837,27 +837,27 @@ function applyLang() {
 
     <h3>Interface Language</h3>
     <div class="ui-lang-grid">
-      <button class="ui-lang-btn" data-lang="en" onclick="setLang('en')">
+      <button class="ui-lang-btn" data-lang="en" data-action="set-ui-language">
         <span class="ul-flag">🇬🇧</span>
         <span class="ul-name">English</span>
       </button>
-      <button class="ui-lang-btn" data-lang="ru" onclick="setLang('ru')">
+      <button class="ui-lang-btn" data-lang="ru" data-action="set-ui-language">
         <span class="ul-flag">🇷🇺</span>
         <span class="ul-name">Русский</span>
       </button>
-      <button class="ui-lang-btn" data-lang="de" onclick="setLang('de')">
+      <button class="ui-lang-btn" data-lang="de" data-action="set-ui-language">
         <span class="ul-flag">🇩🇪</span>
         <span class="ul-name">Deutsch</span>
       </button>
-      <button class="ui-lang-btn" data-lang="es" onclick="setLang('es')">
+      <button class="ui-lang-btn" data-lang="es" data-action="set-ui-language">
         <span class="ul-flag">🇪🇸</span>
         <span class="ul-name">Español</span>
       </button>
     </div>
 
     <div style="margin-top:24px; display:flex; gap:10px;">
-      <button class="btn" onclick="saveProfile()" data-i18n="btn.save">Save Settings</button>
-      <button class="btn btn-outline" onclick="loadProfile()" data-i18n="btn.reset">Reset</button>
+      <button class="btn" data-action="save-profile" data-i18n="btn.save">Save Settings</button>
+      <button class="btn btn-outline" data-action="load-profile" data-i18n="btn.reset">Reset</button>
     </div>
   </div>
 </div>
@@ -875,11 +875,11 @@ function applyLang() {
           <span style="font-size: 1.2em;">📈</span> SMM Infographic
         </a>
         <div class="segmented">
-          <button type="button" data-ops-window="24" class="active" onclick="setOpsWindow(24)">24h</button>
-          <button type="button" data-ops-window="72" onclick="setOpsWindow(72)">72h</button>
-          <button type="button" data-ops-window="168" onclick="setOpsWindow(168)">7d</button>
+          <button type="button" data-ops-window="24" data-action="set-ops-window" class="active">24h</button>
+          <button type="button" data-ops-window="72" data-action="set-ops-window">72h</button>
+          <button type="button" data-ops-window="168" data-action="set-ops-window">7d</button>
         </div>
-        <button class="btn btn-outline" type="button" onclick="loadOpsOverview(true)">Обновить</button>
+        <button class="btn btn-outline" type="button" data-action="refresh-ops">Обновить</button>
       </div>
     </div>
 
@@ -952,7 +952,7 @@ function applyLang() {
 <!-- Modal -->
 <div class="modal-overlay" id="modal">
   <div class="modal">
-    <button class="close" onclick="closeModal()">&times;</button>
+    <button class="close" data-action="close-modal">&times;</button>
     <h2 id="modal-title">AI Analysis</h2>
     <pre id="modal-body">Loading...</pre>
   </div>
@@ -1014,10 +1014,10 @@ function renderLangPicker(){
     const dropId='lpdrop-'+code;
     pill.innerHTML=`${LANG_NAMES[code]||code}<span class="lp-lvl">· ${lvlObj.label}</span><span class="lp-arrow">▾</span>`+
       `<div class="lp-drop" id="${dropId}">`+
-      LANG_LEVELS.map(l=>`<div class="lp-di${lvlKey===l.key?' active':''}" onclick="_setLangLevel('${code}','${l.key}');event.stopPropagation()">`+
+      LANG_LEVELS.map(l=>`<div class="lp-di${lvlKey===l.key?' active':''}" data-action="set-language-level" data-language-code="${attr(code)}" data-language-level="${attr(l.key)}">`+
         `<span>${l.label}</span><span class="lp-di-sub">${l.sub}</span><span class="lp-di-chk">✓</span></div>`).join('')+
       `</div>`+
-      `<span class="lp-rm" onclick="_removeLang('${code}');event.stopPropagation()">✕</span>`;
+      `<span class="lp-rm" data-action="remove-language" data-language-code="${attr(code)}">✕</span>`;
     pill.addEventListener('click',()=>_toggleLangDrop(code));
     p.appendChild(pill);
   }
@@ -1136,7 +1136,7 @@ async function loadCountries() {
     const data = await (await fetch('/api/countries',{cache:'no-store'})).json();
     $('ms-list').innerHTML = data.map(c => {
       const name = COUNTRY_NAMES[c.code] || c.code.toUpperCase();
-      return `<label class="ms-item"><input type="checkbox" value="${c.code}" onchange="onCountryToggle()"><span>${name}</span><span class="ms-cnt">${c.count}</span></label>`;
+      return `<label class="ms-item"><input type="checkbox" value="${c.code}" data-change-action="country-toggle"><span>${name}</span><span class="ms-cnt">${c.count}</span></label>`;
     }).join('');
   } catch(e) { console.error('loadCountries:', e); }
 }
@@ -1306,7 +1306,7 @@ function _renderExcludedChips(){
   const wrap = $('excluded-chips');
   if(!wrap) return;
   wrap.innerHTML = _excludedKws.map((kw,i) =>
-    `<span class="kw-chip">${esc(kw)}<span class="chip-x" onclick="_removeExcludedKw(${i})">×</span></span>`
+    `<span class="kw-chip">${esc(kw)}<span class="chip-x" data-action="remove-excluded-keyword" data-keyword-index="${i}">×</span></span>`
   ).join('');
 }
 function _removeExcludedKw(i){ _excludedKws.splice(i,1); _renderExcludedChips(); }
@@ -1458,27 +1458,6 @@ function esc(s){if(s===null||s===undefined)return'';const d=document.createEleme
 function attr(s){return String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function safeUrl(u){if(!u)return'#';try{const p=new URL(String(u));if(p.protocol==='https:'||p.protocol==='http:')return attr(p.href);}catch(e){}return'#';}
 
-// jsq — used inside an HTML attribute value (single-quoted) that's then
-// re-parsed as a JS string by the browser when the user clicks. The
-// surrounding context is `onclick="... '${jsq(name)}' ..."`. To be safe
-// across BOTH parsing layers we have to neutralise:
-//   * JS-string breakers: backslash and single-quote
-//   * HTML-attribute breakers: double-quote (closes the onclick="..."),
-//     ampersand (entity expansion), and angle brackets (script-inject
-//     on quirky parsers / older sanitisers).
-// Without escaping double-quotes a name like `o" onclick="alert(1)"` would
-// break out of the attribute. A bare-bones jsq that handled only \ and '
-// missed all of those.
-function jsq(s){
-  return String(s ?? '')
-    .replace(/\\/g,  '\\\\')
-    .replace(/'/g,   "\\'")
-    .replace(/"/g,   '&quot;')
-    .replace(/&/g,   '&amp;')
-    .replace(/</g,   '&lt;')
-    .replace(/>/g,   '&gt;');
-}
-
 /* Interactivity */
 document.querySelectorAll('.country-item').forEach(el => {
   el.addEventListener('click', () => el.classList.toggle('active'));
@@ -1617,7 +1596,7 @@ function renderOpsAlerts(d){
       <div class="ops-alert queue">
         <strong>Давление очереди растёт</strong>
         <p>${fmtNumber(d.kpis.unscored_total)} вакансий ещё без оценки (${queueRisk}%). Обычно это значит, что скоринг отстаёт от сбора.</p>
-        <button type="button" onclick="openJobsView({ tab:'jobs', minScore:0 })">Открыть все вакансии</button>
+        <button type="button" data-action="open-jobs" data-tab="jobs" data-min-score="0">Открыть все вакансии</button>
       </div>
     `);
   }
@@ -1627,7 +1606,7 @@ function renderOpsAlerts(d){
       <div class="ops-alert errors">
         <strong>Обнаружены ошибки API</strong>
         <p>За выбранный период: ${fmtNumber(d.kpis.api_401)} проблем аутентификации и ${fmtNumber(d.kpis.api_500)} серверных ошибок. Проверьте последние события.</p>
-        <button type="button" onclick="loadOpsOverview(true)">Обновить события</button>
+        <button type="button" data-action="refresh-ops">Обновить события</button>
       </div>
     `);
   }
@@ -1637,7 +1616,7 @@ function renderOpsAlerts(d){
       <div class="ops-alert queue">
         <strong>Последний скан устарел</strong>
         <p>Последний успешный скан был ${fmtRelative(d.scan.last_at)}. Если это неожиданно — запустите скан вручную и проверьте планировщик.</p>
-        <button type="button" onclick="triggerScan()">Запустить скан</button>
+        <button type="button" data-action="trigger-scan">Запустить скан</button>
       </div>
     `);
   }
@@ -1647,7 +1626,7 @@ function renderOpsAlerts(d){
       <div class="ops-alert success">
         <strong>Система работает нормально</strong>
         <p>Нет очевидных сигналов тревоги: очередь управляема, сканы свежие, ошибки API в норме.</p>
-        <button type="button" onclick="openJobsView({ tab:'jobs', minScore:70 })">Топ-совпадения</button>
+        <button type="button" data-action="open-jobs" data-tab="jobs" data-min-score="70">Топ-совпадения</button>
       </div>
     `);
   }
@@ -1703,7 +1682,7 @@ async function loadOpsOverview(force=false){
       { kicker:'Отсечено фильтром', value:fmtNumber(d.kpis.prefilter_rejected), sub:'pre-filter, без AI-оценки', delta:'hard reject (score=0)', action:'queue' },
       { kicker:'Ошибки API', value:fmtNumber(d.kpis.api_401 + d.kpis.api_500), sub:`${fmtNumber(d.kpis.api_401)} авт. · ${fmtNumber(d.kpis.api_500)} сервер`, delta:'Последние проблемы', action:'api' },
     ].map(card => `
-      <div class="ops-card clickable" onclick="handleOpsCardAction('${card.action}')">
+      <div class="ops-card clickable" data-action="ops-card" data-ops-action="${attr(card.action)}">
         <div class="kicker">${card.kicker}</div>
         <div class="value">${card.value}</div>
         <div class="sub">${card.sub}</div>
@@ -1759,7 +1738,7 @@ async function loadOpsOverview(force=false){
 
     sources.innerHTML = d.sources.length
       ? d.sources.map(s => `
-          <div class="source-item" style="cursor:pointer" onclick="openJobsView({ tab:'jobs', minScore:0, source:'${jsq(s.name)}' })">
+          <div class="source-item" style="cursor:pointer" data-action="open-jobs" data-tab="jobs" data-min-score="0" data-source="${attr(s.name)}">
             <div>
               <div class="name">${esc(s.name)}</div>
               <div class="meta">${fmtNumber(s.recent)} свежих / ${fmtNumber(s.total)} всего</div>
@@ -1839,8 +1818,8 @@ async function loadOpsOverview(force=false){
                 <td style="color:var(--muted)">${a.joined ? fmtRelative(a.joined) : '—'}</td>
                 <td>
                   <div class="actions-wrap">
-                    <button onclick="viewAdminUserProfile(${a.id})" title="View Profile">🔍</button>
-                    ${a.role !== 'admin' ? `<button onclick="deleteUser(${a.id}, '${jsq(a.name)}')" title="Delete User" style="color:var(--red)">🗑️</button>` : ''}
+                    <button data-action="view-admin-user" data-user-id="${a.id}" title="View Profile">🔍</button>
+                    ${a.role !== 'admin' ? `<button data-action="delete-user" data-user-id="${a.id}" data-user-name="${attr(a.name)}" title="Delete User" style="color:var(--red)">🗑️</button>` : ''}
                   </div>
                 </td>
               </tr>
@@ -1934,7 +1913,7 @@ async function viewAdminUserProfile(userId) {
         </div>
         
         <div style="margin-top:15px; border-top:1px solid var(--border); padding-top:12px">
-          <button class="btn btn-outline" onclick="closeModal()">Close</button>
+          <button class="btn btn-outline" data-action="close-modal">Close</button>
         </div>
       </div>
     `;
@@ -2038,5 +2017,6 @@ async function initApp() {
 }
 initApp();
 </script>
+<script src="/static/js/events.js"></script>
 </body>
 </html>

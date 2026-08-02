@@ -36,12 +36,13 @@
 - Restore-тест выявил несовместимость `pg_dump 17` с сервером PostgreSQL 16. Runtime закреплён на `postgresql-client-16`, а backup теперь проверяет совпадение major-версий до создания dump.
 - Добавлен `.dockerignore`: серверный `.env`, приватные ключи, локальные данные и служебные каталоги больше не могут попасть в Docker image.
 - Dashboard снова подключает CSRF fetch-wrapper до application JS: сохранение профиля, job actions, scan и logout передают `X-CSRF-Token`, а health/static probes больше не создают session cookies.
+- Удалён устаревший `static/js/app.js`; все inline `onclick/onchange` заменены на `data-action` delegation. HTML получает per-response CSP nonce, `script-src-attr 'none'`, JavaScript `unsafe-inline` удалён.
 
 ### Verification
 
 - 162 tests проходили после filter/cache/dedup блока; infrastructure tests добавлены отдельно.
 - Production head: `0009_geographic_dedup_hash`; primary scorer: `gemini:gemini-3.5-flash-lite`.
 
-Остались ручные внешние шаги: включить Backblaze B2 write-only key, затем вынести inline dashboard JS/CSS и убрать CSP `unsafe-inline`.
+Остались ручные/следующие шаги: включить Backblaze B2 write-only key; вынести inline CSS/`style=` и убрать оставшийся `style-src 'unsafe-inline'`.
 
 → [[Changelog 2026-07]] → [[Безопасность]] → [[Деплой]] → [[Миграции]] → [[Roadmap]]

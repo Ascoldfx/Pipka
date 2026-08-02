@@ -2,12 +2,13 @@
 
 # Frontend (SPA)
 
-Один HTML + один JS-файл — лёгкий vanilla SPA без сборщиков. Сервится FastAPI'ем как статика из `app/static/`.
+Лёгкий vanilla SPA без сборщиков. HTML содержит текущую application-логику, а два небольших внешних JS-файла отвечают за security bootstrap и CSP-safe event delegation.
 
 | Файл | Размер | Назначение |
 |------|--------|-----------|
-| `app/static/dashboard.html` | ~2000 строк | Каркас + inline CSS + i18n-словари + ~70% логики |
-| `app/static/js/app.js` | ~600 строк | Инициализация, fetch-wrapper с CSRF, обработчики табов |
+| `app/static/dashboard.html` | ~2000 строк | Каркас + inline CSS + i18n-словари + application-логика |
+| `app/static/js/security.js` | небольшой | Fetch-wrapper, добавляющий CSRF header до запуска application JS |
+| `app/static/js/events.js` | небольшой | Один delegated click/change handler для статических и динамических контролов |
 | `app/static/infographic.html` | отдельный | SMM-friendly сравнение истории за 30 дней и всё время (`/infographic`) |
 | `app/static/llms.txt` | манифест | Описание проекта для AI-краулеров |
 
@@ -29,7 +30,7 @@ switchTab(name) — переключение вкладок (jobs / inbox / appl
 
 ## fetch wrapper + CSRF
 
-Файл: `app/static/js/app.js`. Глобальный `window.fetch` обёрнут на старте — на любых **POST/PUT/PATCH/DELETE** автоматически подмешивается заголовок `X-CSRF-Token` из cookie:
+Файл: `app/static/js/security.js`. Он синхронно подключён в `<head>` до application JS. Глобальный `window.fetch` обёрнут на старте — на любых **POST/PUT/PATCH/DELETE** автоматически подмешивается заголовок `X-CSRF-Token` из cookie:
 
 ```js
 function _readCsrfCookie() {
@@ -54,6 +55,10 @@ window.fetch = (input, init = {}) => {
 Почему cookie, а не из `/api/me` JSON: cookie задаётся на каждом GET-ответе сервером ([[Безопасность#3-csrf-double-submit]]) и доступен JS (`HttpOnly=False`). На GET вообще ничего лишнего не делаем.
 
 Все остальные `fetch(...)` в коде (loadJobs, doAction, saveProfile…) пишутся как обычно — обёртка прозрачна.
+
+## CSP и события
+
+В HTML и динамических шаблонах нет `onclick`/`onchange`. Контролы используют `data-action`/`data-change-action`, а `events.js` обрабатывает их через `document` delegation. FastAPI при выдаче `/` и `/infographic` добавляет случайный CSP nonce только известным inline `<script>` блокам. Политика содержит `script-src-attr 'none'`; произвольный inline JavaScript запрещён. `style-src 'unsafe-inline'` пока нужен из-за inline CSS/`style=`.
 
 ## i18n — 4 языка
 

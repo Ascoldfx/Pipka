@@ -14,7 +14,7 @@ SSH ключ: `~/.ssh/id_ed25519`.
   - `scoring/` — `rules.py` (pre_filter) + `matcher.py` (Claude/fallback) + `gemini_matcher.py` (Gemini) + `gemini_client.py` (Google GenAI SDK)
   - `sources/` — Adzuna, JobSpy, Arbeitnow, Remotive, Arbeitsagentur, Xing, BerlinStartupJobs, WTTJ, Jooble + aggregator
   - `services/` — scheduler, user_service, tracker_service, ops_service, backup_service, job_service
-  - `static/` — dashboard.html, infographic.html, js/app.js, css/styles.css
+  - `static/` — dashboard.html, infographic.html, js/security.js, js/events.js, css/styles.css
 - `alembic/` — миграции (единственный способ менять схему БД)
 - `docs/pipka-wiki/` — Obsidian wiki (хранится **в репозитории**)
 - `app/config.py` — конфиг из env vars

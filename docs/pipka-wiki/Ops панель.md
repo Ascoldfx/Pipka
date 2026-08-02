@@ -78,7 +78,7 @@ LIMIT $limit
 
 ## Read path
 
-Frontend: `app/static/js/app.js:loadOpsOverview()` тянет `/api/ops/overview` каждые `S.opsWindow` секунд (по умолчанию 24 часа, кнопки 6/24/72/168). Рисует:
+Frontend: `loadOpsOverview()` в application-блоке `app/static/dashboard.html` тянет `/api/ops/overview` каждые `S.opsWindow` секунд (по умолчанию 24 часа, кнопки 24/72/168). Рисует:
 
 - KPI-карточки (Total Jobs, Top, Inbox, ...).
 - Pipeline timeline (jobs_recent vs scored_recent).

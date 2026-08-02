@@ -23,6 +23,7 @@ from app.api.scan import router as scan_router
 from app.api.stats import router as stats_router
 from app.config import settings
 from app.database import init_db
+from app.security_headers import content_security_policy
 from app.services.ops_service import record_ops_event
 
 _access_log = logging.getLogger("pipka.access")
@@ -236,9 +237,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     * ``Strict-Transport-Security`` — locks the browser to HTTPS for 1 year
       (incl. subdomains, eligible for HSTS preload list submission).
     * ``Content-Security-Policy`` — neutralises XSS even if `innerHTML`
-      escaping slips. Permissive enough that current SPA still works
-      (`'unsafe-inline'` for inline ``<style>`` and event handlers; we
-      should narrow this once we move inline JS out of dashboard.html).
+      escaping slips. Arbitrary inline scripts and event-handler attributes
+      are blocked; HTML pages authorise only their own scripts with a nonce.
     * ``X-Frame-Options: DENY`` + ``frame-ancestors 'none'`` — clickjacking.
     * ``X-Content-Type-Options: nosniff`` — MIME sniffing.
     * ``Referrer-Policy: strict-origin-when-cross-origin`` — don't leak
@@ -247,25 +247,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
       microphone, geolocation; we don't use them.
     """
 
-    # CSP currently includes ``'unsafe-inline'`` for both script-src and
-    # style-src — required because dashboard.html has 1.2k lines of inline
-    # ``<script>`` plus 53 inline ``onclick=`` attrs. Tightening this
-    # (audit #A6) is post-launch work: needs a 4-8h refactor to extract
-    # the inline JS into static files and convert onclick= attrs to
-    # event delegation, with a UI regression pass. Risk too high for a
-    # 1-day-pre-launch change.
-    CSP: ClassVar[str] = (
-        "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline'; "
-        "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data: https:; "
-        "font-src 'self' data:; "
-        "connect-src 'self'; "
-        "frame-ancestors 'none'; "
-        "form-action 'self' https://accounts.google.com; "
-        "base-uri 'self'; "
-        "object-src 'none'"
-    )
+    CSP: ClassVar[str] = content_security_policy()
 
     HEADERS: ClassVar[dict[str, str]] = {
         "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",

@@ -1,3 +1,5 @@
+import re
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -56,3 +58,29 @@ def test_security_headers_cover_csrf_rejections() -> None:
     assert response.status_code == 403
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["cache-control"] == "no-store, no-cache, must-revalidate, max-age=0"
+
+
+def test_html_pages_nonce_only_their_known_inline_scripts() -> None:
+    client = TestClient(app, base_url="https://localhost")
+
+    for path in ("/", "/infographic"):
+        response = client.get(path)
+        csp = response.headers["content-security-policy"]
+        nonce_match = re.search(r"script-src 'self' 'nonce-([^']+)'", csp)
+
+        assert response.status_code == 200
+        assert nonce_match
+        assert "script-src-attr 'none'" in csp
+        assert "script-src 'self' 'unsafe-inline'" not in csp
+        assert f'nonce="{nonce_match.group(1)}"' in response.text
+
+
+def test_non_html_responses_do_not_allow_inline_scripts() -> None:
+    client = TestClient(app, base_url="https://localhost")
+
+    response = client.get("/health/live")
+    csp = response.headers["content-security-policy"]
+
+    assert "script-src 'self';" in csp
+    assert "script-src-attr 'none'" in csp
+    assert "nonce-" not in csp

@@ -76,7 +76,7 @@ Callback отклоняет identity без `sub`, email или без буле�
 
 ## Logout
 
-`POST /auth/logout` → `request.session.clear()` → JSON `{"ok": true}`. Frontend (`app.js`) отправляет через `fetch('POST')` чтобы прошёл CSRF-чек, затем navigate'ит на `/`. Раньше был GET — эксплоился через `<img src="/auth/logout">` в любой странице которую посещал залогиненный user.
+`POST /auth/logout` → `request.session.clear()` → JSON `{"ok": true}`. Frontend отправляет через `fetch('POST')`; `static/js/security.js` автоматически добавляет CSRF header, после чего UI переходит на `/`. Раньше был GET — эксплоился через `<img src="/auth/logout">` в любой странице которую посещал залогиненный user.
 
 ## Safety / связи
 
