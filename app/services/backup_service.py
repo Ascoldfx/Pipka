@@ -9,6 +9,7 @@ import asyncio
 import gzip
 import logging
 import os
+import re
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -78,6 +79,7 @@ def _create_local_backup() -> Path:
     db = _parse_db_url(settings.database_url)
     env = os.environ.copy()
     env["PGPASSWORD"] = db["password"]
+    _assert_postgres_client_matches_server(db, env)
 
     cmd = [
         "pg_dump",
@@ -113,6 +115,43 @@ def _create_local_backup() -> Path:
     logger.info("DB backup saved: %s (%.1f KB compressed)", backup_path.name, size_kb)
 
     return backup_path
+
+
+def _assert_postgres_client_matches_server(db: dict, env: dict[str, str]) -> None:
+    """Refuse dumps that cannot be reliably restored into the running server."""
+    client = subprocess.run(
+        ["pg_dump", "--version"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=30,
+        check=False,
+    )
+    server = subprocess.run(
+        [
+            "psql", "-h", db["host"], "-p", db["port"], "-U", db["user"],
+            "--no-password", "-At", "-d", db["dbname"], "-c", "SHOW server_version_num;",
+        ],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=30,
+        check=False,
+    )
+    client_match = re.search(rb"PostgreSQL\)\s+(\d+)", client.stdout)
+    try:
+        server_major = int(server.stdout.strip()) // 10000
+    except ValueError:
+        server_major = 0
+
+    if client.returncode or server.returncode or not client_match or not server_major:
+        raise RuntimeError("Cannot verify PostgreSQL client/server versions before backup")
+
+    client_major = int(client_match.group(1))
+    if client_major != server_major:
+        raise RuntimeError(
+            "PostgreSQL client/server major mismatch before backup "
+            f"({client_major} vs {server_major})"
+        )
 
 
 async def verify_latest_backup_restore() -> str:

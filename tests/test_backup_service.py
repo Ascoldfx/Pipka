@@ -33,6 +33,11 @@ async def test_backup_is_written_atomically_off_the_event_loop(tmp_path, monkeyp
         "postgresql+asyncpg://pipka:secret@db:5432/pipka",
     )
     monkeypatch.setattr(backup_service.settings, "b2_key_id", "")
+    monkeypatch.setattr(
+        backup_service,
+        "_assert_postgres_client_matches_server",
+        lambda db, env: None,
+    )
 
     def fake_run(*args, **kwargs):
         return SimpleNamespace(
@@ -65,3 +70,42 @@ async def test_latest_backup_is_selected_for_restore_check(tmp_path, monkeypatch
 
     assert Path(result) == newest
     assert checked == [newest]
+
+
+def test_backup_rejects_postgres_client_server_major_mismatch(monkeypatch):
+    responses = iter(
+        [
+            SimpleNamespace(
+                returncode=0,
+                stdout=b"pg_dump (PostgreSQL) 17.6 (Debian 17.6-1)\n",
+                stderr=b"",
+            ),
+            SimpleNamespace(returncode=0, stdout=b"160010\n", stderr=b""),
+        ]
+    )
+    monkeypatch.setattr(backup_service.subprocess, "run", lambda *args, **kwargs: next(responses))
+
+    with pytest.raises(RuntimeError, match=r"major mismatch.*\(17 vs 16\)"):
+        backup_service._assert_postgres_client_matches_server(
+            {"host": "db", "port": "5432", "user": "pipka", "dbname": "pipka"},
+            {"PGPASSWORD": "not-logged"},
+        )
+
+
+def test_backup_accepts_matching_postgres_major(monkeypatch):
+    responses = iter(
+        [
+            SimpleNamespace(
+                returncode=0,
+                stdout=b"pg_dump (PostgreSQL) 16.10 (Debian 16.10-1)\n",
+                stderr=b"",
+            ),
+            SimpleNamespace(returncode=0, stdout=b"160010\n", stderr=b""),
+        ]
+    )
+    monkeypatch.setattr(backup_service.subprocess, "run", lambda *args, **kwargs: next(responses))
+
+    backup_service._assert_postgres_client_matches_server(
+        {"host": "db", "port": "5432", "user": "pipka", "dbname": "pipka"},
+        {"PGPASSWORD": "not-logged"},
+    )

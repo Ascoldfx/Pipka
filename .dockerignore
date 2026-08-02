@@ -1,0 +1,31 @@
+# Secrets and local configuration must never be baked into the image.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# VCS, editor state and local agent instructions.
+.git
+.gitignore
+.github
+.obsidian
+.claude
+.codex
+.agents
+
+# Local environments, caches and generated artifacts.
+.venv
+venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+*.egg-info
+build
+dist
+data
+
+# Development-only material.
+tests
+docs

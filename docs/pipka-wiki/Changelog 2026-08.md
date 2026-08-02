@@ -33,6 +33,8 @@
 - App container запускается как UID 10001: read-only FS, no capabilities, no-new-privileges, tmpfs и persistent backup volume only.
 - `/health` теперь проверяет DB, scheduler и last scan age; `/health/live` — shallow liveness; startup grace 90s.
 - Dumps пишутся атомарно в worker thread. Каждое воскресенье full restore в disposable DB проверяет, что бэкап действительно восстанавливается.
+- Restore-тест выявил несовместимость `pg_dump 17` с сервером PostgreSQL 16. Runtime закреплён на `postgresql-client-16`, а backup теперь проверяет совпадение major-версий до создания dump.
+- Добавлен `.dockerignore`: серверный `.env`, приватные ключи, локальные данные и служебные каталоги больше не могут попасть в Docker image.
 
 ### Verification
 
