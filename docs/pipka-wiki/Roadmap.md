@@ -102,7 +102,6 @@ Medium-severity (4-5):
 3. Ввести per-backend latency/token/cost counters и вывести их в Ops.
 4. Кэшировать detailed analysis по `(user, job, profile_hash, analysis_model)` с TTL; идею из старого `pipka-latest` реализовать заново в текущих роутерах, не переносить устаревший монолит.
 5. Разделить AI-квоты real-time и backfill, чтобы массовая очередь не вытесняла пользовательский анализ.
-6. Добавить CI (`pytest`, `ruff`, fresh Alembic upgrade, inline-JS syntax check) на каждый push.
 
 ### P1 — frontend/UX
 
