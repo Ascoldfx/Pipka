@@ -16,11 +16,52 @@ from app.sources.base import (
     JobSource,
     RawJob,
     SearchParams,
+    fuzzy_title_key,
     is_fuzzy_duplicate,
     normalise_posted_at,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _fuzzy_deduplicate(jobs: list[RawJob]) -> tuple[list[RawJob], int]:
+    """Merge fuzzy duplicates while comparing only equal-title candidates.
+
+    ``is_fuzzy_duplicate`` requires exact equality of the normalized title, so
+    comparing a job with every previously accepted title was wasted O(n²)
+    work. Bucketing preserves order and merge semantics while reducing the
+    normal case to near O(n).
+    """
+    deduped: list[RawJob] = []
+    title_buckets: dict[str, list[int]] = {}
+    comparisons = 0
+
+    for job in jobs:
+        title_key = fuzzy_title_key(job.title)
+        merged = False
+        for index in title_buckets.get(title_key, []):
+            comparisons += 1
+            seen = deduped[index]
+            if not is_fuzzy_duplicate(job, seen):
+                continue
+
+            all_sources: list[str] = seen.raw_data.get("merged_sources", [seen.source])
+            if job.source not in all_sources:
+                all_sources.append(job.source)
+
+            if len(job.description or "") > len(seen.description or ""):
+                job.raw_data["merged_sources"] = all_sources
+                deduped[index] = job
+            else:
+                seen.raw_data["merged_sources"] = all_sources
+            merged = True
+            break
+
+        if not merged:
+            title_buckets.setdefault(title_key, []).append(len(deduped))
+            deduped.append(job)
+
+    return deduped, comparisons
 
 
 def _normalise_posted_at(value: datetime | None) -> datetime | None:
@@ -221,31 +262,18 @@ class JobAggregator:
         # Pass 2 — fuzzy dedup: same normalised title + company-name subset match
         # Handles "Heraeus" vs "Heraeus Quarzglas GmbH & Co. KG HRdirekt" and
         # the same job posted on Indeed + LinkedIn + Arbeitsagentur simultaneously.
-        # O(n²) but n < 500 per scan in practice — negligible.
-        fuzzy_deduped: list[RawJob] = []
-        for job in unique:
-            merged = False
-            for i, seen in enumerate(fuzzy_deduped):
-                if is_fuzzy_duplicate(job, seen):
-                    # Accumulate all sources seen for this job
-                    all_sources: list[str] = seen.raw_data.get("merged_sources", [seen.source])
-                    if job.source not in all_sources:
-                        all_sources.append(job.source)
-
-                    if len(job.description or "") > len(seen.description or ""):
-                        # Switch to richer candidate, carry over the merged sources list
-                        job.raw_data["merged_sources"] = all_sources
-                        fuzzy_deduped[i] = job
-                    else:
-                        seen.raw_data["merged_sources"] = all_sources
-                    merged = True
-                    break
-            if not merged:
-                fuzzy_deduped.append(job)
+        # Title equality is mandatory, so partition candidates by normalized
+        # title instead of making millions of guaranteed-false comparisons.
+        fuzzy_deduped, fuzzy_comparisons = _fuzzy_deduplicate(unique)
 
         removed = len(unique) - len(fuzzy_deduped)
         if removed:
-            logger.info("After fuzzy dedup: %d jobs (removed %d near-duplicates)", len(fuzzy_deduped), removed)
+            logger.info(
+                "After fuzzy dedup: %d jobs (removed %d near-duplicates, %d candidate comparisons)",
+                len(fuzzy_deduped),
+                removed,
+                fuzzy_comparisons,
+            )
         unique = fuzzy_deduped
 
         # Filter with stats. Some sources leak tz-aware datetimes from upstream
@@ -286,6 +314,7 @@ class JobAggregator:
             "raw_count": len(raw_jobs),
             "unique_count": len(unique),
             "fuzzy_removed": removed,
+            "fuzzy_comparisons": fuzzy_comparisons,
             "filtered_count": len(filtered),
             "rejected_negative": rejected_negative,
             "rejected_old": rejected_old,

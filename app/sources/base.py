@@ -84,6 +84,11 @@ def _normalize(text: str) -> str:
     return text.strip()
 
 
+def fuzzy_title_key(title: str) -> str:
+    """Return the exact title key used by fuzzy duplicate comparison."""
+    return _normalize(title)
+
+
 def _company_tokens(company: str) -> frozenset[str]:
     """Extract significant tokens from a company name for fuzzy comparison."""
     text = _normalize(company)
@@ -181,7 +186,7 @@ def is_fuzzy_duplicate(a: "RawJob", b: "RawJob") -> bool:
       "Head of Procurement" @ Siemens Energy, Frankfurt
       "Head of Procurement" @ Siemens Healthineers, Erlangen
     """
-    if _normalize(a.title) != _normalize(b.title):
+    if fuzzy_title_key(a.title) != fuzzy_title_key(b.title):
         return False
     if not _are_same_company(a.company_name, b.company_name):
         return False

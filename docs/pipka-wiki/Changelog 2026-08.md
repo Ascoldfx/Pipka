@@ -37,6 +37,7 @@
 - Добавлен `.dockerignore`: серверный `.env`, приватные ключи, локальные данные и служебные каталоги больше не могут попасть в Docker image.
 - Dashboard снова подключает CSRF fetch-wrapper до application JS: сохранение профиля, job actions, scan и logout передают `X-CSRF-Token`, а health/static probes больше не создают session cookies.
 - Удалён устаревший `static/js/app.js`; все inline `onclick/onchange` заменены на `data-action` delegation. HTML получает per-response CSP nonce, `script-src-attr 'none'`, JavaScript `unsafe-inline` удалён.
+- Fuzzy dedup больше не сравнивает каждую пару из 1k+ вакансий: обязательное совпадение normalised title используется как bucket key, поэтому сравниваются только реальные кандидаты. Ops payload включает `fuzzy_comparisons`.
 
 ### Verification
 
