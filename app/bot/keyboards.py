@@ -1,5 +1,7 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from app.config import settings
+
 # --- Main menu ---
 
 def main_menu() -> InlineKeyboardMarkup:
@@ -45,11 +47,11 @@ def show_more_button() -> InlineKeyboardMarkup:
 # --- Job actions ---
 
 def job_actions(job_db_id: int) -> InlineKeyboardMarkup:
+    first_row = [InlineKeyboardButton("💾 Сохранить", callback_data=f"save_{job_db_id}")]
+    if not settings.gemini_api_key or settings.gemini_detailed_analysis_enabled:
+        first_row.insert(0, InlineKeyboardButton("🤖 AI Анализ", callback_data=f"ai_{job_db_id}"))
     return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("🤖 AI Анализ", callback_data=f"ai_{job_db_id}"),
-            InlineKeyboardButton("💾 Сохранить", callback_data=f"save_{job_db_id}"),
-        ],
+        first_row,
         [
             InlineKeyboardButton("📨 Отправил резюме", callback_data=f"applied_{job_db_id}"),
             InlineKeyboardButton("👎 Не подходит", callback_data=f"reject_{job_db_id}"),

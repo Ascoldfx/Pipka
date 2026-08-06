@@ -13,19 +13,20 @@ class Settings(BaseSettings):
     anthropic_api_key: str
 
     # Google Gemini (optional).
-    # Scoring and detailed analysis have different latency/quality profiles,
-    # so they intentionally use separate production-stable models.
+    # Gemini 3.6 Flash is reserved for batch scoring. Its free-tier RPD is
+    # small, so detailed on-demand analysis is disabled by default rather than
+    # competing with fresh vacancy scoring.
     gemini_api_key: str = ""
-    gemini_scoring_model: str = "gemini-3.5-flash-lite"
+    gemini_scoring_model: str = "gemini-3.6-flash"
     gemini_analysis_model: str = "gemini-3.6-flash"
     gemini_scoring_max_output_tokens: int = 12000
     gemini_analysis_max_output_tokens: int = 4096
     gemini_batch_delay: float = 4.0
+    gemini_daily_request_limit: int = 20
+    gemini_detailed_analysis_enabled: bool = False
 
-    # NVIDIA Build (optional fallback when the Gemini circuit breaker is open).
-    # Get key at https://build.nvidia.com → set NVIDIA_API_KEY in .env to enable.
-    # The periodic idle rescorer is disabled by default: NVIDIA Build can be
-    # unstable under bulk load, while fallback scoring remains available.
+    # NVIDIA Build is optional and used only by the explicitly enabled idle
+    # rescorer. It is not an automatic fallback for the Gemini bulk queue.
     nvidia_idle_rescore_enabled: bool = False
     nvidia_api_key: str = ""
     # google/gemma-4-31b-it was decommissioned from NVIDIA Build (404 / hangs).
@@ -91,6 +92,13 @@ class Settings(BaseSettings):
     # Scoring
     max_jobs_per_scoring_batch: int = 15
     max_scored_per_search: int = 30
+    # A profile edit must never resurrect the whole historical archive. The
+    # re-score queue is restricted to previously strong matches in the active
+    # target market. New jobs are scored by the real-time scan separately.
+    backfill_max_age_days: int = 31
+    backfill_ai_jobs_per_run: int = 30
+    backfill_country: str = "de"
+    backfill_min_previous_score: int = 60
     score_cache_hours: int = 168  # 7 days
     claude_timeout_seconds: float = 60.0
     claude_max_retries: int = 2

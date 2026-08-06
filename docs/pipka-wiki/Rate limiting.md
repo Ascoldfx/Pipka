@@ -59,9 +59,9 @@ Day-2 фикс (май 2026), hardened в августе. Глобальный s
 
 First-match wins (tightest first). Exempt: `/static/*`, `/health`, `/auth/google/callback` (Google retry'ит после reCAPTCHA, нельзя rate-limit'ить).
 
-Каждый клик на "🤖 AI Анализ" в UI → один запрос к Gemini/Claude. Без cap'а юзер мог за 30 сек продёрнуть 100 запросов и потратить 100/500 RPD дневной квоты.
+При `GEMINI_DETAILED_ANALYSIS_ENABLED=false` кнопка "🤖 AI Анализ" скрыта: Gemini 3.6 полностью отдан пакетной оценке. Если её явно включить, endpoint-level cap остаётся дополнительной защитой от click-spam.
 
-Real-time `_score_and_notify` (3-часовой scan) и `_backfill_score` НЕ ограничены — они и так bounded'ы scheduler'ом и `MAX_SCORED_PER_SEARCH` (см. [[Скоринг]]).
+Real-time `_score_and_notify`, `_backfill_score` и recheck разделяют persistent `GEMINI_DAILY_REQUEST_LIMIT`; он не сбрасывается при рестарте контейнера (см. [[Скоринг]]).
 
 ## Когда переезжать на Redis
 

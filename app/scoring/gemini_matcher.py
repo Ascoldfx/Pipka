@@ -19,7 +19,7 @@ import random
 import time
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import (
@@ -31,7 +31,9 @@ from tenacity import (
 )
 
 from app.config import settings
+from app.database import async_session
 from app.models.job import Job, JobScore
+from app.models.ops_event import OpsEvent
 from app.models.user import User
 from app.scoring.gemini_client import generate_gemini_content
 from app.scoring.matcher import SCORING_PROMPT, build_profile_text, validated_job_index
@@ -49,8 +51,10 @@ _gemini_semaphore = asyncio.Semaphore(1)
 _pacer_lock = asyncio.Lock()
 _last_call_monotonic: float = 0.0
 
-# Circuit breaker — trip when daily quota is exhausted so backfill can hand work
-# off to NVIDIA instead of looping retries forever. Resets at next UTC midnight.
+# Circuit breaker — pause Gemini until UTC midnight once its daily budget is
+# spent or the provider returns quota exhaustion. There is deliberately no
+# automatic NVIDIA/Claude bulk fallback: a provider outage must not turn into
+# an uncontrolled second queue of retries.
 _breaker_lock = asyncio.Lock()
 _gemini_disabled_until: datetime | None = None  # UTC, naive
 _consecutive_exhausts: int = 0
@@ -98,6 +102,44 @@ def is_gemini_available() -> bool:
     return False
 
 
+async def _claim_daily_request_slot() -> bool:
+    """Persistently reserve one Gemini request from today's configured budget.
+
+    ``OpsEvent`` provides durable accounting across restarts. Calls are already
+    serialised by ``_gemini_semaphore``, so the count-and-insert sequence is
+    also single-flight inside this process. An attempted call is counted even
+    when Gemini fails, which avoids repeating a quota-consuming request.
+    """
+    if settings.gemini_daily_request_limit <= 0:
+        return False
+
+    today_utc = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0, tzinfo=None
+    )
+    async with async_session() as session:
+        used = (
+            await session.execute(
+                select(func.count(OpsEvent.id)).where(
+                    OpsEvent.event_type == "gemini_request",
+                    OpsEvent.source == settings.gemini_scoring_model,
+                    OpsEvent.created_at >= today_utc,
+                )
+            )
+        ).scalar_one()
+        if used >= settings.gemini_daily_request_limit:
+            return False
+        session.add(
+            OpsEvent(
+                event_type="gemini_request",
+                status="attempt",
+                source=settings.gemini_scoring_model,
+                message="batch scoring",
+            )
+        )
+        await session.commit()
+    return True
+
+
 async def _record_success() -> None:
     """Reset the consecutive-exhausts counter on a successful Gemini response."""
     global _consecutive_exhausts
@@ -105,11 +147,11 @@ async def _record_success() -> None:
         _consecutive_exhausts = 0
 
 
-async def _record_exhaust(reason: str) -> None:
+async def _record_exhaust(reason: str, *, immediate: bool = False) -> None:
     """Bump the breaker counter; trip if threshold reached."""
     global _consecutive_exhausts, _gemini_disabled_until
     async with _breaker_lock:
-        _consecutive_exhausts += 1
+        _consecutive_exhausts = _BREAKER_TRIP_THRESHOLD if immediate else _consecutive_exhausts + 1
         logger.warning(
             "Gemini exhausted #%d/%d (reason=%s)",
             _consecutive_exhausts, _BREAKER_TRIP_THRESHOLD, reason,
@@ -154,11 +196,10 @@ def _error_status(exc: BaseException) -> int | None:
 
 def _is_retryable(exc: BaseException) -> bool:
     """Retry transient statuses from both Google SDK generations."""
-    if _error_status(exc) in {408, 429, 500, 502, 503, 504}:
+    if _error_status(exc) in {408, 500, 502, 503, 504}:
         return True
     name = type(exc).__name__
     return name in {
-        "ResourceExhausted",
         "ServiceUnavailable",
         "DeadlineExceeded",
         "InternalServerError",
@@ -190,7 +231,7 @@ def _build_jobs_text(jobs: list[Job]) -> str:
 
 async def _generate_with_retry(prompt: str, batch_size: int):
     """Call Gemini with pacing, single-flight serialisation, and tenacity retry
-    on 429/503/timeouts. Exp backoff 5→10→20→40→80s + ±25% jitter, 5 attempts.
+    on transient 5xx/timeouts. Quota exhaustion is never retried.
 
     NOTE: ``reraise=False`` is intentional. With ``reraise=True``, tenacity
     re-raises the original ``ResourceExhausted`` after the last attempt —
@@ -211,6 +252,9 @@ async def _generate_with_retry(prompt: str, batch_size: int):
         with attempt:
             attempt_counter["n"] += 1
             async with _gemini_semaphore:
+                if not await _claim_daily_request_slot():
+                    await _record_exhaust("daily_request_budget", immediate=True)
+                    return None
                 await _pace()
                 try:
                     return await generate_gemini_content(
@@ -228,13 +272,6 @@ async def _generate_with_retry(prompt: str, batch_size: int):
                             "Gemini transient error (attempt %d, batch=%d): %s",
                             attempt_counter["n"], batch_size, type(exc).__name__,
                         )
-                        if _error_status(exc) == 429 or type(exc).__name__ == "ResourceExhausted":
-                            await record_ops_event(
-                                "gemini_429",
-                                "retry",
-                                source="gemini",
-                                message=f"attempt={attempt_counter['n']} batch={batch_size}",
-                            )
                     raise
 
 
@@ -252,6 +289,8 @@ async def _call_gemini_raw(
     )
     try:
         response = await _generate_with_retry(prompt, len(jobs))
+        if response is None:
+            return []
         await _record_success()
         results = getattr(response, "parsed", None)
         if not isinstance(results, list):
@@ -291,7 +330,13 @@ async def _call_gemini_raw(
         # a future ``reraise=True`` regression) still feeds the breaker so we
         # don't sit in a tight 429 loop forever. The dedicated
         # ``except RetryError`` above is the primary path.
-        if _is_retryable(exc):
+        if _error_status(exc) == 429 or type(exc).__name__ == "ResourceExhausted":
+            await record_ops_event(
+                "gemini_429", "error", source="gemini",
+                message=f"batch={len(jobs)} quota_exhausted",
+            )
+            await _record_exhaust(type(exc).__name__, immediate=True)
+        elif _is_retryable(exc):
             await _record_exhaust(type(exc).__name__)
         return []
 

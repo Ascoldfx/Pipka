@@ -343,6 +343,12 @@ async def _score_batch(
 
 async def analyze_single_job(job: Job, profile: UserProfile) -> str:
     """Detailed analysis of a single job for the inline button."""
+    if settings.gemini_api_key and not settings.gemini_detailed_analysis_enabled:
+        return (
+            "Детальный AI-анализ временно отключён: доступный лимит Gemini 3.6 "
+            "зарезервирован для пакетной оценки новых вакансий. Используйте "
+            "оценку и краткий вердикт в карточке вакансии."
+        )
     profile_text = build_profile_text(profile)
     prompt = (
         f"Ты Executive Recruiter. Профиль кандидата:\n{profile_text}\n\n"

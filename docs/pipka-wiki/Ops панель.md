@@ -60,9 +60,10 @@ LIMIT $limit
 | event_type | status | Источник | Когда пишется |
 |------------|--------|----------|---------------|
 | `scan` | `success`/`error` | `_background_scan` | По завершении/падении основного 3ч-скана |
-| `gemini_429` | `retry` | `_call_gemini_raw` | Каждая ResourceExhausted с tenacity-ретраем |
+| `gemini_request` | `attempt` | `_generate_with_retry` | Durable счётчик каждого Gemini batch/API-вызова за UTC-день |
+| `gemini_429` | `error` | `_call_gemini_raw` | Один ответ ResourceExhausted; ретрая нет |
 | `gemini_exhausted` | `error` | `_call_gemini_raw` | После 5-й попытки |
-| `gemini_breaker_open` | `warning` | `_record_exhaust` | 3 подряд exhausted → breaker до полуночи UTC |
+| `gemini_breaker_open` | `warning` | `_record_exhaust` | 3 подряд exhausted, 429 или исчерпанный дневной budget → breaker до полуночи UTC |
 | `nvidia_429`, `nvidia_exhausted` | как у gemini | NVIDIA matcher | Аналогично, для NVIDIA Build |
 | `nvidia_rescore` | `success` | `_nvidia_idle_rescore` | После каждого тика idle-rescore'а |
 | `backup` | `success`/`error` | `_daily_backup` | После cron в 02:30 UTC |

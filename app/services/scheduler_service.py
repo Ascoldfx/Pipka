@@ -459,26 +459,15 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
 def _backfill_score_fn():
     """Return the appropriate scoring function for backfill.
 
-    Gemini-first (changed 29.07.2026): the current Gemini 3.5 Flash Lite quota
-    has enough headroom for both real-time and backfill scoring, while NVIDIA
-    Build has become unreliable under bulk load (503s and read timeouts).
-
-    Priority:
-      1. Gemini Flash Lite — primary scorer while its circuit breaker is closed.
-      2. NVIDIA Build      — automatic fallback when Gemini is unavailable.
-      3. Claude            — last resort.
+    Gemini 3.6 Flash is the only automatic bulk scorer when configured. Its
+    daily budget is enforced by the matcher; when depleted, this job becomes a
+    harmless no-op until UTC midnight. Do not fall back to NVIDIA: production
+    503/timeouts there previously created an endless retry queue.
     """
     if settings.gemini_api_key:
-        from app.scoring.gemini_matcher import is_gemini_available, score_jobs_gemini  # noqa: PLC0415
-        if is_gemini_available():
-            logger.debug("Backfill scorer: using Gemini (%s)", settings.gemini_scoring_model)
-            return score_jobs_gemini
-        logger.warning("Backfill scorer: Gemini breaker open — trying NVIDIA fallback")
-
-    if settings.nvidia_api_key:
-        from app.scoring.nvidia_matcher import score_jobs_nvidia  # noqa: PLC0415
-        logger.debug("Backfill scorer: using NVIDIA fallback (%s)", settings.nvidia_model)
-        return score_jobs_nvidia
+        from app.scoring.gemini_matcher import score_jobs_gemini  # noqa: PLC0415
+        logger.debug("Backfill scorer: Gemini batch scoring (%s)", settings.gemini_scoring_model)
+        return score_jobs_gemini
 
     logger.debug("Backfill scorer: using Claude (%s)", settings.claude_model)
     return score_jobs
@@ -585,8 +574,9 @@ async def _backfill_score():
     Runs every 2 hours. Two-pass approach:
       1. Pre-filter rejects → immediately write JobScore(score=0) — no Claude call needed.
          This drains the "unscored" queue for irrelevant jobs without burning API credits.
-      2. Pre-filter passes  → send up to 500 per run to the AI scorer
-         (Gemini Flash if GEMINI_API_KEY is set, Claude otherwise).
+      2. Pre-filter passes  → send only previously strong matches in the
+         target market to the AI scorer. A profile edit must not enqueue the
+         full archive or re-score weak old vacancies.
     """
     _score_fn = _backfill_score_fn()
     backend = _score_fn.__name__.replace("score_jobs_", "").replace("score_jobs", "claude") or "claude"
@@ -602,9 +592,25 @@ async def _backfill_score():
             if not user.profile:
                 continue
             try:
-                cutoff = datetime.now() - timedelta(days=settings.job_max_age_days)
+                cutoff = datetime.now() - timedelta(days=settings.backfill_max_age_days)
+                prior_strong_score = (
+                    select(JobScore.id)
+                    .where(
+                        JobScore.user_id == user.id,
+                        JobScore.job_id == Job.id,
+                        JobScore.score >= settings.backfill_min_previous_score,
+                    )
+                    .exists()
+                )
                 all_jobs_result = await session.execute(
-                    select(Job).where(Job.scraped_at >= cutoff)
+                    select(Job)
+                    .where(
+                        Job.country == settings.backfill_country.lower(),
+                        func.coalesce(Job.posted_at, Job.scraped_at) >= cutoff,
+                        or_(Job.url_status.is_(None), Job.url_status == "active"),
+                        prior_strong_score,
+                    )
+                    .order_by(Job.posted_at.desc().nulls_last(), Job.scraped_at.desc(), Job.id.desc())
                 )
                 all_jobs = all_jobs_result.scalars().all()
 
@@ -697,7 +703,7 @@ async def _backfill_score():
 
                 # Tier 1 first: director / head of / VP
                 if need_ai_t1:
-                    to_score = need_ai_t1[:1000]
+                    to_score = need_ai_t1[:settings.backfill_ai_jobs_per_run]
                     logger.info(
                         "Backfill tier1 [%s]: AI-scoring %d director-level jobs for user %s",
                         backend, len(to_score), user.telegram_id,
@@ -707,7 +713,7 @@ async def _backfill_score():
 
                 # Tier 2: manager-level, only when tier1 is fully cleared
                 if need_ai_t2:
-                    to_score = need_ai_t2[:1000]
+                    to_score = need_ai_t2[:settings.backfill_ai_jobs_per_run]
                     logger.info(
                         "Backfill tier2 [%s]: AI-scoring %d manager-level jobs for user %s",
                         backend, len(to_score), user.telegram_id,

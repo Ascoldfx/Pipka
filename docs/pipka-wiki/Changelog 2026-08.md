@@ -2,6 +2,14 @@
 
 # Changelog — август 2026
 
+## 6 августа — Gemini 3.6: пакетная очередь без quota storm
+
+- Primary batch scorer переведён на `gemini-3.6-flash`; один запрос оценивает до 15 вакансий.
+- Добавлен persistent `GEMINI_DAILY_REQUEST_LIMIT=20`: до 300 вакансий в UTC-день при полных пакетах. Попытки сохраняются в `ops_events`, поэтому рестарт контейнера лимит не обходит.
+- `429/ResourceExhausted` больше не ретраится: breaker ставит Gemini на паузу до полуночи UTC. NVIDIA не подхватывает backfill автоматически, что устраняет поток `503`/`ReadTimeout`.
+- Ручной detailed analysis выключен по умолчанию и скрыт в Telegram, чтобы не расходовать 3.6-квоту.
+- После изменения профиля backfill берёт лишь ранее сильные (score ≥60) немецкие вакансии не старше 31 дня, исключает closed/unreachable и берёт 30 наиболее приоритетных за тик; исторические ~19k оценок не становятся массовой работой.
+
 ## 2 августа — access control и credential hardening
 
 - Public Google/Telegram registration закрыта по умолчанию; добавлены email/Telegram allowlists. Inactive users блокируются в обоих каналах.
