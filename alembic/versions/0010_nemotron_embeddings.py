@@ -44,7 +44,10 @@ def upgrade() -> None:
     op.execute(
         "ALTER TABLE user_profiles ALTER COLUMN embedding TYPE vector(2048) USING embedding::vector(2048)"
     )
-    _create_indexes()
+    # Note: We cannot create HNSW indexes for 2048-dimensional vectors because pgvector
+    # has a hard limit of 2000 dimensions for HNSW indexes. Flat scan (exact search)
+    # will be used instead, which is extremely fast for small datasets (under 10k rows).
+
 
 
 def downgrade() -> None:
