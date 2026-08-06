@@ -10,6 +10,11 @@
 - Ручной detailed analysis выключен по умолчанию и скрыт в Telegram, чтобы не расходовать 3.6-квоту.
 - После изменения профиля backfill берёт лишь ранее сильные (score ≥60) немецкие вакансии не старше 31 дня, исключает closed/unreachable и берёт 30 наиболее приоритетных за тик; исторические ~19k оценок не становятся массовой работой.
 
+## 6 августа — NVIDIA Nemotron embeddings
+
+- Semantic index переведён с Gemini Embedding на `nvidia/nemotron-3-embed-1b`: отдельная NVIDIA-квота, multilingual retrieval и обязательные `passage` (вакансия) / `query` (профиль) режимы.
+- Alembic `0010` очищает несовместимые Gemini-векторы, меняет pgvector 768 → 2048 и пересоздаёт HNSW-индексы. Смешивать векторы двух моделей запрещено.
+
 ## 2 августа — access control и credential hardening
 
 - Public Google/Telegram registration закрыта по умолчанию; добавлены email/Telegram allowlists. Inactive users блокируются в обоих каналах.

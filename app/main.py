@@ -365,8 +365,10 @@ async def lifespan(app: FastAPI):
     finally:
         app.state.ratelimit_cleanup_task.cancel()
         from app.scoring.gemini_client import close_gemini_client
+        from app.scoring.nvidia_embedding_client import close_nvidia_embedding_client
 
         await close_gemini_client()
+        await close_nvidia_embedding_client()
 
 
 app = FastAPI(

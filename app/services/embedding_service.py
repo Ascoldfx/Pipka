@@ -14,6 +14,7 @@ from app.config import settings
 from app.models.job import Job
 from app.models.user import UserProfile
 from app.scoring.gemini_client import get_gemini_client
+from app.scoring.nvidia_embedding_client import embed_nvidia_text
 from app.scoring.profile_hash import compute_profile_hash
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,16 @@ def _is_postgres(session: AsyncSession) -> bool:
 
 
 def _enabled(session: AsyncSession) -> bool:
-    return bool(settings.embedding_enabled and settings.gemini_api_key and _is_postgres(session))
+    provider = settings.embedding_provider.lower()
+    has_provider_key = (
+        settings.nvidia_api_key if provider == "nvidia" else settings.gemini_api_key
+    )
+    return bool(
+        settings.embedding_enabled
+        and provider in {"gemini", "nvidia"}
+        and has_provider_key
+        and _is_postgres(session)
+    )
 
 
 async def _pace() -> None:
@@ -46,6 +56,8 @@ def _vector_literal(values: list[float]) -> str:
 
 def _normalise_dimension(values: list[float]) -> list[float]:
     dim = settings.embedding_dimension
+    if settings.embedding_provider.lower() == "nvidia" and len(values) != dim:
+        raise ValueError(f"NVIDIA embedding dimension {len(values)} != configured {dim}")
     if len(values) == dim:
         return values
     if len(values) > dim:
@@ -77,6 +89,9 @@ def _extract_embedding(response: Any) -> list[float]:
 
 
 async def _embed(text_value: str, *, task_type: str) -> list[float]:
+    if settings.embedding_provider.lower() == "nvidia":
+        return _normalise_dimension(await embed_nvidia_text(text_value, task_type=task_type))
+
     config: dict[str, Any] = {"task_type": task_type.upper()}
     if settings.embedding_dimension:
         config["output_dimensionality"] = settings.embedding_dimension

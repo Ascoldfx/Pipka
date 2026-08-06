@@ -65,15 +65,18 @@ class Settings(BaseSettings):
     disabled_sources: str = "arbeitsagentur"
     jobspy_sites: str = "indeed"
 
-    # Search / semantic indexing
+    # Search / semantic indexing. Nemotron is deliberately separate from the
+    # Gemini scorer quota. Its 2048-dimensional vectors need migration 0010.
     embedding_enabled: bool = True
-    embedding_model: str = "models/gemini-embedding-001"
-    embedding_dimension: int = 768
-    embedding_batch_delay: float = 0.8       # Gemini Embedding free tier is RPM-bound
-    embedding_jobs_per_run: int = 70         # ~840/day when run every 2h, under 1K RPD
+    embedding_provider: str = "nvidia"
+    embedding_model: str = "nvidia/nemotron-3-embed-1b"
+    embedding_dimension: int = 2048
+    embedding_batch_delay: float = 0.8
+    embedding_jobs_per_run: int = 70
     embedding_profiles_per_run: int = 20
     embedding_index_interval_hours: int = 2
     semantic_search_limit: int = 500
+    nvidia_embedding_timeout_seconds: float = 30.0
 
     # Database
     database_url: str = "sqlite+aiosqlite:///./pipka.db"
