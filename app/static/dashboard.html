@@ -577,6 +577,141 @@ function applyLang() {
     fcl.textContent = T('filter.allCountries');
   }
 }
+
+/* ── Guest Multilingual Landing I18N ── */
+const GUEST_I18N = {
+  ru: {
+    heroTag: "🤖 Pipka AI Job Matcher",
+    heroTitle: "Умная платформа AI-оценки и непрерывного поиска вакансий",
+    heroSubtitle: "Система каждые 3 часа сканирует 10 ведущих европейских и мировых площадок, автоматически сопоставляет требования вакансий с вашим резюме и присылает лучшие совпадения прямо в Telegram и Дашборд.",
+    ctaLogin: "🔑 Войти через Google",
+    ctaGift: "+50 кредитов",
+    guideHeader: "📖 Пошаговая инструкция по настройке таргетированного поиска:",
+    step1Title: "1️⃣ Авторизация",
+    step1Desc: "Войдите через аккаунт Google (кнопка в правом верхнем углу). При первом входе вы автоматически получите <b>50 бесплатных кредитов</b>.",
+    step2Title: "2️⃣ Загрузка резюме",
+    step2Desc: "Перейдите во вкладку <b>Settings</b> → нажмите <b>Upload Resume</b> (PDF/DOCX/TXT). AI создаст семантический вектор вашего опыта.",
+    step3Title: "3️⃣ Параметры поиска",
+    step3Desc: "Укажите целевые должности (Target Job Titles), желаемые страны (Germany, Switzerland...), формат работы (Remote/Hybrid) и минус-слова.",
+    step4Title: "4️⃣ AI-скоринг & Telegram",
+    step4Desc: "Система начнет непрерывный авто-поиск 24/7. Вакансии со скором 70+ будут мгновенно приходить в ваш Telegram!",
+    sourcesHeader: "🌐 10 площадок парсинга:"
+  },
+  en: {
+    heroTag: "🤖 Pipka AI Job Matcher",
+    heroTitle: "Smart AI Job Scoring & Continuous Scanning Platform",
+    heroSubtitle: "Scans 10 leading European and global job portals every 3 hours, matches candidate experience with job requirements using AI embeddings, and delivers top matches directly to Telegram and Dashboard.",
+    ctaLogin: "🔑 Sign in with Google",
+    ctaGift: "+50 credits free",
+    guideHeader: "📖 Step-by-Step Guide to Targeted Job Search Setup:",
+    step1Title: "1️⃣ Authorization",
+    step1Desc: "Sign in with your Google account (top right button). New accounts automatically receive <b>50 free trial credits</b>.",
+    step2Title: "2️⃣ Upload Resume",
+    step2Desc: "Go to <b>Settings</b> tab → click <b>Upload Resume</b> (PDF/DOCX/TXT). AI creates a semantic vector of your career experience.",
+    step3Title: "3️⃣ Search Parameters",
+    step3Desc: "Specify Target Job Titles, Preferred Countries (Germany, Switzerland...), Work Mode (Remote/Hybrid), and Excluded Keywords.",
+    step4Title: "4️⃣ AI Matching & Telegram",
+    step4Desc: "The automated scanner runs 24/7. Vacancies with a match score of 70+ are delivered instantly to your Telegram!",
+    sourcesHeader: "🌐 10 Parsed Job Platforms:"
+  },
+  de: {
+    heroTag: "🤖 Pipka AI Job Matcher",
+    heroTitle: "Intelligente KI-Stellenbewertung & Kontinuierliches Job-Scanning",
+    heroSubtitle: "Durchsucht alle 3 Stunden 10 führende europäische und globale Stellenportale, gleicht Lebensläufe mit Stellenanforderungen per KI ab und liefert Top-Treffer direkt auf Telegram und Dashboard.",
+    ctaLogin: "🔑 Mit Google anmelden",
+    ctaGift: "+50 Gratis-Guthaben",
+    guideHeader: "📖 Schritt-für-Schritt-Anleitung zur Einrichtung der gezielten Suche:",
+    step1Title: "1️⃣ Anmeldung",
+    step1Desc: "Melden Sie sich mit Ihrem Google-Konto an. Neue Konten erhalten automatisch <b>50 kostenlose Credits</b>.",
+    step2Title: "2️⃣ Lebenslauf hochladen",
+    step2Desc: "Gehen Sie zu <b>Settings</b> → klicken Sie auf <b>Upload Resume</b> (PDF/DOCX/TXT). Die KI erstellt einen Vektor Ihrer Erfahrung.",
+    step3Title: "3️⃣ Suchparameter",
+    step3Desc: "Geben Sie Ziel-Stellentitel, bevorzugte Länder (Deutschland, Schweiz...), Arbeitsformate (Homeoffice/Hybrid) und Ausschlusswörter ein.",
+    step4Title: "4️⃣ KI-Matching & Telegram",
+    step4Desc: "Der automatische Scanner läuft 24/7. Stellenangebote mit einem Score von 70+ werden sofort an Ihr Telegram gesendet!",
+    sourcesHeader: "🌐 10 geparste Stellenportale:"
+  },
+  fr: {
+    heroTag: "🤖 Pipka AI Job Matcher",
+    heroTitle: "Plateforme Intelligente d'Évaluation de Postes par IA",
+    heroSubtitle: "Analyse 10 portails d'emploi européens et mondiaux toutes les 3 heures, évalue l'expérience candidat par rapport aux exigences et envoie les meilleures offres sur Telegram.",
+    ctaLogin: "🔑 Se connecter avec Google",
+    ctaGift: "+50 crédits offerts",
+    guideHeader: "📖 Guide étape par étape pour configurer la recherche ciblée:",
+    step1Title: "1️⃣ Connexion",
+    step1Desc: "Connectez-vous avec votre compte Google. Les nouveaux comptes reçoivent automatiquement <b>50 crédits gratuits</b>.",
+    step2Title: "2️⃣ Importer le CV",
+    step2Desc: "Allez dans l'onglet <b>Settings</b> → cliquez sur <b>Upload Resume</b> (PDF/DOCX/TXT). L'IA génère un vecteur sémantique.",
+    step3Title: "3️⃣ Paramètres de recherche",
+    step3Desc: "Spécifiez vos intitulés de poste cibles, pays préférés (Allemagne, Suisse...), mode de travail (Télétravail/Hybride) et mots-clés.",
+    step4Title: "4️⃣ Matching IA & Telegram",
+    step4Desc: "Le scanner tourne 24h/24. Les offres avec un score 70+ sont envoyées instantanément sur votre Telegram!",
+    sourcesHeader: "🌐 10 Plateformes agrégées:"
+  },
+  es: {
+    heroTag: "🤖 Pipka AI Job Matcher",
+    heroTitle: "Plataforma Inteligente de Evaluación de Empleo por IA",
+    heroSubtitle: "Escanea 10 portales de empleo europeos y globales cada 3 horas, evalúa la experiencia del candidato con IA y envía las mejores ofertas a Telegram.",
+    ctaLogin: "🔑 Iniciar sesión con Google",
+    ctaGift: "+50 créditos gratis",
+    guideHeader: "📖 Guía paso a paso para configurar la búsqueda dirigida:",
+    step1Title: "1️⃣ Inicio de sesión",
+    step1Desc: "Inicie sesión con su cuenta de Google. Las cuentas nuevas reciben <b>50 créditos gratuitos</b> para empezar.",
+    step2Title: "2️⃣ Cargar Currículum",
+    step2Desc: "Vaya a <b>Settings</b> → haga clic en <b>Upload Resume</b> (PDF/DOCX/TXT). La IA crea un vector semántico de su perfil.",
+    step3Title: "3️⃣ Parámetros de búsqueda",
+    step3Desc: "Especifique puestos objetivo, países preferidos (Alemania, Suiza...), modalidad (Remoto/Híbrido) y palabras clave excluidas.",
+    step4Title: "4️⃣ Matching IA y Telegram",
+    step4Desc: "El escáner funciona 24/7. ¡Las vacantes con puntuación de 70+ se envían instantáneamente a su Telegram!",
+    sourcesHeader: "🌐 10 Portales agregados:"
+  },
+  ua: {
+    heroTag: "🤖 Pipka AI Job Matcher",
+    heroTitle: "Розумна платформа AI-оцінки та безперервного пошуку вакансій",
+    heroSubtitle: "Система кожні 3 години сканує 10 провідних європейських та світових бірж праці, автоматично зіставляє вимоги вакансій з вашим резюме і надсилає найкращі співпадіння в Telegram та Дашборд.",
+    ctaLogin: "🔑 Увійти через Google",
+    ctaGift: "+50 кредитів",
+    guideHeader: "📖 Покрокова інструкція з налаштування таргетованого пошуку:",
+    step1Title: "1️⃣ Авторизація",
+    step1Desc: "Увійдіть через акаунт Google (кнопка у правому верхньому кутку). При першому вході ви автоматично отримаєте <b>50 безкоштовних кредитів</b>.",
+    step2Title: "2️⃣ Завантаження резюме",
+    step2Desc: "Перейдіть у вкладку <b>Settings</b> → натисніть <b>Upload Resume</b> (PDF/DOCX/TXT). AI створить семантичний вектор вашого досвіду.",
+    step3Title: "3️⃣ Параметри пошуку",
+    step3Desc: "Вкажіть цільові посади (Target Job Titles), бажані країни (Німеччина, Швейцарія...), формат роботи (Remote/Hybrid) та мінус-слова.",
+    step4Title: "4️⃣ AI-скоринг & Telegram",
+    step4Desc: "Система розпочне безперервний авто-пошук 24/7. Вакансії зі скором 70+ будуть миттєво надходити у ваш Telegram!",
+    sourcesHeader: "🌐 10 майданчиків парсингу:"
+  }
+};
+
+function switchGuestLanguage(lang) {
+  const dict = GUEST_I18N[lang] || GUEST_I18N.ru;
+  const setHtml = (id, val) => { const el = document.getElementById(id); if(el && val) el.innerHTML = val; };
+  setHtml('gh-tag', dict.heroTag);
+  setHtml('gh-title', dict.heroTitle);
+  setHtml('gh-sub', dict.heroSubtitle);
+  setHtml('gh-cta-login', dict.ctaLogin);
+  setHtml('gh-cta-gift', dict.ctaGift);
+  setHtml('gh-guide-title', dict.guideHeader);
+  setHtml('gh-step1-t', dict.step1Title);
+  setHtml('gh-step1-d', dict.step1Desc);
+  setHtml('gh-step2-t', dict.step2Title);
+  setHtml('gh-step2-d', dict.step2Desc);
+  setHtml('gh-step3-t', dict.step3Title);
+  setHtml('gh-step3-d', dict.step3Desc);
+  setHtml('gh-step4-t', dict.step4Title);
+  setHtml('gh-step4-d', dict.step4Desc);
+  setHtml('gh-sources-h', dict.sourcesHeader);
+
+  const loginBtnLabels = { ru: 'Войти', en: 'Sign in', de: 'Anmelden', fr: 'Connexion', es: 'Iniciar sesión', ua: 'Увійти' };
+  const rb = document.getElementById('role-badge');
+  if (rb && (typeof S === 'undefined' || !S || !S.authenticated)) {
+    rb.textContent = loginBtnLabels[lang] || 'Login';
+  }
+
+  try { localStorage.setItem('pipka_guest_lang', lang); } catch(e){}
+}
+window.switchGuestLanguage = switchGuestLanguage;
 </script>
 </head>
 <body class="guest-mode">
@@ -2314,144 +2449,6 @@ function toggleLogin() {
         }
     }
 }
-
-/* ── Guest Multilingual Landing I18N ── */
-const GUEST_I18N = {
-  ru: {
-    heroTag: "🤖 Pipka AI Job Matcher",
-    heroTitle: "Умная платформа AI-оценки и непрерывного поиска вакансий",
-    heroSubtitle: "Система каждые 3 часа сканирует 10 ведущих европейских и мировых площадок, автоматически сопоставляет требования вакансий с вашим резюме и присылает лучшие совпадения прямо в Telegram и Дашборд.",
-    ctaLogin: "🔑 Войти через Google",
-    ctaGift: "+50 кредитов",
-    guideHeader: "📖 Пошаговая инструкция по настройке таргетированного поиска:",
-    step1Title: "1️⃣ Авторизация",
-    step1Desc: "Войдите через аккаунт Google (кнопка в правом верхнем углу). При первом входе вы автоматически получите <b>50 бесплатных кредитов</b>.",
-    step2Title: "2️⃣ Загрузка резюме",
-    step2Desc: "Перейдите во вкладку <b>Settings</b> → нажмите <b>Upload Resume</b> (PDF/DOCX/TXT). AI создаст семантический вектор вашего опыта.",
-    step3Title: "3️⃣ Параметры поиска",
-    step3Desc: "Укажите целевые должности (Target Job Titles), желаемые страны (Germany, Switzerland...), формат работы (Remote/Hybrid) и минус-слова.",
-    step4Title: "4️⃣ AI-скоринг & Telegram",
-    step4Desc: "Система начнет непрерывный авто-поиск 24/7. Вакансии со скором 70+ будут мгновенно приходить в ваш Telegram!",
-    sourcesHeader: "🌐 10 площадок парсинга:"
-  },
-  en: {
-    heroTag: "🤖 Pipka AI Job Matcher",
-    heroTitle: "Smart AI Job Scoring & Continuous Scanning Platform",
-    heroSubtitle: "Scans 10 leading European and global job portals every 3 hours, matches candidate experience with job requirements using AI embeddings, and delivers top matches directly to Telegram and Dashboard.",
-    ctaLogin: "🔑 Sign in with Google",
-    ctaGift: "+50 credits free",
-    guideHeader: "📖 Step-by-Step Guide to Targeted Job Search Setup:",
-    step1Title: "1️⃣ Authorization",
-    step1Desc: "Sign in with your Google account (top right button). New accounts automatically receive <b>50 free trial credits</b>.",
-    step2Title: "2️⃣ Upload Resume",
-    step2Desc: "Go to <b>Settings</b> tab → click <b>Upload Resume</b> (PDF/DOCX/TXT). AI creates a semantic vector of your career experience.",
-    step3Title: "3️⃣ Search Parameters",
-    step3Desc: "Specify Target Job Titles, Preferred Countries (Germany, Switzerland...), Work Mode (Remote/Hybrid), and Excluded Keywords.",
-    step4Title: "4️⃣ AI Matching & Telegram",
-    step4Desc: "The automated scanner runs 24/7. Vacancies with a match score of 70+ are delivered instantly to your Telegram!",
-    sourcesHeader: "🌐 10 Parsed Job Platforms:"
-  },
-  de: {
-    heroTag: "🤖 Pipka AI Job Matcher",
-    heroTitle: "Intelligente KI-Stellenbewertung & Kontinuierliches Job-Scanning",
-    heroSubtitle: "Durchsucht alle 3 Stunden 10 führende europäische und globale Stellenportale, gleicht Lebensläufe mit Stellenanforderungen per KI ab und liefert Top-Treffer direkt auf Telegram und Dashboard.",
-    ctaLogin: "🔑 Mit Google anmelden",
-    ctaGift: "+50 Gratis-Guthaben",
-    guideHeader: "📖 Schritt-für-Schritt-Anleitung zur Einrichtung der gezielten Suche:",
-    step1Title: "1️⃣ Anmeldung",
-    step1Desc: "Melden Sie sich mit Ihrem Google-Konto an. Neue Konten erhalten automatisch <b>50 kostenlose Credits</b>.",
-    step2Title: "2️⃣ Lebenslauf hochladen",
-    step2Desc: "Gehen Sie zu <b>Settings</b> → klicken Sie auf <b>Upload Resume</b> (PDF/DOCX/TXT). Die KI erstellt einen Vektor Ihrer Erfahrung.",
-    step3Title: "3️⃣ Suchparameter",
-    step3Desc: "Geben Sie Ziel-Stellentitel, bevorzugte Länder (Deutschland, Schweiz...), Arbeitsformate (Homeoffice/Hybrid) und Ausschlusswörter ein.",
-    step4Title: "4️⃣ KI-Matching & Telegram",
-    step4Desc: "Der automatische Scanner läuft 24/7. Stellenangebote mit einem Score von 70+ werden sofort an Ihr Telegram gesendet!",
-    sourcesHeader: "🌐 10 geparste Stellenportale:"
-  },
-  fr: {
-    heroTag: "🤖 Pipka AI Job Matcher",
-    heroTitle: "Plateforme Intelligente d'Évaluation de Postes par IA",
-    heroSubtitle: "Analyse 10 portails d'emploi européens et mondiaux toutes les 3 heures, évalue l'expérience candidat par rapport aux exigences et envoie les meilleures offres sur Telegram.",
-    ctaLogin: "🔑 Se connecter avec Google",
-    ctaGift: "+50 crédits offerts",
-    guideHeader: "📖 Guide étape par étape pour configurer la recherche ciblée:",
-    step1Title: "1️⃣ Connexion",
-    step1Desc: "Connectez-vous avec votre compte Google. Les nouveaux comptes reçoivent automatiquement <b>50 crédits gratuits</b>.",
-    step2Title: "2️⃣ Importer le CV",
-    step2Desc: "Allez dans l'onglet <b>Settings</b> → cliquez sur <b>Upload Resume</b> (PDF/DOCX/TXT). L'IA génère un vecteur sémantique.",
-    step3Title: "3️⃣ Paramètres de recherche",
-    step3Desc: "Spécifiez vos intitulés de poste cibles, pays préférés (Allemagne, Suisse...), mode de travail (Télétravail/Hybride) et mots-clés.",
-    step4Title: "4️⃣ Matching IA & Telegram",
-    step4Desc: "Le scanner tourne 24h/24. Les offres avec un score 70+ sont envoyées instantanément sur votre Telegram!",
-    sourcesHeader: "🌐 10 Plateformes agrégées:"
-  },
-  es: {
-    heroTag: "🤖 Pipka AI Job Matcher",
-    heroTitle: "Plataforma Inteligente de Evaluación de Empleo por IA",
-    heroSubtitle: "Escanea 10 portales de empleo europeos y globales cada 3 horas, evalúa la experiencia del candidato con IA y envía las mejores ofertas a Telegram.",
-    ctaLogin: "🔑 Iniciar sesión con Google",
-    ctaGift: "+50 créditos gratis",
-    guideHeader: "📖 Guía paso a paso para configurar la búsqueda dirigida:",
-    step1Title: "1️⃣ Inicio de sesión",
-    step1Desc: "Inicie sesión con su cuenta de Google. Las cuentas nuevas reciben <b>50 créditos gratuitos</b> para empezar.",
-    step2Title: "2️⃣ Cargar Currículum",
-    step2Desc: "Vaya a <b>Settings</b> → haga clic en <b>Upload Resume</b> (PDF/DOCX/TXT). La IA crea un vector semántico de su perfil.",
-    step3Title: "3️⃣ Parámetros de búsqueda",
-    step3Desc: "Especifique puestos objetivo, países preferidos (Alemania, Suiza...), modalidad (Remoto/Híbrido) y palabras clave excluidas.",
-    step4Title: "4️⃣ Matching IA y Telegram",
-    step4Desc: "El escáner funciona 24/7. ¡Las vacantes con puntuación de 70+ se envían instantáneamente a su Telegram!",
-    sourcesHeader: "🌐 10 Portales agregados:"
-  },
-  ua: {
-    heroTag: "🤖 Pipka AI Job Matcher",
-    heroTitle: "Розумна платформа AI-оцінки та безперервного пошуку вакансій",
-    heroSubtitle: "Система кожні 3 години сканує 10 провідних європейських та світових бірж праці, автоматично зіставляє вимоги вакансій з вашим резюме і надсилає найкращі співпадіння в Telegram та Дашборд.",
-    ctaLogin: "🔑 Увійти через Google",
-    ctaGift: "+50 кредитів",
-    guideHeader: "📖 Покрокова інструкція з налаштування таргетованого пошуку:",
-    step1Title: "1️⃣ Авторизація",
-    step1Desc: "Увійдіть через акаунт Google (кнопка у правому верхньому кутку). При першому вході ви автоматично отримаєте <b>50 безкоштовних кредитів</b>.",
-    step2Title: "2️⃣ Завантаження резюме",
-    step2Desc: "Перейдіть у вкладку <b>Settings</b> → натисніть <b>Upload Resume</b> (PDF/DOCX/TXT). AI створить семантичний вектор вашого досвіду.",
-    step3Title: "3️⃣ Параметри пошуку",
-    step3Desc: "Вкажіть цільові посади (Target Job Titles), бажані країни (Німеччина, Швейцарія...), формат роботи (Remote/Hybrid) та мінус-слова.",
-    step4Title: "4️⃣ AI-скоринг & Telegram",
-    step4Desc: "Система розпочне безперервний авто-пошук 24/7. Вакансії зі скором 70+ будуть миттєво надходити у ваш Telegram!",
-    sourcesHeader: "🌐 10 майданчиків парсингу:"
-  }
-};
-
-function switchGuestLanguage(lang) {
-  const dict = GUEST_I18N[lang] || GUEST_I18N.ru;
-  const setHtml = (id, val) => { const el = $(id); if(el && val) el.innerHTML = val; };
-  setHtml('gh-tag', dict.heroTag);
-  setHtml('gh-title', dict.heroTitle);
-  setHtml('gh-sub', dict.heroSubtitle);
-  setHtml('gh-cta-login', dict.ctaLogin);
-  setHtml('gh-cta-gift', dict.ctaGift);
-  setHtml('gh-guide-title', dict.guideHeader);
-  setHtml('gh-step1-t', dict.step1Title);
-  setHtml('gh-step1-d', dict.step1Desc);
-  setHtml('gh-step2-t', dict.step2Title);
-  setHtml('gh-step2-d', dict.step2Desc);
-  setHtml('gh-step3-t', dict.step3Title);
-  setHtml('gh-step3-d', dict.step3Desc);
-  setHtml('gh-step4-t', dict.step4Title);
-  setHtml('gh-step4-d', dict.step4Desc);
-  setHtml('gh-sources-h', dict.sourcesHeader);
-  const sel = $('guest-lang-dropdown');
-  if (sel) sel.value = lang;
-
-  // Update Guest role button text
-  const loginBtnLabels = { ru: 'Войти', en: 'Sign in', de: 'Anmelden', fr: 'Connexion', es: 'Iniciar sesión', ua: 'Увійти' };
-  const rb = $('role-badge');
-  if (rb && (!S || !S.authenticated)) {
-    rb.textContent = loginBtnLabels[lang] || 'Login';
-  }
-
-  try { localStorage.setItem('pipka_guest_lang', lang); } catch(e){}
-}
-window.switchGuestLanguage = switchGuestLanguage;
 
 /* Init */
 async function initApp() {
