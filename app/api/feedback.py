@@ -39,6 +39,44 @@ async def submit_feedback(
     await session.refresh(fb)
 
     logger.info("New user feedback from user_id=%s category=%s", current_user.id, req.category)
+
+    # Send instant Telegram notification to admin Telegram IDs
+    try:
+        from app.config import settings
+        import httpx
+
+        admin_ids = [
+            tid.strip()
+            for tid in settings.allowed_telegram_ids.split(",")
+            if tid.strip().isdigit()
+        ]
+        if admin_ids and settings.telegram_bot_token:
+            category_icon = {
+                "bug": "🐛 БАГ / ОШИБКА",
+                "feature": "💡 ИДЕЯ / ПРЕДЛОЖЕНИЕ",
+                "question": "❓ ВОПРОС",
+                "general": "💬 ОТЗЫВ",
+            }.get(req.category.strip().lower(), "💬 ОТЗЫВ")
+
+            user_disp = current_user.name or current_user.email or f"ID {current_user.id}"
+            contact_disp = req.contact.strip() if req.contact else (current_user.email or "—")
+
+            tg_text = (
+                f"📩 <b>Новая Обратная Связь!</b>\n\n"
+                f"<b>Тип:</b> {category_icon}\n"
+                f"<b>От:</b> {user_disp}\n"
+                f"<b>Контакт:</b> <code>{contact_disp}</code>\n\n"
+                f"<b>Сообщение:</b>\n<i>{req.message.strip()}</i>"
+            )
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                for aid in admin_ids:
+                    await client.post(
+                        f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage",
+                        json={"chat_id": int(aid), "text": tg_text, "parse_mode": "HTML"},
+                    )
+    except Exception as exc:
+        logger.debug("Failed to send Telegram feedback notification: %s", exc)
+
     return {"ok": True, "id": fb.id, "message": "Спасибо за ваш отзыв! Мы ценим ваше мнение."}
 
 
