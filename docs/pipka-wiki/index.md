@@ -15,7 +15,7 @@
 - [[Дедупликация]] — exact (sha256) + fuzzy (title + company subset) + merged_sources
 - [[Поиск и индексация]] — tsvector + GIN, pgvector + Gemini embeddings
 - [[Watchlist]] — точечный 6-часовой scan по `target_companies`
-- [[Скоринг]] — pre-filter rules + 3 AI backend'а (Gemini, Claude, NVIDIA)
+- [[Скоринг]] — pre-filter rules + 2 AI backend'а (Gemini, NVIDIA)
 - [[Pre-filter правила]] — keyword lists, buckets, language detection
 - [[Кэш и инвалидация]] — profile_hash + model_version (Phase 2)
 - [[Проверка ссылок]] — daily HEAD-ping для скрытия закрытых вакансий
@@ -29,7 +29,7 @@
 ## Эксплуатация
 
 - [[Деплой]] — сервер, Docker, цикл выкатки
-- [[Миграции]] — Alembic, актуальный head `0009_geographic_dedup_hash`
+- [[Миграции]] — Alembic, актуальный head `0010_nemotron_embeddings`
 - [[Бэкапы]] — pg_dump → gzip → local + Backblaze B2
 - [[Настройки]] — все env-переменные
 
@@ -61,7 +61,7 @@
 | БД | PostgreSQL 16 (asyncpg, JSONB) |
 | ORM | SQLAlchemy 2.0 async |
 | Migrations | Alembic |
-| AI | Gemini 3.5 Flash-Lite / 3.6 Flash · Claude Sonnet · NVIDIA Llama 3.3 |
+| AI | Gemini 3.6 Flash · NVIDIA Llama 3.3 |
 | Bot | python-telegram-bot 21 |
 | Scheduler | APScheduler 3 |
 | Auth | Google OAuth2 (authlib) + SessionMiddleware |
