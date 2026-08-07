@@ -45,9 +45,14 @@ def current_primary_model_version() -> str:
     return "none"
 
 
-def valid_score_model_versions() -> tuple[str, str]:
+def valid_score_model_versions() -> tuple[str, ...]:
     """Models that make a current-profile score cacheable."""
-    return ("prefilter", current_primary_model_version())
+    versions = ["prefilter"]
+    if settings.gemini_api_key:
+        versions.append(MODEL_GEMINI())
+    if settings.nvidia_api_key:
+        versions.append(MODEL_NVIDIA())
+    return tuple(versions)
 
 # The set of profile attributes that influence scoring. Order is fixed so
 # the resulting JSON serialisation is deterministic across runs.

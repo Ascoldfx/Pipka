@@ -249,6 +249,8 @@ async def _background_scan(bot_app, trigger: str = "scheduled"):
                     country_queries=country_queries,
                 )
 
+                await session.commit()
+
                 # 2. Collect and store jobs (aggregator handles dedup + upsert)
                 all_jobs = await aggregator.search(params, session)
                 logger.info("Background scan: %d jobs in DB after aggregation (Params: %s / %s)", len(all_jobs), final_queries, final_countries)

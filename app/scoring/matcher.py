@@ -164,12 +164,6 @@ async def score_jobs(
 
 async def analyze_single_job(job: Job, profile: UserProfile) -> str:
     """Detailed analysis of a single job for the inline button."""
-    if settings.gemini_api_key and not settings.gemini_detailed_analysis_enabled:
-        return (
-            "Детальный AI-анализ временно отключён: доступный лимит Gemini 3.6 "
-            "зарезервирован для пакетной оценки новых вакансий. Используйте "
-            "оценку и краткий вердикт в карточке вакансии."
-        )
     profile_text = build_profile_text(profile)
     prompt = (
         f"Ты Executive Recruiter. Профиль кандидата:\n{profile_text}\n\n"
@@ -180,17 +174,17 @@ async def analyze_single_job(job: Job, profile: UserProfile) -> str:
         "Если вакансия на немецком, переведи суть на русский. Ответ на русском."
     )
     
-    if settings.gemini_api_key:
+    if settings.gemini_api_key and settings.gemini_detailed_analysis_enabled:
         try:
             response = await generate_gemini_content(
                 prompt,
                 model=settings.gemini_analysis_model,
                 max_output_tokens=settings.gemini_analysis_max_output_tokens,
             )
-            return response.text
+            if response and response.text:
+                return response.text
         except Exception as e:
-            logger.error("Gemini analysis error: %s", e)
-            return f"Ошибка анализа Gemini: {str(e)[:100]}"
+            logger.warning("Gemini analysis error: %s. Falling back to NVIDIA.", e)
 
     if settings.nvidia_api_key:
         url = f"{settings.nvidia_base_url.rstrip('/')}/chat/completions"
