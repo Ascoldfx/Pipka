@@ -11,7 +11,7 @@
 
 ## Источники и обработка
 
-- [[Источники вакансий]] — 9 источников: Adzuna, JobSpy, Arbeitnow, Remotive, Arbeitsagentur, Xing, BerlinStartupJobs, WTTJ, Jooble + Watchlist
+- [[Источники вакансий]] — 10 источников: Adzuna, JobSpy, Arbeitnow, Remotive, Arbeitsagentur, Xing, BerlinStartupJobs, WTTJ, Jooble, BuiltIn + Watchlist
 - [[Дедупликация]] — exact (sha256) + fuzzy (title + company subset) + merged_sources
 - [[Поиск и индексация]] — tsvector + GIN, pgvector + Gemini embeddings
 - [[Watchlist]] — точечный 6-часовой scan по `target_companies`
