@@ -135,7 +135,7 @@
         /* ── History comparison ── */
         .history-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: 1fr;
             gap: 20px;
             margin-bottom: 20px;
         }
@@ -154,9 +154,6 @@
             position: absolute;
             inset: 0 0 auto;
             height: 3px;
-        }
-        .period-card.month::before {
-            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-blue));
         }
         .period-card.all-time::before {
             background: linear-gradient(90deg, var(--accent-purple), var(--accent-amber));
@@ -193,7 +190,7 @@
         }
         .period-metrics {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 1px;
             overflow: hidden;
             border: 1px solid var(--card-border);
@@ -212,11 +209,6 @@
             line-height: 1;
             margin-bottom: 7px;
             font-variant-numeric: tabular-nums;
-        }
-        .month .history-value {
-            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
         }
         .all-time .history-value {
             background: linear-gradient(135deg, var(--accent-purple), var(--accent-amber));
@@ -342,16 +334,14 @@
         @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
         @media (max-width: 900px) {
-            .funnel { grid-template-columns: repeat(2, 1fr); }
+            .period-metrics { grid-template-columns: repeat(2, 1fr); }
             .history-grid { grid-template-columns: 1fr; }
             .hero-row { grid-template-columns: 1fr; }
-            .funnel-card:not(:last-child) .funnel-arrow { display: none; }
         }
         @media (max-width: 500px) {
-            .funnel { grid-template-columns: 1fr; }
+            .period-metrics { grid-template-columns: 1fr; }
             .dashboard { padding: 24px 16px; }
             .title { font-size: 2rem; }
-            .funnel-value { font-size: 2.2rem; }
             .period-card { padding: 20px; }
             .period-title { font-size: 1.3rem; }
             .history-value { font-size: 2rem; }
@@ -369,40 +359,13 @@
         <h1 class="title">The Job Search Engine — in Numbers</h1>
     </div>
 
-    <!-- Month vs all-time history -->
+    <!-- All-time history card -->
     <div class="history-grid">
-        <div class="period-card month">
-            <div class="period-header">
-                <div>
-                    <div class="period-kicker">Recent history</div>
-                    <h2 class="period-title">Last 30 Days</h2>
-                </div>
-                <span class="period-source" id="m-sources">— sources</span>
-            </div>
-            <div class="period-metrics">
-                <div class="history-metric">
-                    <span class="history-value skeleton" id="m-collected">0</span>
-                    <span class="history-label">Jobs collected</span>
-                </div>
-                <div class="history-metric">
-                    <span class="history-value skeleton" id="m-prefilter">0</span>
-                    <span class="history-label">Rejected before AI</span>
-                </div>
-                <div class="history-metric">
-                    <span class="history-value skeleton" id="m-analyzed">0</span>
-                    <span class="history-label">AI analyses</span>
-                </div>
-                <div class="history-metric">
-                    <span class="history-value skeleton" id="m-top">0</span>
-                    <span class="history-label">Top matches (70+)</span>
-                </div>
-            </div>
-        </div>
         <div class="period-card all-time">
             <div class="period-header">
                 <div>
                     <div class="period-kicker">Complete history</div>
-                    <h2 class="period-title">All Time</h2>
+                    <h2 class="period-title">За всё время (All Time)</h2>
                 </div>
                 <span class="period-source" id="a-sources">— sources</span>
             </div>
@@ -447,7 +410,7 @@
 
     <div class="footer">
         <span class="dot"></span>
-        <span>System Operational • Live 30-day and all-time history</span>
+        <span>System Operational • Live all-time history</span>
     </div>
 </div>
 
@@ -478,19 +441,8 @@ async function load() {
             top_matches: d.top_matches,
             active_sources: d.active_sources,
         };
-        const month = d.history?.month || {
-            jobs_collected: 0,
-            prefilter_rejected: 0,
-            ai_analyses_performed: 0,
-            top_matches: 0,
-            active_sources: 0,
-        };
 
         const map = [
-            ['m-collected', month.jobs_collected],
-            ['m-prefilter', month.prefilter_rejected],
-            ['m-analyzed',  month.ai_analyses_performed],
-            ['m-top',       month.top_matches],
             ['a-collected', allTime.jobs_collected],
             ['a-prefilter', allTime.prefilter_rejected],
             ['a-analyzed',  allTime.ai_analyses_performed],
@@ -500,20 +452,24 @@ async function load() {
 
         map.forEach(([id, val]) => {
             const el = document.getElementById(id);
-            el.classList.remove('skeleton');
-            animateValue(el, val || 0, 2200);
+            if (el) {
+                el.classList.remove('skeleton');
+                animateValue(el, val || 0, 2200);
+            }
         });
 
         const sourceLabel = count => `${count || 0} ${(count || 0) === 1 ? 'source' : 'sources'}`;
-        document.getElementById('m-sources').textContent = sourceLabel(month.active_sources);
-        document.getElementById('a-sources').textContent = sourceLabel(allTime.active_sources);
+        const aSources = document.getElementById('a-sources');
+        if (aSources) aSources.textContent = sourceLabel(allTime.active_sources);
 
         // User count
         const userEl = document.getElementById('v-user');
         const userCount = d.active_users || 1;
-        userEl.textContent = userCount;
-        document.getElementById('user-label').textContent =
-            userCount === 1 ? 'Active User' : 'Active Users';
+        if (userEl) userEl.textContent = userCount;
+        const userLabel = document.getElementById('user-label');
+        if (userLabel) {
+            userLabel.textContent = userCount === 1 ? 'Active User' : 'Active Users';
+        }
 
     } catch (e) {
         console.error('Stats fetch failed:', e);
@@ -521,8 +477,10 @@ async function load() {
             el.classList.remove('skeleton');
             el.textContent = '—';
         });
-        document.querySelector('.footer span:last-child').textContent = 'Data unavailable';
-        document.querySelector('.dot').style.background = '#ef4444';
+        const fSpan = document.querySelector('.footer span:last-child');
+        if (fSpan) fSpan.textContent = 'Data unavailable';
+        const dot = document.querySelector('.dot');
+        if (dot) dot.style.background = '#ef4444';
     }
 }
 
