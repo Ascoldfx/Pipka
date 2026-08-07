@@ -158,7 +158,7 @@ _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 # fresh session/CSRF cookie on every monitoring request. OAuth endpoints are
 # GET-only and still rely on Authlib's signed ``state`` validation.
 _CSRF_SESSIONLESS_PATHS = frozenset({"/health", "/health/live", "/infographic", "/llms.txt", "/api/webhooks/crypto"})
-_CSRF_SESSIONLESS_PREFIXES = ("/static/", "/auth/google/")
+_CSRF_SESSIONLESS_PREFIXES = ("/static/",)
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
