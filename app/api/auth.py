@@ -125,12 +125,17 @@ async def get_me(request: Request):
     # One short query for the live telegram_id — session has it from login,
     # but the scheduler's Forbidden handler updates the DB row only.
     telegram_linked = False
+    onboarded = False
+    credits_val = 50
     async with async_session() as session:
         from sqlalchemy import select  # noqa: PLC0415
         from app.models.user import User  # noqa: PLC0415
-        result = await session.execute(select(User.telegram_id).where(User.id == user_id))
-        row = result.scalar_one_or_none()
-        telegram_linked = row is not None
+        result = await session.execute(select(User).where(User.id == user_id))
+        user_row = result.scalar_one_or_none()
+        if user_row:
+            telegram_linked = user_row.telegram_id is not None
+            onboarded = user_row.onboarded
+            credits_val = user_row.credits
 
     return {
         "authenticated": True,
@@ -139,6 +144,8 @@ async def get_me(request: Request):
         "name": request.session.get("user_name", ""),
         "avatar": request.session.get("user_avatar", ""),
         "role": request.session.get("user_role", "user"),
+        "credits": credits_val,
+        "onboarded": onboarded,
         "csrf_token": csrf_token,
         "telegram_linked": telegram_linked,
     }

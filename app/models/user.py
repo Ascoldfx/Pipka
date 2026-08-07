@@ -21,6 +21,7 @@ class User(Base):
     subscription_tier: Mapped[str] = mapped_column(String(20), default="free")
     credits: Mapped[int] = mapped_column(Integer, default=50)
     total_credits_purchased: Mapped[int] = mapped_column(Integer, default=0)
+    onboarded: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     profile: Mapped["UserProfile | None"] = relationship(back_populates="user", uselist=False, cascade="all, delete-orphan")
@@ -28,6 +29,7 @@ class User(Base):
     applications: Mapped[list["Application"]] = relationship(back_populates="user")
     subscriptions: Mapped[list["SearchSubscription"]] = relationship(back_populates="user")
     payment_transactions: Mapped[list["PaymentTransaction"]] = relationship(back_populates="user")
+    feedbacks: Mapped[list["UserFeedback"]] = relationship(back_populates="user")
 
 
 class PaymentTransaction(Base):
@@ -45,6 +47,19 @@ class PaymentTransaction(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     user: Mapped["User"] = relationship(back_populates="payment_transactions")
+
+
+class UserFeedback(Base):
+    __tablename__ = "user_feedbacks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    category: Mapped[str] = mapped_column(String(50), default="general")
+    message: Mapped[str] = mapped_column(Text)
+    contact: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    user: Mapped["User"] = relationship(back_populates="feedbacks")
 
 
 class UserProfile(Base):

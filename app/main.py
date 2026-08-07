@@ -16,6 +16,7 @@ from app.api._ratelimit import RateLimitMiddleware, start_bucket_cleanup_task
 from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
 from app.api.billing import router as billing_router
+from app.api.feedback import router as feedback_router
 from app.api.health import router as health_router
 from app.api.jobs import router as jobs_router
 from app.api.ops import router as ops_router
@@ -427,3 +428,4 @@ app.include_router(scan_router, tags=["scan"])
 app.include_router(ops_router, tags=["ops"])
 app.include_router(admin_router, tags=["admin"])
 app.include_router(billing_router, tags=["billing"])
+app.include_router(feedback_router, tags=["feedback"])

@@ -619,6 +619,7 @@ function applyLang() {
     <span>💳 Billing</span>
     <span id="credits-badge" style="background:#eef2f7;color:var(--fg);font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;">0 cr</span>
   </div>
+  <div class="tab tab-plain auth-only" onclick="openFeedbackModal()" style="display:none;cursor:pointer;">💬 Обратная связь</div>
   <div class="tab tab-plain auth-only" data-tab="ops" data-action="switch-tab" id="tab-ops" style="display:none">Ops</div>
 </div>
 
@@ -1022,6 +1023,86 @@ function applyLang() {
   </div>
 </div>
 
+<!-- Modal: Feedback -->
+<div class="modal-overlay" id="modal-feedback" style="display:none;">
+  <div class="modal" style="max-width:520px;">
+    <button class="close" onclick="closeFeedbackModal()">&times;</button>
+    <h2 style="font-size:20px;margin-bottom:6px;">💬 Обратная связь</h2>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:16px;">Напишите нам ваш вопрос, предложение или сообщение об ошибке.</p>
+    
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">Категория</label>
+        <select id="fb-category" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;">
+          <option value="question">❓ Задать вопрос</option>
+          <option value="bug">🐛 Сообщить об ошибке</option>
+          <option value="feature">💡 Предложить функцию</option>
+          <option value="general" selected>💬 Общий отзыв</option>
+        </select>
+      </div>
+
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">Сообщение</label>
+        <textarea id="fb-message" rows="5" placeholder="Опишите ваши впечатления, идею или проблему..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
+      </div>
+
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">Контакт для ответа (email / Telegram)</label>
+        <input type="text" id="fb-contact" placeholder="name@example.com или @username" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;">
+      </div>
+
+      <div id="fb-status" style="font-size:12px;"></div>
+
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px;">
+        <button type="button" class="btn btn-outline" onclick="closeFeedbackModal()">Отмена</button>
+        <button type="button" class="btn-primary" style="padding:8px 18px;" onclick="submitFeedback()">Отправить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Welcome Onboarding -->
+<div class="modal-overlay" id="modal-onboarding" style="display:none;z-index:9990;">
+  <div class="modal" style="max-width:680px;padding:32px;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.25);">
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:42px;margin-bottom:8px;">🚀</div>
+      <h2 style="font-size:24px;letter-spacing:-0.5px;margin-bottom:6px;">Добро пожаловать в Pipka AI Job Matcher!</h2>
+      <p style="font-size:14px;color:var(--muted);max-width:540px;margin:0 auto;line-height:1.5;">Умная платформа непрерывного поиска и AI-оценки вакансий для руководителей и экспертов.</p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;">
+      <div style="background:#f7f9fc;border:1px solid #edf1f5;padding:14px;border-radius:12px;">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px;color:var(--blue);">🤖 Автоматический AI-сканер</div>
+        <p style="font-size:11px;color:var(--muted);line-height:1.4;">Каждые 3 часа опрашивает десятки площадок, сопоставляет вакансии с вашим резюме и присылает лучшие совпадения.</p>
+      </div>
+      <div style="background:#f7f9fc;border:1px solid #edf1f5;padding:14px;border-radius:12px;">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px;color:var(--green);">🎁 50 Подарочных Кредитов</div>
+        <p style="font-size:11px;color:var(--muted);line-height:1.4;">Вам уже зачислено 50 бесплатных проверок для мгновенного старта и тестирования системы.</p>
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid var(--border);padding:16px;border-radius:14px;margin-bottom:24px;">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin-bottom:10px;">🌐 10 Источников агрегации вакансий:</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px;color:var(--fg);">
+        <div>• <b>Adzuna</b> (Германия, ЕС, США)</div>
+        <div>• <b>Welcome to the Jungle</b> (WTTJ)</div>
+        <div>• <b>JobSpy</b> (Indeed / LinkedIn)</div>
+        <div>• <b>Remotive</b> (Global Remote)</div>
+        <div>• <b>Xing</b> (Главная сеть DACH)</div>
+        <div>• <b>Arbeitnow</b> (DACH Стартапы)</div>
+        <div>• <b>Jooble</b> (Stepstone, Monster)</div>
+        <div>• <b>Arbeitsagentur</b> (ФРГ)</div>
+        <div>• <b>BuiltIn.com</b> (Tech & Startups)</div>
+        <div>• <b>BerlinStartupJobs</b> (Берлин)</div>
+      </div>
+    </div>
+
+    <div style="text-align:center;">
+      <button type="button" class="btn-primary" style="padding:12px 36px;font-size:15px;font-weight:600;border-radius:999px;" onclick="completeOnboarding()">Начать работу с Pipka AI 🚀</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ── State ── */
 const S = { page:1, perPage:50, sort:'date', order:'desc', totalPages:1, tabStatus:'', role:'guest', authenticated:false, activeTab:'jobs', opsWindow:24 };
@@ -1161,6 +1242,59 @@ function switchTab(name, save=true) {
     S.tabStatus = name === 'jobs' ? '' : (name === 'inbox' ? 'new' : name);
     S.page = 1;
     loadJobs();
+}
+
+/* ── Feedback & Onboarding ── */
+function openFeedbackModal() {
+  const m = $('modal-feedback');
+  if (m) {
+    $('fb-message').value = '';
+    $('fb-status').innerHTML = '';
+    m.style.display = 'flex';
+  }
+}
+
+function closeFeedbackModal() {
+  const m = $('modal-feedback');
+  if (m) m.style.display = 'none';
+}
+
+async function submitFeedback() {
+  const message = ($('fb-message').value || '').trim();
+  const category = $('fb-category').value;
+  const contact = ($('fb-contact').value || '').trim();
+  const statusEl = $('fb-status');
+
+  if (!message || message.length < 5) {
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--red);">Пожалуйста, опишите ваше сообщение (минимум 5 символов).</span>';
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/feedback', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({category, message, contact})
+    });
+    const data = await res.json();
+    if (res.ok && data.ok) {
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--green);font-weight:600;">✅ Спасибо! Ваш отзыв успешно отправлен.</span>';
+      setTimeout(() => closeFeedbackModal(), 2000);
+    } else {
+      if (statusEl) statusEl.innerHTML = `<span style="color:var(--red);">Ошибка: ${data.detail || 'Не удалось отправить'}</span>`;
+    }
+  } catch (err) {
+    if (statusEl) statusEl.innerHTML = `<span style="color:var(--red);">Ошибка сети: ${err.message}</span>`;
+  }
+}
+
+async function completeOnboarding() {
+  const m = $('modal-onboarding');
+  if (m) m.style.display = 'none';
+  try {
+    await fetch('/api/onboarding/complete', {method: 'POST'});
+  } catch (err) {
+    console.error('completeOnboarding error:', err);
   }
 }
 
@@ -2126,6 +2260,11 @@ async function initApp() {
       document.querySelectorAll('.auth-only').forEach(el => el.style.display = '');
       $('f-score').value = '70';
       loadBillingInfo();
+
+      if (me.onboarded === false) {
+        const obModal = $('modal-onboarding');
+        if (obModal) obModal.style.display = 'flex';
+      }
 
       if (me.avatar) {
         avatar.src = me.avatar; avatar.style.display = 'inline-block';
