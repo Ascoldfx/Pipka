@@ -9,8 +9,8 @@ def content_security_policy(*, script_nonce: str | None = None) -> str:
         script_sources.append(f"'nonce-{script_nonce}'")
     return (
         "default-src 'self'; "
-        f"script-src {' '.join(script_sources)}; "
-        "script-src-attr 'none'; "
+        f"script-src {' '.join(script_sources)} 'unsafe-inline'; "
+        "script-src-attr 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: https:; "
         "font-src 'self' data:; "

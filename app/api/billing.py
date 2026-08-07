@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import get_current_user
+from app.api._helpers import get_current_user
 from app.config import settings
 from app.database import get_db
 from app.models.user import PaymentTransaction, User

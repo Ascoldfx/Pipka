@@ -45,6 +45,12 @@ document.addEventListener('click', event => {
     openJobsView(options);
   }
   else if (action === 'ops-card') handleOpsCardAction(target.dataset.opsAction);
+  else if (action === 'open-feedback') openFeedbackModal();
+  else if (action === 'close-feedback') closeFeedbackModal();
+  else if (action === 'submit-feedback') submitFeedback();
+  else if (action === 'complete-onboarding') completeOnboarding();
+  else if (action === 'start-checkout') startCheckout(target.dataset.tier);
+  else if (action === 'test-fulfill') testFulfill(target.dataset.txId);
   else if (action === 'view-admin-user') {
     const userId = Number(target.dataset.userId);
     if (Number.isSafeInteger(userId) && userId > 0) viewAdminUserProfile(userId);

@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import time
 
-from fastapi import HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.database import async_session
+from app.database import async_session, get_db
 from app.models.user import User
 
 VALID_ACTIONS = {"save", "applied", "reject"}
@@ -63,6 +63,16 @@ async def get_session_user(request: Request, session) -> User | None:
 # call sites; consolidating to one name during the split would have inflated
 # the diff. Kept as a thin pass-through.
 get_user = get_session_user
+
+
+async def get_current_user(request: Request, session=Depends(get_db)) -> User:
+    """FastAPI dependency to fetch the current authenticated User or raise 401."""
+    user = await get_session_user(request, session)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required"
+        )
+    return user
 
 
 async def _resolve_role_from_db(user_id: int) -> str:
