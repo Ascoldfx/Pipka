@@ -85,10 +85,22 @@ _SCORING_RESPONSE_SCHEMA = {
 }
 
 
-def _next_utc_midnight() -> datetime:
+def _next_reset_time() -> datetime:
+    """Return the next Google AI Studio reset time (08:00 UTC, aligned with Pacific Time midnight)."""
     now = datetime.now(timezone.utc).replace(tzinfo=None)
-    tomorrow = (now + timedelta(days=1)).date()
-    return datetime.combine(tomorrow, datetime.min.time())
+    today_reset = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=8)
+    if now < today_reset:
+        return today_reset
+    return today_reset + timedelta(days=1)
+
+
+def _last_reset_time() -> datetime:
+    """Return the most recent Google AI Studio reset time (08:00 UTC)."""
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    today_reset = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=8)
+    if now >= today_reset:
+        return today_reset
+    return today_reset - timedelta(days=1)
 
 
 def is_gemini_available() -> bool:
@@ -113,16 +125,14 @@ async def _claim_daily_request_slot() -> bool:
     if settings.gemini_daily_request_limit <= 0:
         return False
 
-    today_utc = datetime.now(timezone.utc).replace(
-        hour=0, minute=0, second=0, microsecond=0, tzinfo=None
-    )
+    last_reset = _last_reset_time()
     async with async_session() as session:
         used = (
             await session.execute(
                 select(func.count(OpsEvent.id)).where(
                     OpsEvent.event_type == "gemini_request",
                     OpsEvent.source == settings.gemini_scoring_model,
-                    OpsEvent.created_at >= today_utc,
+                    OpsEvent.created_at >= last_reset,
                 )
             )
         ).scalar_one()
@@ -157,7 +167,7 @@ async def _record_exhaust(reason: str, *, immediate: bool = False) -> None:
             _consecutive_exhausts, _BREAKER_TRIP_THRESHOLD, reason,
         )
         if _consecutive_exhausts >= _BREAKER_TRIP_THRESHOLD and _gemini_disabled_until is None:
-            _gemini_disabled_until = _next_utc_midnight()
+            _gemini_disabled_until = _next_reset_time()
             await record_ops_event(
                 "gemini_breaker_open",
                 "warning",

@@ -378,6 +378,13 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
     to_score = prioritized_jobs[:80]
 
     score_fn = _backfill_score_fn()
+    if score_fn.__name__ == "score_jobs_gemini":
+        from app.scoring.gemini_matcher import is_gemini_available  # noqa: PLC0415
+        if not is_gemini_available():
+            logger.info("Gemini circuit breaker is open. Falling back to Claude for real-time scoring.")
+            from app.scoring.matcher import score_jobs  # noqa: PLC0415
+            score_fn = score_jobs
+
     logger.info("Using %s for real-time scoring", score_fn.__name__)
     scores = await score_fn(to_score, user, session)
 
@@ -803,7 +810,7 @@ async def _nvidia_idle_rescore():
 
 async def _embed_index():
     """Backfill pgvector embeddings for jobs and profiles in small batches."""
-    if not settings.embedding_enabled or not settings.gemini_api_key:
+    if not settings.embedding_enabled:
         return
 
     from app.services.embedding_service import index_missing_embeddings  # noqa: PLC0415

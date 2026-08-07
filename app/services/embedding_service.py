@@ -172,6 +172,9 @@ async def _index_jobs(session: AsyncSession) -> int:
         .limit(settings.embedding_jobs_per_run)
     )
     jobs = list(result.scalars())
+    # Commit immediately to release the transaction after SELECT
+    await session.commit()
+
     indexed = 0
     for job in jobs:
         try:
@@ -193,10 +196,12 @@ async def _index_jobs(session: AsyncSession) -> int:
                     "updated_at": datetime.now(),
                 },
             )
+            # Commit after each job update to release locks quickly
+            await session.commit()
             indexed += 1
         except Exception as exc:
+            await session.rollback()
             logger.warning("Job embedding failed job_id=%s: %s", job.id, exc)
-    await session.commit()
     return indexed
 
 
@@ -208,8 +213,10 @@ async def _index_profiles(session: AsyncSession) -> int:
         .limit(200)
     )
     profiles = list(result.scalars())
+    # Commit immediately to release the transaction after SELECT
+    await session.commit()
+    
     indexed = 0
-
     for profile in profiles:
         current_hash = compute_profile_hash(profile)
         row = await session.execute(
@@ -217,6 +224,9 @@ async def _index_profiles(session: AsyncSession) -> int:
             {"profile_id": profile.id},
         )
         existing_hash = row.scalar_one_or_none()
+        # Commit SELECT hash check immediately
+        await session.commit()
+        
         if existing_hash == current_hash:
             continue
         if indexed >= settings.embedding_profiles_per_run:
@@ -242,11 +252,13 @@ async def _index_profiles(session: AsyncSession) -> int:
                     "profile_hash": current_hash,
                 },
             )
+            # Commit after each profile update to release locks quickly
+            await session.commit()
             indexed += 1
         except Exception as exc:
+            await session.rollback()
             logger.warning("Profile embedding failed profile_id=%s: %s", profile.id, exc)
 
-    await session.commit()
     return indexed
 
 
