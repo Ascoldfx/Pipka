@@ -73,9 +73,6 @@ async def get_countries(request: Request):
     duplicate dropdown entries on the frontend.
     """
     async with async_session() as session:
-        user = await get_user(request, session)
-        if not user:
-            return []
         code = func.lower(Job.country)
         result = await session.execute(
             select(code.label("code"), func.count(Job.id).label("cnt"))
@@ -108,17 +105,20 @@ async def get_jobs(
 ):
     async with async_session() as session:
         user = await get_user(request, session)
-        if not user:
-            return {"jobs": [], "total": 0, "page": page, "pages": 0}
+        user_id = user.id if user else None
 
         is_postgres = session.get_bind().dialect.name == "postgresql"
-        score_join = and_(JobScore.job_id == Job.id, JobScore.user_id == user.id)
-        app_join = and_(Application.job_id == Job.id, Application.user_id == user.id)
+        if user_id:
+            score_join = and_(JobScore.job_id == Job.id, JobScore.user_id == user_id)
+            app_join = and_(Application.job_id == Job.id, Application.user_id == user_id)
+        else:
+            score_join = literal_column("1") == literal_column("0")
+            app_join = literal_column("1") == literal_column("0")
 
         filters = []
         search_rank = None
         semantic_ids: list[int] = []
-        if min_score > 0:
+        if user_id and min_score > 0:
             filters.append(JobScore.score >= min_score)
         if source:
             filters.append(Job.source == source)
@@ -187,6 +187,7 @@ async def get_jobs(
         if (
             is_default_feed
             and not explicit_country_filter
+            and user
             and user.profile
             and user.profile.hidden_countries
         ):
@@ -209,7 +210,7 @@ async def get_jobs(
         if not include_closed:
             filters.append(or_(Job.url_status.is_(None), Job.url_status != "closed"))
 
-        if semantic:
+        if semantic and user:
             from app.services.embedding_service import semantic_job_ids_for_profile  # noqa: PLC0415
 
             semantic_ids = await semantic_job_ids_for_profile(
