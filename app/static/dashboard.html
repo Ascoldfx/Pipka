@@ -86,7 +86,43 @@
   th.sorted { color:var(--fg); }
   th .arrow { font-size:9px; margin-left:3px; }
   td { padding:8px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
-  tr:hover { background:var(--hover); }
+  /* Skeleton Loading Animations */
+  @keyframes skeleton-pulse {
+    0% { opacity: 0.35; }
+    50% { opacity: 0.75; }
+    100% { opacity: 0.35; }
+  }
+  .skeleton-row td { padding: 12px; }
+  .skeleton-box {
+    background: var(--border);
+    border-radius: 4px;
+    animation: skeleton-pulse 1.3s ease-in-out infinite;
+  }
+
+  /* Micro-animations */
+  .tab-plain, .btn-primary, .btn, .source-tag { transition: transform 0.12s ease, background-color 0.15s ease, border-color 0.15s ease; }
+  .btn-primary:active, .btn:active { transform: scale(0.97); }
+
+  /* Mobile Responsive Cards */
+  @media (max-width: 768px) {
+    .table-wrap { border: none; overflow: visible; }
+    .table-wrap table, .table-wrap thead, .table-wrap tbody, .table-wrap th, .table-wrap td, .table-wrap tr { display: block; }
+    .table-wrap thead tr { position: absolute; top: -9999px; left: -9999px; }
+    .table-wrap tr {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 12px;
+      padding: 14px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+    }
+    .table-wrap td {
+      border: none;
+      padding: 3px 0;
+      position: relative;
+    }
+    .score-wrap { margin-bottom: 6px; }
+  }
 
   .score { display:inline-block; font-weight:700; font-size:14px; min-width:28px; text-align:center; border-radius:4px; }
   .score.high { color:var(--green); } .score.mid { color:var(--yellow); } .score.low { color:var(--red); } .score.none { color:var(--muted); }
@@ -1504,6 +1540,21 @@ async function loadStats(){
   }catch(e){console.error(e)}
 }
 
+function renderSkeletonRows(count = 6) {
+  let html = '';
+  for (let i = 0; i < count; i++) {
+    html += `<tr class="skeleton-row">
+      <td><div class="skeleton-box" style="width:36px;height:20px;"></div></td>
+      <td><div class="skeleton-box" style="width:75%;height:14px;margin-bottom:6px;"></div><div class="skeleton-box" style="width:45%;height:10px;"></div></td>
+      <td><div class="skeleton-box" style="width:60%;height:12px;"></div></td>
+      <td><div class="skeleton-box" style="width:50%;height:12px;"></div></td>
+      <td><div class="skeleton-box" style="width:40%;height:12px;"></div></td>
+      <td><div class="skeleton-box" style="width:90px;height:24px;border-radius:999px;"></div></td>
+    </tr>`;
+  }
+  return html;
+}
+
 /* ── Jobs table ── */
 async function loadJobs(){
   const p=new URLSearchParams({page:S.page,per_page:S.perPage,sort:S.sort,order:S.order,min_score:$('f-score').value});
@@ -1514,7 +1565,7 @@ async function loadJobs(){
   if(S.tabStatus) p.set('status',S.tabStatus);
   if($('f-include-closed') && $('f-include-closed').checked) p.set('include_closed','1');
   const tbody=$('jobs-body');
-  tbody.innerHTML=`<tr><td colspan="6" class="loading">${T('msg.loading')}</td></tr>`;
+  tbody.innerHTML=renderSkeletonRows(6);
   try{
     const data=await(await fetch('/api/jobs?'+p,{cache:'no-store'})).json();
     S.totalPages=data.pages;
