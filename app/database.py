@@ -53,6 +53,9 @@ async def get_session() -> AsyncSession:
         yield session
 
 
+get_db = get_session
+
+
 async def init_db():
     """Bring the database schema to ``head`` via Alembic.
 
