@@ -717,7 +717,29 @@ function switchGuestLanguage(lang) {
 
   try { localStorage.setItem('pipka_guest_lang', lang); } catch(e){}
 }
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'light';
+  const next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('pipka_theme', next); } catch(e){}
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = next === 'dark' ? '☀️' : '🌙';
+}
+
+function toggleLogin() {
+    if(typeof S === 'undefined' || !S || !S.authenticated) {
+        window.location.href = '/auth/google/login';
+    } else {
+        if(confirm('Log out?')) {
+          fetch('/auth/logout', { method: 'POST' }).finally(() => { window.location.href = '/'; });
+        }
+    }
+}
+
 window.switchGuestLanguage = switchGuestLanguage;
+window.toggleTheme = toggleTheme;
+window.toggleLogin = toggleLogin;
 </script>
 </head>
 <body class="guest-mode">
@@ -736,12 +758,12 @@ window.switchGuestLanguage = switchGuestLanguage;
         <option value="ua">🇺🇦 UA</option>
       </select>
     </div>
-    <button id="theme-toggle" data-action="toggle-theme" title="Toggle dark mode">🌙</button>
+    <button id="theme-toggle" data-action="toggle-theme" onclick="window.toggleTheme && window.toggleTheme()" title="Toggle dark mode">🌙</button>
     <button id="scan-btn" data-action="trigger-scan" style="display:none">
       <span id="scan-btn-label">▶ Scan</span>
       <span class="scan-sub" id="scan-btn-sub"></span>
     </button>
-    <button id="user-btn" data-action="toggle-login" style="display:flex;align-items:center;gap:7px;background:none;border:1.5px solid var(--border);border-radius:999px;padding:4px 10px 4px 5px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;color:var(--fg);transition:border-color .18s;" title="Account">
+    <button id="user-btn" data-action="toggle-login" onclick="window.toggleLogin && window.toggleLogin()" style="display:flex;align-items:center;gap:7px;background:none;border:1.5px solid var(--border);border-radius:999px;padding:4px 10px 4px 5px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;color:var(--fg);transition:border-color .18s;" title="Account">
       <img id="user-avatar" src="" style="width:22px;height:22px;border-radius:50%;display:none;flex-shrink:0;" />
       <span id="user-avatar-icon" style="width:22px;height:22px;border-radius:50%;background:var(--hover);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">👤</span>
       <span id="role-badge">Guest</span>
