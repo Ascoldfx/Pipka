@@ -15,6 +15,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.api._ratelimit import RateLimitMiddleware, start_bucket_cleanup_task
 from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
+from app.api.billing import router as billing_router
 from app.api.health import router as health_router
 from app.api.jobs import router as jobs_router
 from app.api.ops import router as ops_router
@@ -155,7 +156,7 @@ _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 # Public read-only probes/assets do not need a session and must not create a
 # fresh session/CSRF cookie on every monitoring request. OAuth endpoints are
 # GET-only and still rely on Authlib's signed ``state`` validation.
-_CSRF_SESSIONLESS_PATHS = frozenset({"/health", "/health/live", "/infographic", "/llms.txt"})
+_CSRF_SESSIONLESS_PATHS = frozenset({"/health", "/health/live", "/infographic", "/llms.txt", "/api/webhooks/crypto"})
 _CSRF_SESSIONLESS_PREFIXES = ("/static/", "/auth/google/")
 
 
@@ -425,3 +426,4 @@ app.include_router(profile_router, tags=["profile"])
 app.include_router(scan_router, tags=["scan"])
 app.include_router(ops_router, tags=["ops"])
 app.include_router(admin_router, tags=["admin"])
+app.include_router(billing_router, tags=["billing"])

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models import Base
@@ -19,12 +19,32 @@ class User(Base):
     language: Mapped[str] = mapped_column(String(5), default="ru")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     subscription_tier: Mapped[str] = mapped_column(String(20), default="free")
+    credits: Mapped[int] = mapped_column(Integer, default=50)
+    total_credits_purchased: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     profile: Mapped["UserProfile | None"] = relationship(back_populates="user", uselist=False, cascade="all, delete-orphan")
     scores: Mapped[list["JobScore"]] = relationship(back_populates="user")
     applications: Mapped[list["Application"]] = relationship(back_populates="user")
     subscriptions: Mapped[list["SearchSubscription"]] = relationship(back_populates="user")
+    payment_transactions: Mapped[list["PaymentTransaction"]] = relationship(back_populates="user")
+
+
+class PaymentTransaction(Base):
+    __tablename__ = "payment_transactions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    amount_usd: Mapped[float] = mapped_column(Float)
+    credits_added: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    provider: Mapped[str] = mapped_column(String(30), default="cryptomus")
+    provider_tx_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    payment_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    user: Mapped["User"] = relationship(back_populates="payment_transactions")
 
 
 class UserProfile(Base):

@@ -128,6 +128,15 @@ class Settings(BaseSettings):
     telegram_search_limit_per_hour: int = 6
     telegram_analysis_limit_per_hour: int = 10
 
+    # Billing & Monetization (Cryptomus / NOWPayments)
+    cryptomus_merchant_id: str = ""
+    cryptomus_payment_key: str = ""
+    billing_starter_price_usd: float = 5.0
+    billing_starter_credits: int = 200
+    billing_pro_price_usd: float = 10.0
+    billing_pro_credits: int = 1000
+    default_user_trial_credits: int = 50
+
     # Search
     default_results_limit: int = 50
     job_max_age_days: int = 45

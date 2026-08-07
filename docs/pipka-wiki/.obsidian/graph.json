@@ -8,28 +8,46 @@
   "collapse-color-groups": false,
   "colorGroups": [
     {
-      "query": "tag:#api OR tag:#auth OR tag:#security OR tag:#ratelimit",
-      "color": { "a": 1, "rgb": 5212927 }
+      "query": "tag:#api OR tag:#auth OR tag:#security OR tag:#ratelimit OR tag:#frontend OR tag:#ui",
+      "color": {
+        "a": 1,
+        "rgb": 5212927
+      }
     },
     {
-      "query": "tag:#service OR tag:#bot OR tag:#tracker",
-      "color": { "a": 1, "rgb": 5294200 }
+      "query": "tag:#service OR tag:#tracker OR tag:#bot OR tag:#watchlist",
+      "color": {
+        "a": 1,
+        "rgb": 5294200
+      }
     },
     {
-      "query": "tag:#scoring OR tag:#cache OR tag:#dedup",
-      "color": { "a": 1, "rgb": 16747586 }
+      "query": "tag:#scoring OR tag:#prefilter OR tag:#cache OR tag:#dedup OR tag:#search",
+      "color": {
+        "a": 1,
+        "rgb": 16747586
+      }
     },
     {
-      "query": "tag:#deploy OR tag:#backup OR tag:#alembic OR tag:#database",
-      "color": { "a": 1, "rgb": 11640025 }
+      "query": "tag:#deploy OR tag:#backup OR tag:#alembic",
+      "color": {
+        "a": 1,
+        "rgb": 11640025
+      }
     },
     {
-      "query": "tag:#observability OR tag:#ops",
-      "color": { "a": 1, "rgb": 16041008 }
+      "query": "tag:#observability OR tag:#ops OR tag:#urlcheck",
+      "color": {
+        "a": 1,
+        "rgb": 16041008
+      }
     },
     {
-      "query": "tag:#config OR tag:#tests OR tag:#changelog OR tag:#roadmap OR file:\"index\"",
-      "color": { "a": 1, "rgb": 5294335 }
+      "query": "tag:#config OR tag:#tests OR tag:#changelog OR tag:#roadmap OR tag:#database",
+      "color": {
+        "a": 1,
+        "rgb": 5294335
+      }
     }
   ],
   "collapse-display": false,
@@ -43,5 +61,5 @@
   "linkStrength": 1,
   "linkDistance": 250,
   "scale": 1,
-  "close": false
+  "close": true
 }

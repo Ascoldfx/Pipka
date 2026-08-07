@@ -362,7 +362,32 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
             "pushed": 0,
         }
 
-    logger.info("Scoring %d new jobs for user %s", len(new_jobs), user.telegram_id)
+    if user.credits <= 0:
+        logger.warning("User %s has 0 credits remaining, skipping AI scoring", user.telegram_id)
+        if bot_app and user.telegram_id:
+            try:
+                await bot_app.bot.send_message(
+                    chat_id=user.telegram_id,
+                    text=(
+                        "⚠️ <b>Баланс кредитов исчерпан!</b>\n\n"
+                        "У вас 0 кредитов. Пополните баланс через команду /buy или в дашборде pipka.net, "
+                        "чтобы возобновить AI-анализ новых вакансий."
+                    ),
+                    parse_mode="HTML",
+                )
+            except Exception as exc:
+                logger.debug("Failed to send credit alert to user %s: %s", user.telegram_id, exc)
+        return {
+            "user_id": user.id,
+            "telegram_id": user.telegram_id,
+            "eligible_jobs": len(new_jobs),
+            "scored_jobs": 0,
+            "top_results": 0,
+            "pushed": 0,
+            "error": "credits_exhausted",
+        }
+
+    logger.info("Scoring %d new jobs for user %s (credits: %d)", len(new_jobs), user.telegram_id, user.credits)
 
     # Similarity is a ranking hint, never a rejection. Explicit target-title
     # matches lead even when an embedding is misleading.
@@ -390,6 +415,13 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
 
     logger.info("Using %s for real-time scoring", score_fn.__name__)
     scores = await score_fn(to_score, user, session)
+
+    if scores:
+        deducted = min(user.credits, len(scores))
+        if deducted > 0:
+            user.credits -= deducted
+            await session.commit()
+            logger.info("Deducted %d credits from user %s (remaining: %d)", deducted, user.id, user.credits)
 
     # Find top results to push. Hidden countries are still collected and
     # scored for an auditable pilot, but must not leak into automatic

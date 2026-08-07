@@ -26,7 +26,8 @@ async def profile_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         profile = await ensure_profile(user, session)
         await session.commit()
 
-    lines = ["⚙️ Ваш профиль:\n"]
+    lines = ["⚙️ <b>Ваш профиль и подписка:</b>\n"]
+    lines.append(f"💰 <b>Кредиты:</b> {user.credits} шт. (всего куплено: {user.total_credits_purchased})")
     lines.append(f"📝 Резюме: {'✅' if profile.resume_text else '❌ не задано'}")
     lines.append(f"🎯 Должности: {', '.join(profile.target_titles) if profile.target_titles else '❌'}")
     lines.append(f"🌐 Языки: {profile.languages or '❌'}")
@@ -103,3 +104,26 @@ async def profile_text_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await update_profile(user, session, **{field_name: value})
 
     await update.message.reply_text("✅ Профиль обновлён!", reply_markup=main_menu())
+
+
+async def billing_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler for /buy or /billing command."""
+    if not update.effective_user or not update.message:
+        return
+
+    async with async_session() as session:
+        user = await get_or_create_user(
+            update.effective_user.id, update.effective_user.full_name, session
+        )
+
+    msg = (
+        f"💳 <b>Пополнение баланса Pipka AI:</b>\n\n"
+        f"Ваш текущий баланс: <b>{user.credits} кредитов</b>\n\n"
+        f"<b>Доступные тарифы:</b>\n"
+        f"• <b>Starter:</b> $5 USD → 200 вакансий\n"
+        f"• <b>Pro:</b> $10 USD → 1000 вакансий\n\n"
+        f"Оплата принимается в <b>USDT/USDC</b> (Base, BSC, ETH, Solana, TON) и банковскими картами.\n\n"
+        f"Для оформления подписки откройте раздел <b>Billing</b> в дашборде:\n"
+        f"👉 https://pipka.net"
+    )
+    await update.message.reply_text(msg, parse_mode="HTML", reply_markup=main_menu())

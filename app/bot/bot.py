@@ -26,6 +26,7 @@ from app.bot.handlers.search import (
     text_search_handler,
 )
 from app.bot.handlers.settings import (
+    billing_command_handler,
     profile_field_handler,
     profile_menu_handler,
     profile_text_handler,
@@ -56,6 +57,8 @@ def create_bot_app(post_init_callback=None):
     app.add_handler(CommandHandler("help", help_handler))
     app.add_handler(CommandHandler("search", lambda u, c: search_menu_handler(u, c)))
     app.add_handler(CommandHandler("profile", lambda u, c: profile_menu_handler(u, c)))
+    app.add_handler(CommandHandler("buy", billing_command_handler))
+    app.add_handler(CommandHandler("billing", billing_command_handler))
 
     # Callback queries — menu navigation
     app.add_handler(CallbackQueryHandler(search_menu_handler, pattern="^menu_search$"))
