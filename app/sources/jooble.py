@@ -152,25 +152,41 @@ class JoobleSource(JobSource):
             "page": page,
             "ResultOnPage": 20,
         }
-        try:
-            async with session.post(
-                api_url,
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=20),
-            ) as resp:
-                if resp.status == 403:
-                    logger.warning("Jooble: 403 Forbidden — invalid API key, disabling until restart")
-                    JoobleSource._auth_failed = True
-                    return []
-                if resp.status != 200:
-                    logger.warning(
-                        "Jooble: HTTP %d for query=%r location=%r page=%d",
-                        resp.status, keywords, location, page,
-                    )
-                    return []
-                data = await resp.json(content_type=None)
-        except Exception as exc:
-            logger.error("Jooble request failed (query=%r): %s", keywords, exc)
+        max_retries = 3
+        data = None
+        for attempt in range(max_retries):
+            try:
+                async with session.post(
+                    api_url,
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=20),
+                ) as resp:
+                    if resp.status == 403:
+                        logger.warning("Jooble: 403 Forbidden — invalid API key, disabling until restart")
+                        JoobleSource._auth_failed = True
+                        return []
+                    if resp.status == 429 or resp.status >= 500:
+                        if attempt < max_retries - 1:
+                            wait_sec = (2 ** attempt) + 0.5
+                            logger.info("Jooble HTTP %d on query=%r (attempt %d/%d). Retrying in %.1fs...", resp.status, keywords, attempt + 1, max_retries, wait_sec)
+                            await asyncio.sleep(wait_sec)
+                            continue
+                        logger.warning("Jooble: HTTP %d for query=%r location=%r page=%d after %d attempts", resp.status, keywords, location, page, max_retries)
+                        return []
+                    if resp.status != 200:
+                        logger.warning("Jooble: HTTP %d for query=%r location=%r page=%d", resp.status, keywords, location, page)
+                        return []
+                    data = await resp.json(content_type=None)
+                    break
+            except Exception as exc:
+                if attempt < max_retries - 1:
+                    wait_sec = (2 ** attempt) + 0.5
+                    await asyncio.sleep(wait_sec)
+                    continue
+                logger.error("Jooble request failed (query=%r): %s", keywords, exc)
+                return []
+
+        if not data:
             return []
 
         jobs: list[RawJob] = []

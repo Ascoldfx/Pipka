@@ -138,14 +138,49 @@ class AdzunaSource:
         if location:
             request_params["where"] = location
 
-        try:
-            async with session.get(url, params=request_params, timeout=aiohttp.ClientTimeout(total=ADZUNA_REQUEST_TIMEOUT)) as resp:
-                if resp.status != 200:
-                    logger.warning("Adzuna %s/%s p%d returned %s", country, query, page, resp.status)
-                    return []
-                data = await resp.json()
-        except Exception as e:
-            logger.error("Adzuna request failed: %s", e)
+        max_retries = 3
+        data = None
+        for attempt in range(max_retries):
+            try:
+                async with session.get(
+                    url, params=request_params, timeout=aiohttp.ClientTimeout(total=ADZUNA_REQUEST_TIMEOUT)
+                ) as resp:
+                    if resp.status == 429:
+                        if attempt < max_retries - 1:
+                            wait_sec = (2 ** attempt) + 1.0
+                            logger.info(
+                                "Adzuna 429 rate limit on %s/%s p%d (attempt %d/%d). Retrying in %.1fs...",
+                                country, query, page, attempt + 1, max_retries, wait_sec,
+                            )
+                            await asyncio.sleep(wait_sec)
+                            continue
+                        logger.warning("Adzuna 429 rate limit persistent for %s/%s p%d after %d attempts", country, query, page, max_retries)
+                        return []
+                    if resp.status >= 500:
+                        if attempt < max_retries - 1:
+                            wait_sec = (2 ** attempt) + 0.5
+                            logger.info(
+                                "Adzuna HTTP %d on %s/%s p%d (attempt %d/%d). Retrying in %.1fs...",
+                                resp.status, country, query, page, attempt + 1, max_retries, wait_sec,
+                            )
+                            await asyncio.sleep(wait_sec)
+                            continue
+                        logger.warning("Adzuna %s/%s p%d returned status %s after %d attempts", country, query, page, resp.status, max_retries)
+                        return []
+                    if resp.status != 200:
+                        logger.warning("Adzuna %s/%s p%d returned status %s", country, query, page, resp.status)
+                        return []
+                    data = await resp.json()
+                    break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    wait_sec = (2 ** attempt) + 0.5
+                    await asyncio.sleep(wait_sec)
+                    continue
+                logger.error("Adzuna request failed: %s", e)
+                return []
+
+        if not data:
             return []
 
         jobs: list[RawJob] = []
