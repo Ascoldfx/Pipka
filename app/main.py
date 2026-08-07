@@ -400,7 +400,7 @@ app.add_middleware(
     session_cookie="pipka_session",
     max_age=30 * 24 * 3600,
     same_site="lax",
-    https_only=True,
+    https_only=False,
 )
 # Body-size cap runs before the session and route layers parse request data.
 app.add_middleware(MaxBodySizeMiddleware)

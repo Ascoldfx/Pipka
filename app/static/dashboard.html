@@ -7,7 +7,20 @@
 <script src="/static/js/security.js?v=2.0.1"></script>
 <style>
   :root, html, body { --bg:#fff; --fg:#111; --muted:#777; --border:#e0e0e0; --hover:#f7f7f7; --green:#2d8a4e; --yellow:#b8860b; --red:#c0392b; --blue:#1565c0; --badge:#f0f0f0; }
-  :root[data-theme="dark"], html[data-theme="dark"], body[data-theme="dark"] { --bg:#0f0f0f; --fg:#e8e8e8; --muted:#888; --border:#2a2a2a; --hover:#1a1a1a; --green:#3dba68; --yellow:#d4a017; --red:#e05252; --blue:#4a9de8; --badge:#1e1e1e; }
+  :root[data-theme="dark"], html[data-theme="dark"], body[data-theme="dark"], body.dark-mode {
+    --bg:#0f0f0f !important;
+    --fg:#e8e8e8 !important;
+    --muted:#a0a0a0 !important;
+    --border:#2a2a2a !important;
+    --hover:#1a1a1a !important;
+    --green:#3dba68 !important;
+    --yellow:#d4a017 !important;
+    --red:#e05252 !important;
+    --blue:#4a9de8 !important;
+    --badge:#1e1e1e !important;
+    background-color:#0f0f0f !important;
+    color:#e8e8e8 !important;
+  }
   body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; background:var(--bg); color:var(--fg); line-height:1.5; font-size:13px; }
 
   /* Guest Mode Strict Scope: hide tabs bar, filters, table, and pagination completely */
@@ -548,8 +561,14 @@ const TRANSLATIONS = {
 
 try {
   const savedTheme = localStorage.getItem('pipka_theme');
-  if (savedTheme) {
-    document.documentElement.setAttribute('data-theme', savedTheme);
+  if (savedTheme === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    document.addEventListener('DOMContentLoaded', () => {
+      if (document.body) {
+        document.body.setAttribute('data-theme', 'dark');
+        document.body.classList.add('dark-mode');
+      }
+    });
   }
 } catch(e){}
 
@@ -719,10 +738,21 @@ function switchGuestLanguage(lang) {
 }
 
 function toggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme') || (document.body && document.body.getAttribute('data-theme')) || 'light';
-  const next = current === 'dark' ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', next);
-  if (document.body) document.body.setAttribute('data-theme', next);
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark' || (document.body && document.body.classList.contains('dark-mode'));
+  const next = isDark ? 'light' : 'dark';
+  if (next === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    if (document.body) {
+      document.body.setAttribute('data-theme', 'dark');
+      document.body.classList.add('dark-mode');
+    }
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    if (document.body) {
+      document.body.removeAttribute('data-theme');
+      document.body.classList.remove('dark-mode');
+    }
+  }
   try { localStorage.setItem('pipka_theme', next); } catch(e){}
   const btn = document.getElementById('theme-toggle');
   if (btn) btn.textContent = next === 'dark' ? '☀️' : '🌙';
