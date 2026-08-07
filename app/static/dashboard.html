@@ -8,8 +8,17 @@
 <style>
   :root { --bg:#fff; --fg:#111; --muted:#777; --border:#e0e0e0; --hover:#f7f7f7; --green:#2d8a4e; --yellow:#b8860b; --red:#c0392b; --blue:#1565c0; --badge:#f0f0f0; }
   :root[data-theme="dark"] { --bg:#0f0f0f; --fg:#e8e8e8; --muted:#888; --border:#2a2a2a; --hover:#1a1a1a; --green:#3dba68; --yellow:#d4a017; --red:#e05252; --blue:#4a9de8; --badge:#1e1e1e; }
-  * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; background:var(--bg); color:var(--fg); line-height:1.5; font-size:13px; }
+
+  /* Guest Mode Strict Scope: hide tabs bar, filters, table, and pagination completely */
+  body.guest-mode #stats,
+  body.guest-mode .filters,
+  body.guest-mode .table-wrap,
+  body.guest-mode .pagination,
+  body.guest-mode .tab-content:not(#tc-jobs),
+  body.guest-mode .auth-only {
+    display: none !important;
+  }
 
   /* Theme transition — only on layout elements, not buttons/interactions */
   body, header, .stats, .filters, table, td, th, .modal, .settings, input, select, textarea, .tab, .tab-content, .source-tag, .score { transition: background-color .2s, border-color .2s, color .15s; }
@@ -2457,26 +2466,20 @@ async function initApp() {
     const statsNavEl = $('stats');
 
     if (!S.authenticated) {
-      // Guest: show Hero Landing, HIDE jobs table, filters & pagination
+      // Guest: add guest-mode CSS class to hide tabs, table, filters, pagination
+      document.body.classList.add('guest-mode');
       document.querySelectorAll('.guest-only').forEach(el => el.style.display = '');
       document.querySelectorAll('.auth-only').forEach(el => el.style.display = 'none');
-      if (filtersEl) filtersEl.style.display = 'none';
-      if (tableWrapEl) tableWrapEl.style.display = 'none';
-      if (paginationEl) paginationEl.style.display = 'none';
-      if (statsNavEl) statsNavEl.style.display = 'none';
       if (rb) rb.textContent = T('btn.login');
       const userBtn = $('user-btn');
       if (userBtn) { userBtn.style.borderColor = '#4285f4'; userBtn.style.color = '#4285f4'; }
       if (scanBtn) scanBtn.style.display = 'none';
       if (opsTab) opsTab.style.display = 'none';
     } else {
-      // Logged in: hide Hero Landing, SHOW jobs table, filters & pagination
+      // Logged in: remove guest-mode CSS class
+      document.body.classList.remove('guest-mode');
       document.querySelectorAll('.guest-only').forEach(el => el.style.display = 'none');
       document.querySelectorAll('.auth-only').forEach(el => el.style.display = '');
-      if (filtersEl) filtersEl.style.display = 'flex';
-      if (tableWrapEl) tableWrapEl.style.display = 'block';
-      if (paginationEl) paginationEl.style.display = 'flex';
-      if (statsNavEl) statsNavEl.style.display = 'flex';
       $('f-score').value = '70';
       loadBillingInfo();
 
