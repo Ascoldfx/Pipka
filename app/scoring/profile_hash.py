@@ -29,7 +29,6 @@ SCORING_RULES_VERSION = "2026-08-01.1"
 # Backend identifiers — pulled from settings so an env-only model bump
 # automatically invalidates downstream caches without code changes.
 MODEL_GEMINI = lambda: f"gemini:{settings.gemini_scoring_model}"   # noqa: E731
-MODEL_CLAUDE = lambda: f"claude:{settings.claude_model}"           # noqa: E731
 MODEL_NVIDIA = lambda: f"nvidia:{settings.nvidia_model}"           # noqa: E731
 
 
@@ -43,7 +42,7 @@ def current_primary_model_version() -> str:
         return MODEL_GEMINI()
     if settings.nvidia_api_key:
         return MODEL_NVIDIA()
-    return MODEL_CLAUDE()
+    return "none"
 
 
 def valid_score_model_versions() -> tuple[str, str]:

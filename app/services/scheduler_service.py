@@ -18,7 +18,6 @@ from app.database import async_session
 from app.models.application import Application
 from app.models.job import Job, JobScore
 from app.models.user import User, UserProfile
-from app.scoring.matcher import score_jobs
 from app.scoring.profile_hash import compute_profile_hash, valid_score_model_versions
 from app.scoring.rules import matches_explicit_target_title, pre_filter
 from app.services.backup_service import run_backup, verify_latest_backup_restore
@@ -381,9 +380,9 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
     if score_fn.__name__ == "score_jobs_gemini":
         from app.scoring.gemini_matcher import is_gemini_available  # noqa: PLC0415
         if not is_gemini_available():
-            logger.info("Gemini circuit breaker is open. Falling back to Claude for real-time scoring.")
-            from app.scoring.matcher import score_jobs  # noqa: PLC0415
-            score_fn = score_jobs
+            logger.info("Gemini circuit breaker is open. Falling back to NVIDIA for real-time scoring.")
+            from app.scoring.nvidia_matcher import score_jobs_nvidia  # noqa: PLC0415
+            score_fn = score_jobs_nvidia
 
     logger.info("Using %s for real-time scoring", score_fn.__name__)
     scores = await score_fn(to_score, user, session)
@@ -476,8 +475,9 @@ def _backfill_score_fn():
         logger.debug("Backfill scorer: Gemini batch scoring (%s)", settings.gemini_scoring_model)
         return score_jobs_gemini
 
-    logger.debug("Backfill scorer: using Claude (%s)", settings.claude_model)
-    return score_jobs
+    logger.debug("Backfill scorer: using NVIDIA (%s)", settings.nvidia_model)
+    from app.scoring.nvidia_matcher import score_jobs_nvidia  # noqa: PLC0415
+    return score_jobs_nvidia
 
 
 def _order_by_semantic_priority(
@@ -609,13 +609,21 @@ async def _backfill_score():
                     )
                     .exists()
                 )
+                has_no_score = (
+                    ~select(JobScore.id)
+                    .where(
+                        JobScore.user_id == user.id,
+                        JobScore.job_id == Job.id,
+                    )
+                    .exists()
+                )
                 all_jobs_result = await session.execute(
                     select(Job)
                     .where(
                         Job.country == settings.backfill_country.lower(),
                         func.coalesce(Job.posted_at, Job.scraped_at) >= cutoff,
                         or_(Job.url_status.is_(None), Job.url_status == "active"),
-                        prior_strong_score,
+                        or_(prior_strong_score, has_no_score),
                     )
                     .order_by(Job.posted_at.desc().nulls_last(), Job.scraped_at.desc(), Job.id.desc())
                 )

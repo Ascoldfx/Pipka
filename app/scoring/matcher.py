@@ -4,7 +4,6 @@ import json
 import logging
 from datetime import datetime, timedelta
 
-from anthropic import AsyncAnthropic
 from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +12,7 @@ from app.config import settings
 from app.models.job import Job, JobScore
 from app.models.user import User, UserProfile
 from app.scoring.gemini_client import generate_gemini_content
-from app.scoring.profile_hash import MODEL_CLAUDE, compute_profile_hash
+from app.scoring.profile_hash import compute_profile_hash
 
 logger = logging.getLogger(__name__)
 
@@ -82,19 +81,6 @@ For each job, return a JSON object with:
 
 Return a JSON array. Only valid JSON, no markdown fences."""
 
-client: AsyncAnthropic | None = None
-
-
-def _get_client() -> AsyncAnthropic:
-    global client
-    if client is None:
-        client = AsyncAnthropic(
-            api_key=settings.anthropic_api_key,
-            timeout=settings.claude_timeout_seconds,
-            max_retries=settings.claude_max_retries,
-        )
-    return client
-
 
 RESUME_MAX_CHARS = 2500  # keep prompt size sane; covers ~400 words of background
 
@@ -160,185 +146,20 @@ def build_profile_text(profile: UserProfile) -> str:
 async def score_jobs(
     jobs: list[Job], user: User, session: AsyncSession
 ) -> list[JobScore]:
-    profile = user.profile
-    if not profile:
-        return []
+    """Score jobs by routing to the available backend: Gemini (primary) or NVIDIA (fallback)."""
+    from app.scoring.gemini_matcher import is_gemini_available, score_jobs_gemini  # noqa: PLC0415
+    from app.scoring.nvidia_matcher import score_jobs_nvidia  # noqa: PLC0415
 
-    # Check cache — single batch SELECT instead of N+1 queries.
-    # A cache hit requires an exact profile/rules hash match. Legacy NULL
-    # hashes are stale by definition and must be rescored.
-    cache_cutoff = datetime.now() - timedelta(hours=settings.score_cache_hours)
-    job_ids = [j.id for j in jobs]
-    current_hash = compute_profile_hash(profile)
-    current_model = MODEL_CLAUDE()
-    cached_result = await session.execute(
-        select(JobScore).where(
-            JobScore.job_id.in_(job_ids),
-            JobScore.user_id == user.id,
-            JobScore.scored_at > cache_cutoff,
-            JobScore.profile_hash == current_hash,
-            JobScore.model_version == current_model,
-        )
-    )
-    cached_map = {s.job_id: s for s in cached_result.scalars().all()}
-    cached_ids: set[int] = set(cached_map.keys())
-    cached_scores: list[JobScore] = list(cached_map.values())
+    if settings.gemini_api_key and is_gemini_available():
+        logger.info("Routing scoring to Gemini")
+        return await score_jobs_gemini(jobs, user, session)
 
-    to_score = [j for j in jobs if j.id not in cached_ids]
-    if not to_score:
-        return cached_scores
+    if settings.nvidia_api_key:
+        logger.info("Routing scoring to NVIDIA")
+        return await score_jobs_nvidia(jobs, user, session)
 
-    # Batch score
-    profile_text = build_profile_text(profile)
-    profile_hash = compute_profile_hash(profile)
-    model_version = MODEL_CLAUDE()
-    new_scores: list[JobScore] = []
-
-    for i in range(0, len(to_score), settings.max_jobs_per_scoring_batch):
-        batch = to_score[i : i + settings.max_jobs_per_scoring_batch]
-        batch_scores = await _score_batch(
-            batch, profile_text, user.id, session,
-            profile_hash=profile_hash, model_version=model_version,
-        )
-        new_scores.extend(batch_scores)
-
-    all_scores = cached_scores + new_scores
-    all_scores.sort(key=lambda s: s.score, reverse=True)
-    return all_scores
-
-
-async def _score_batch(
-    jobs: list[Job],
-    profile_text: str,
-    user_id: int,
-    session: AsyncSession,
-    *,
-    profile_hash: str | None = None,
-    model_version: str | None = None,
-) -> list[JobScore]:
-    jobs_text = ""
-    for idx, job in enumerate(jobs):
-        desc_preview = (job.description or "")[:1200]
-        remote_info = f"Remote: {'Yes' if job.is_remote else 'No' if job.is_remote is False else 'Unknown'}"
-
-        jobs_text += (
-            f"\n### Job {idx}\n"
-            f"Title: {job.title}\n"
-            f"Company: {job.company_name or 'N/A'}\n"
-            f"Location: {job.location or 'N/A'} ({job.country or 'N/A'})\n"
-            f"{remote_info}\n"
-            f"Description: {desc_preview}\n"
-        )
-
-    prompt = SCORING_PROMPT.format(profile_text=profile_text, jobs_text=jobs_text)
-
-    import asyncio
-    
-    ai = _get_client()
-    max_retries = 3
-    text = None
-    for attempt in range(max_retries):
-        try:
-            response = await ai.messages.create(
-                model=settings.claude_model,
-                max_tokens=settings.claude_scoring_max_tokens,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            text = response.content[0].text
-            break
-        except Exception as e:
-            if attempt < max_retries - 1:
-                wait_time = 2 ** attempt
-                logger.warning("Claude scoring attempt %d failed: %s. Retrying in %ds...", attempt + 1, e, wait_time)
-                await asyncio.sleep(wait_time)
-            else:
-                logger.error("Claude scoring failed after %d attempts: %s", max_retries, e)
-                return []
-                
-    try:
-        # Strip markdown fences if present
-        if "```" in text:
-            text = text.split("```json")[-1] if "```json" in text else text.split("```")[-2] if text.count("```") >= 2 else text
-            text = text.replace("```", "").strip()
-        # Try to fix truncated JSON
-        text = text.strip()
-        if not text.endswith("]"):
-            # Find last complete object
-            last_brace = text.rfind("}")
-            if last_brace > 0:
-                text = text[:last_brace + 1] + "]"
-        results = json.loads(text)
-    except Exception as e:
-        # Model output can echo resume/profile data after an indirect prompt
-        # injection. Never put the raw response into logs or Sentry breadcrumbs.
-        logger.error("Claude parsing JSON failed: %s (output_length=%d)", e, len(text or ""))
-        return []
-
-    # Phase 2b: bulk UPSERT instead of per-row flush+IntegrityError.
-    # ON CONFLICT DO UPDATE overwrites stale rows, including legacy rows whose
-    # profile_hash is NULL. Matching rows stay untouched to avoid churn.
-    rows = []
-    for item in results:
-        idx = validated_job_index(item, len(jobs))
-        if idx is None:
-            continue
-        job = jobs[idx]
-        rows.append({
-            "job_id": job.id,
-            "user_id": user_id,
-            "score": min(100, max(0, int(item.get("score", 0)))),
-            "ai_analysis": item.get("verdict", ""),
-            "breakdown": item.get("breakdown"),
-            "profile_hash": profile_hash,
-            "model_version": model_version,
-        })
-
-    if not rows:
-        return []
-
-    stmt = pg_insert(JobScore).values(rows)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["job_id", "user_id"],
-        set_={
-            "score": stmt.excluded.score,
-            "ai_analysis": stmt.excluded.ai_analysis,
-            "breakdown": stmt.excluded.breakdown,
-            "scored_at": datetime.now(),
-            "profile_hash": stmt.excluded.profile_hash,
-            "model_version": stmt.excluded.model_version,
-        },
-        where=or_(
-            JobScore.profile_hash.is_(None),
-            JobScore.profile_hash != stmt.excluded.profile_hash,
-            JobScore.model_version.is_(None),
-            JobScore.model_version != stmt.excluded.model_version,
-        ),
-    ).returning(JobScore.id, JobScore.job_id)
-
-    try:
-        result = await session.execute(stmt)
-        inserted_job_ids = {row.job_id for row in result.all()}
-        await session.commit()
-    except Exception:
-        await session.rollback()
-        logger.exception("_score_batch UPSERT failed for user_id=%s", user_id)
-        return []
-
-    # Build returned ORM-tracked instances mirroring the caller's contract.
-    by_job: dict[int, dict] = {r["job_id"]: r for r in rows}
-    scores: list[JobScore] = []
-    for jid in inserted_job_ids:
-        r = by_job[jid]
-        scores.append(JobScore(
-            job_id=r["job_id"],
-            user_id=r["user_id"],
-            score=r["score"],
-            ai_analysis=r["ai_analysis"],
-            breakdown=r["breakdown"],
-            profile_hash=r["profile_hash"],
-            model_version=r["model_version"],
-        ))
-    return scores
+    logger.warning("No API key available for Gemini or NVIDIA. Cannot score jobs.")
+    return []
 
 
 async def analyze_single_job(job: Job, profile: UserProfile) -> str:
@@ -370,14 +191,31 @@ async def analyze_single_job(job: Job, profile: UserProfile) -> str:
         except Exception as e:
             logger.error("Gemini analysis error: %s", e)
             return f"Ошибка анализа Gemini: {str(e)[:100]}"
+
+    if settings.nvidia_api_key:
+        url = f"{settings.nvidia_base_url.rstrip('/')}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {settings.nvidia_api_key}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": settings.nvidia_model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 1500,
+            "temperature": 0.3,
+            "top_p": 0.95,
+            "stream": False,
+        }
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+                return data["choices"][0]["message"].get("content") or "Пустой ответ от NVIDIA"
+        except Exception as e:
+            logger.error("NVIDIA analysis error: %s", e)
+            return f"Ошибка анализа NVIDIA: {str(e)[:100]}"
             
-    try:
-        ai = _get_client()
-        response = await ai.messages.create(
-            model=settings.claude_model,
-            max_tokens=settings.claude_analysis_max_tokens,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response.content[0].text
-    except Exception as e:
-        return f"Ошибка анализа: {str(e)[:100]}"
+    return "Детальный анализ недоступен: API-ключи Gemini и NVIDIA отсутствуют."
