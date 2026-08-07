@@ -625,15 +625,66 @@ function applyLang() {
 
 <!-- TAB: ALL JOBS -->
 <div class="tab-content active" id="tc-jobs">
+  <!-- Guest Welcome & Guidance Banner (Visible to Guests only) -->
+  <div id="guest-hero-banner" class="guest-only" style="background:var(--hover);border:1px solid var(--border);border-radius:16px;padding:24px;margin:16px 24px 0;box-shadow:0 4px 20px rgba(0,0,0,0.03);">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:20px;margin-bottom:20px;">
+      <div style="max-width:620px;">
+        <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(66,133,244,0.1);color:var(--blue);font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.8px;">
+          🤖 Pipka AI Job Matcher
+        </div>
+        <h2 style="font-size:22px;letter-spacing:-0.5px;margin-bottom:8px;line-height:1.3;color:var(--fg);">Умная платформа AI-оценки и непрерывного поиска вакансий</h2>
+        <p style="color:var(--muted);font-size:13px;line-height:1.5;">Система каждые 3 часа сканирует 10 ведущих европейских и мировых площадок, автоматически сопоставляет требования вакансий с вашим резюме и присылает лучшие совпадения прямо в Telegram и Дашборд.</p>
+      </div>
+      <div style="text-align:right;">
+        <a href="/auth/google/login" class="btn-primary" style="display:inline-flex;align-items:center;gap:8px;padding:12px 24px;font-size:14px;font-weight:600;border-radius:999px;text-decoration:none;box-shadow:0 4px 14px rgba(66,133,244,0.25);">
+          <span>🔑 Войти через Google</span>
+          <span style="background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:999px;font-size:11px;">+50 кредитов</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Step-by-Step Guide -->
+    <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px;">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin-bottom:12px;">📖 Пошаговая инструкция по настройке таргетированного поиска:</div>
+      
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+        <div style="background:var(--bg);border:1px solid var(--border);padding:14px;border-radius:12px;">
+          <div style="font-weight:700;font-size:12px;color:var(--blue);margin-bottom:4px;">1️⃣ Авторизация</div>
+          <p style="font-size:11px;color:var(--muted);line-height:1.4;">Войдите через аккаунт Google (кнопка в правом верхнем углу). При первом входе вы автоматически получите <b>50 бесплатных кредитов</b>.</p>
+        </div>
+
+        <div style="background:var(--bg);border:1px solid var(--border);padding:14px;border-radius:12px;">
+          <div style="font-weight:700;font-size:12px;color:var(--green);margin-bottom:4px;">2️⃣ Загрузка резюме</div>
+          <p style="font-size:11px;color:var(--muted);line-height:1.4;">Перейдите во вкладку <b>Settings</b> → нажмите <b>Upload Resume</b> (PDF/DOCX/TXT). AI создаст семантический вектор вашего опыта.</p>
+        </div>
+
+        <div style="background:var(--bg);border:1px solid var(--border);padding:14px;border-radius:12px;">
+          <div style="font-weight:700;font-size:12px;color:var(--yellow);margin-bottom:4px;">3️⃣ Параметры поиска</div>
+          <p style="font-size:11px;color:var(--muted);line-height:1.4;">Укажите целевые должности (Target Job Titles), желаемые страны (Germany, Switzerland...), формат работы (Remote/Hybrid) и минус-слова.</p>
+        </div>
+
+        <div style="background:var(--bg);border:1px solid var(--border);padding:14px;border-radius:12px;">
+          <div style="font-weight:700;font-size:12px;color:var(--fg);margin-bottom:4px;">4️⃣ AI-скоринг & Telegram</div>
+          <p style="font-size:11px;color:var(--muted);line-height:1.4;">Система начнет непрерывный авто-поиск 24/7. Вакансии со скором 70+ будут мгновенно приходить в ваш Telegram!</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 10 Sources list -->
+    <div style="margin-top:16px;background:var(--bg);border:1px solid var(--border);padding:12px 16px;border-radius:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--muted);">
+      <div><b>🌐 10 площадок парсинга:</b> Adzuna · JobSpy (Indeed/LinkedIn) · Xing · Jooble · BuiltIn.com · Welcome to the Jungle · Remotive · Arbeitnow · Arbeitsagentur · BerlinStartupJobs</div>
+    </div>
+  </div>
+
   <div class="filters">
     <input type="text" id="f-search" data-i18n="filter.search" data-i18n-attr="placeholder" placeholder="Search title or company...">
     <span id="search-count" style="font-size:12px;color:var(--muted);white-space:nowrap;display:none"></span>
     <label data-i18n="filter.score">Score</label>
     <select id="f-score">
-      <option value="0" data-i18n="filter.all">All</option>
+      <option value="0" data-i18n="filter.all" selected>All</option>
       <option value="40">40+</option>
       <option value="60">60+</option>
-      <option value="70" selected>70+</option>
+      <option value="70">70+</option>
       <option value="80">80+</option>
       <option value="90">90+</option>
     </select>
@@ -2249,6 +2300,8 @@ async function initApp() {
 
     if (!S.authenticated) {
       // Guest
+      document.querySelectorAll('.guest-only').forEach(el => el.style.display = '');
+      document.querySelectorAll('.auth-only').forEach(el => el.style.display = 'none');
       if (rb) rb.textContent = T('btn.login');
       const userBtn = $('user-btn');
       if (userBtn) { userBtn.style.borderColor = '#4285f4'; userBtn.style.color = '#4285f4'; }
@@ -2257,6 +2310,7 @@ async function initApp() {
       $('f-score').value = '0';
     } else {
       // Logged in
+      document.querySelectorAll('.guest-only').forEach(el => el.style.display = 'none');
       document.querySelectorAll('.auth-only').forEach(el => el.style.display = '');
       $('f-score').value = '70';
       loadBillingInfo();
