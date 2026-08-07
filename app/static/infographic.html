@@ -190,7 +190,7 @@
         }
         .period-metrics {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 1px;
             overflow: hidden;
             border: 1px solid var(--card-border);
@@ -375,10 +375,6 @@
                     <span class="history-label">Jobs collected</span>
                 </div>
                 <div class="history-metric">
-                    <span class="history-value skeleton" id="a-prefilter">0</span>
-                    <span class="history-label">Rejected before AI</span>
-                </div>
-                <div class="history-metric">
                     <span class="history-value skeleton" id="a-analyzed">0</span>
                     <span class="history-label">AI analyses</span>
                 </div>
@@ -444,7 +440,6 @@ async function load() {
 
         const map = [
             ['a-collected', allTime.jobs_collected],
-            ['a-prefilter', allTime.prefilter_rejected],
             ['a-analyzed',  allTime.ai_analyses_performed],
             ['a-top',       allTime.top_matches],
             ['v-sources',   allTime.active_sources],
