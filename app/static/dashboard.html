@@ -572,6 +572,7 @@ try {
   }
 } catch(e){}
 
+const _SUPPORTED_LANGS = ['en', 'ru', 'de', 'fr', 'es', 'ua'];
 function _detectLang() {
   const saved = localStorage.getItem('pipka_lang');
   if (saved && _SUPPORTED_LANGS.includes(saved)) return saved;
@@ -1516,6 +1517,7 @@ function switchTab(name, save=true) {
     S.tabStatus = name === 'jobs' ? '' : (name === 'inbox' ? 'new' : name);
     S.page = 1;
     loadJobs();
+  }
 }
 
 /* ── Feedback & Onboarding ── */
