@@ -546,7 +546,13 @@ const TRANSLATIONS = {
     'msg.loading':'Cargando...','msg.noJobs':'No se encontraron trabajos.',
     'btn.guest':'Invitado','btn.login':'Iniciar sesión con Google'}};
 
-const _SUPPORTED_LANGS = ['en','ru','de','es'];
+try {
+  const savedTheme = localStorage.getItem('pipka_theme');
+  if (savedTheme) {
+    document.documentElement.setAttribute('data-theme', savedTheme);
+  }
+} catch(e){}
+
 function _detectLang() {
   const saved = localStorage.getItem('pipka_lang');
   if (saved && _SUPPORTED_LANGS.includes(saved)) return saved;
@@ -2440,6 +2446,15 @@ async function deleteUser(userId, userName) {
   }
 }
 
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'light';
+  const next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('pipka_theme', next); } catch(e){}
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = next === 'dark' ? '☀️' : '🌙';
+}
+
 function toggleLogin() {
     if(!S.authenticated) {
         window.location.href = '/auth/google/login';
@@ -2449,6 +2464,8 @@ function toggleLogin() {
         }
     }
 }
+window.toggleTheme = toggleTheme;
+window.toggleLogin = toggleLogin;
 
 /* Init */
 async function initApp() {

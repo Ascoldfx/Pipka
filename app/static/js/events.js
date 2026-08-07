@@ -4,60 +4,60 @@ document.addEventListener('click', event => {
   if (!target) return;
 
   const action = target.dataset.action;
-  if (action === 'toggle-theme') toggleTheme();
-  else if (action === 'trigger-scan') triggerScan();
-  else if (action === 'toggle-login') toggleLogin();
+  if (action === 'toggle-theme') (window.toggleTheme || (typeof toggleTheme !== 'undefined' ? toggleTheme : null))?.();
+  else if (action === 'trigger-scan') (window.triggerScan || (typeof triggerScan !== 'undefined' ? triggerScan : null))?.();
+  else if (action === 'toggle-login') (window.toggleLogin || (typeof toggleLogin !== 'undefined' ? toggleLogin : null))?.();
   else if (action === 'dismiss-telegram-banner') {
     const banner = document.getElementById('tg-unlinked-banner');
     if (banner) banner.style.display = 'none';
   }
-  else if (action === 'switch-tab') switchTab(target.dataset.tab);
-  else if (action === 'toggle-country-drop') toggleCountryDrop(event);
-  else if (action === 'country-all') msAll(event);
-  else if (action === 'country-none') msNone(event);
+  else if (action === 'switch-tab') (window.switchTab || (typeof switchTab !== 'undefined' ? switchTab : null))?.(target.dataset.tab);
+  else if (action === 'toggle-country-drop') (window.toggleCountryDrop || (typeof toggleCountryDrop !== 'undefined' ? toggleCountryDrop : null))?.(event);
+  else if (action === 'country-all') (window.msAll || (typeof msAll !== 'undefined' ? msAll : null))?.(event);
+  else if (action === 'country-none') (window.msNone || (typeof msNone !== 'undefined' ? msNone : null))?.(event);
   else if (action === 'upload-resume') document.getElementById('resume-file')?.click();
-  else if (action === 'toggle-work-mode-drop') toggleWMDrop(event);
+  else if (action === 'toggle-work-mode-drop') (window.toggleWMDrop || (typeof toggleWMDrop !== 'undefined' ? toggleWMDrop : null))?.(event);
   else if (action === 'set-work-mode') {
-    setWorkMode(target.dataset.mode);
-    closeWMDrop();
+    (window.setWorkMode || (typeof setWorkMode !== 'undefined' ? setWorkMode : null))?.(target.dataset.mode);
+    (window.closeWMDrop || (typeof closeWMDrop !== 'undefined' ? closeWMDrop : null))?.();
   }
-  else if (action === 'set-ui-language') setLang(target.dataset.lang);
-  else if (action === 'save-profile') saveProfile();
-  else if (action === 'load-profile') loadProfile();
-  else if (action === 'set-ops-window') setOpsWindow(Number(target.dataset.opsWindow));
-  else if (action === 'refresh-ops') loadOpsOverview(true);
-  else if (action === 'close-modal') closeModal();
+  else if (action === 'set-ui-language') (window.setLang || (typeof setLang !== 'undefined' ? setLang : null))?.(target.dataset.lang);
+  else if (action === 'save-profile') (window.saveProfile || (typeof saveProfile !== 'undefined' ? saveProfile : null))?.();
+  else if (action === 'load-profile') (window.loadProfile || (typeof loadProfile !== 'undefined' ? loadProfile : null))?.();
+  else if (action === 'set-ops-window') (window.setOpsWindow || (typeof setOpsWindow !== 'undefined' ? setOpsWindow : null))?.(Number(target.dataset.opsWindow));
+  else if (action === 'refresh-ops') (window.loadOpsOverview || (typeof loadOpsOverview !== 'undefined' ? loadOpsOverview : null))?.(true);
+  else if (action === 'close-modal') (window.closeModal || (typeof closeModal !== 'undefined' ? closeModal : null))?.();
   else if (action === 'set-language-level') {
     event.stopPropagation();
-    _setLangLevel(target.dataset.languageCode, target.dataset.languageLevel);
+    (window._setLangLevel || (typeof _setLangLevel !== 'undefined' ? _setLangLevel : null))?.(target.dataset.languageCode, target.dataset.languageLevel);
   }
   else if (action === 'remove-language') {
     event.stopPropagation();
-    _removeLang(target.dataset.languageCode);
+    (window._removeLang || (typeof _removeLang !== 'undefined' ? _removeLang : null))?.(target.dataset.languageCode);
   }
   else if (action === 'remove-excluded-keyword') {
-    _removeExcludedKw(Number(target.dataset.keywordIndex));
+    (window._removeExcludedKw || (typeof _removeExcludedKw !== 'undefined' ? _removeExcludedKw : null))?.(Number(target.dataset.keywordIndex));
   }
   else if (action === 'open-jobs') {
     const options = { tab: target.dataset.tab || 'jobs' };
     if (target.dataset.minScore !== undefined) options.minScore = Number(target.dataset.minScore);
     if (target.dataset.source !== undefined) options.source = target.dataset.source;
-    openJobsView(options);
+    if (window.openJobsView) window.openJobsView(options);
   }
-  else if (action === 'ops-card') handleOpsCardAction(target.dataset.opsAction);
-  else if (action === 'open-feedback') openFeedbackModal();
-  else if (action === 'close-feedback') closeFeedbackModal();
-  else if (action === 'submit-feedback') submitFeedback();
-  else if (action === 'complete-onboarding') completeOnboarding();
-  else if (action === 'start-checkout') startCheckout(target.dataset.tier);
-  else if (action === 'test-fulfill') testFulfill(target.dataset.txId);
+  else if (action === 'ops-card') if (window.handleOpsCardAction) window.handleOpsCardAction(target.dataset.opsAction);
+  else if (action === 'open-feedback') (window.openFeedbackModal || (typeof openFeedbackModal !== 'undefined' ? openFeedbackModal : null))?.();
+  else if (action === 'close-feedback') (window.closeFeedbackModal || (typeof closeFeedbackModal !== 'undefined' ? closeFeedbackModal : null))?.();
+  else if (action === 'submit-feedback') (window.submitFeedback || (typeof submitFeedback !== 'undefined' ? submitFeedback : null))?.();
+  else if (action === 'complete-onboarding') (window.completeOnboarding || (typeof completeOnboarding !== 'undefined' ? completeOnboarding : null))?.();
+  else if (action === 'start-checkout') (window.startCheckout || (typeof startCheckout !== 'undefined' ? startCheckout : null))?.(target.dataset.tier);
+  else if (action === 'test-fulfill') (window.testFulfill || (typeof testFulfill !== 'undefined' ? testFulfill : null))?.(target.dataset.txId);
   else if (action === 'view-admin-user') {
     const userId = Number(target.dataset.userId);
-    if (Number.isSafeInteger(userId) && userId > 0) viewAdminUserProfile(userId);
+    if (Number.isSafeInteger(userId) && userId > 0 && window.viewAdminUserProfile) window.viewAdminUserProfile(userId);
   }
   else if (action === 'delete-user') {
     const userId = Number(target.dataset.userId);
-    if (Number.isSafeInteger(userId) && userId > 0) deleteUser(userId, target.dataset.userName || '');
+    if (Number.isSafeInteger(userId) && userId > 0 && window.deleteUser) window.deleteUser(userId, target.dataset.userName || '');
   }
 });
 
