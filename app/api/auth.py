@@ -89,6 +89,7 @@ async def google_callback(request: Request):
         request.session["user_name"] = user.name or ""
         request.session["user_avatar"] = user.avatar_url or ""
         request.session["user_role"] = user.role
+        logger.info("Successfully logged in user %s (id=%s, role=%s)", user.email, user.id, user.role)
 
     return RedirectResponse(url="/", status_code=302)
 
@@ -106,19 +107,9 @@ async def logout(request: Request):
 
 @router.get("/api/me")
 async def get_me(request: Request):
-    """Return current user info from session.
-
-    Includes the CSRF token so the SPA can echo it back via the
-    ``X-CSRF-Token`` header on unsafe requests. The token is also delivered
-    as a JS-readable cookie by ``CSRFMiddleware`` — either source works.
-
-    Also surfaces ``telegram_linked: bool`` — drops to ``False`` when the
-    scheduler's ``Forbidden`` handler has cleared ``User.telegram_id``
-    (the user blocked the bot). Frontend uses it to show a "re-link via
-    /start" banner so Telegram pushes don't silently disappear.
-    """
     user_id = request.session.get("user_id")
     csrf_token = request.session.get("csrf_token", "")
+    logger.info("API /api/me called: user_id=%s session_keys=%s", user_id, list(request.session.keys()))
     if not user_id:
         return {"authenticated": False, "role": "guest", "csrf_token": csrf_token}
 
