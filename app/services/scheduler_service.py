@@ -28,6 +28,7 @@ from app.sources import (
     ArbeitnowSource,
     ArbeitsagenturSource,
     BerlinStartupJobsSource,
+    BuiltInSource,
     GupyFeedSource,
     JobSpySource,
     JoobleSource,
@@ -199,6 +200,7 @@ async def _background_scan(bot_app, trigger: str = "scheduled"):
                 WTTJSource(),
                 JoobleSource(),
                 GupyFeedSource(),
+                BuiltInSource(),
             ]
         )
 
