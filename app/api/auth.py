@@ -90,7 +90,7 @@ async def google_callback(request: Request):
         request.session["user_avatar"] = user.avatar_url or ""
         request.session["user_role"] = user.role
 
-    return RedirectResponse(url="/")
+    return RedirectResponse(url="/", status_code=302)
 
 
 @router.post("/auth/logout")
