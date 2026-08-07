@@ -36,7 +36,8 @@ async def get_stats(request: Request):
     async with async_session() as session:
         user = await get_user(request, session)
         if not user:
-            return {}
+            total_jobs = (await session.execute(select(func.count(Job.id)))).scalar() or 0
+            return {"total_jobs": total_jobs, "inbox_count": 0, "applied_count": 0, "rejected_count": 0}
 
         cached = _STATS_CACHE.get(user.id)
         if cached is not None:

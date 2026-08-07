@@ -63,4 +63,9 @@ document.addEventListener('click', event => {
 
 document.addEventListener('change', event => {
   if (event.target.matches('[data-change-action="country-toggle"]')) onCountryToggle();
+  else if (event.target.id === 'guest-lang-dropdown' || event.target.matches('[data-change-action="switch-guest-lang"]')) {
+    if (typeof window.switchGuestLanguage === 'function') {
+      window.switchGuestLanguage(event.target.value);
+    }
+  }
 });

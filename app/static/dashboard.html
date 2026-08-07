@@ -584,7 +584,7 @@ function applyLang() {
   <div style="display:flex;align-items:center;gap:10px">
     <!-- Guest Language Switcher -->
     <div id="guest-lang-select" class="guest-only" style="display:flex;align-items:center;">
-      <select id="guest-lang-dropdown" onchange="switchGuestLanguage(this.value)" style="background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">
+      <select id="guest-lang-dropdown" data-change-action="switch-guest-lang" onchange="window.switchGuestLanguage && window.switchGuestLanguage(this.value)" style="background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">
         <option value="ru">🇷🇺 RU</option>
         <option value="en">🇬🇧 EN</option>
         <option value="de">🇩🇪 DE</option>
@@ -2439,8 +2439,17 @@ function switchGuestLanguage(lang) {
   setHtml('gh-sources-h', dict.sourcesHeader);
   const sel = $('guest-lang-dropdown');
   if (sel) sel.value = lang;
+
+  // Update Guest role button text
+  const loginBtnLabels = { ru: 'Войти', en: 'Sign in', de: 'Anmelden', fr: 'Connexion', es: 'Iniciar sesión', ua: 'Увійти' };
+  const rb = $('role-badge');
+  if (rb && (!S || !S.authenticated)) {
+    rb.textContent = loginBtnLabels[lang] || 'Login';
+  }
+
   try { localStorage.setItem('pipka_guest_lang', lang); } catch(e){}
 }
+window.switchGuestLanguage = switchGuestLanguage;
 
 /* Init */
 async function initApp() {
