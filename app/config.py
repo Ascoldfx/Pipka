@@ -115,10 +115,8 @@ class Settings(BaseSettings):
     # Admin emails (comma-separated) — these Google accounts get admin role
     admin_emails: str = ""
 
-    # Registration is closed by default. Existing active users can continue
-    # to sign in; new Google/Telegram identities must be explicitly invited.
-    # Admin emails are always allowed to create their first account.
-    allow_public_registration: bool = False
+    # Registration policy (public Google/Telegram registration enabled).
+    allow_public_registration: bool = True
     allowed_user_emails: str = ""
     allowed_telegram_ids: str = ""
 
