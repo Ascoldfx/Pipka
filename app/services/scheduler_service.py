@@ -362,7 +362,7 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
             "pushed": 0,
         }
 
-    if user.credits <= 0:
+    if user.credits <= 0 and user.role != "admin":
         logger.warning("User %s has 0 credits remaining, skipping AI scoring", user.telegram_id)
         if bot_app and user.telegram_id:
             try:
@@ -416,7 +416,7 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
     logger.info("Using %s for real-time scoring", score_fn.__name__)
     scores = await score_fn(to_score, user, session)
 
-    if scores:
+    if scores and user.role != "admin":
         deducted = min(user.credits, len(scores))
         if deducted > 0:
             user.credits -= deducted
