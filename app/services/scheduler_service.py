@@ -143,6 +143,18 @@ def start_scheduler(bot_app):
         id="embed_index_startup",
         replace_existing=True,
     )
+    # NVIDIA has a separate embedding quota. When a meaningful backlog forms,
+    # drain it every 30 minutes; once it is <=100, leave only the normal
+    # two-hour job to pick up fresh vacancies and profile changes.
+    if settings.embedding_provider.lower() == "nvidia":
+        scheduler.add_job(
+            _embed_index,
+            "interval",
+            minutes=settings.embedding_burst_interval_minutes,
+            kwargs={"min_pending_jobs": settings.embedding_burst_queue_threshold},
+            id="embed_index_burst",
+            replace_existing=True,
+        )
     # Optional NVIDIA idle rescorer. NVIDIA remains available as the automatic
     # backfill fallback even when this periodic refresh job is disabled.
     if settings.nvidia_idle_rescore_enabled:
@@ -852,22 +864,28 @@ async def _nvidia_idle_rescore():
                 )
 
 
-async def _embed_index():
-    """Backfill pgvector embeddings for jobs and profiles in small batches."""
+async def _embed_index(*, min_pending_jobs: int | None = None):
+    """Backfill pgvector embeddings, optionally only for a material backlog."""
     if not settings.embedding_enabled:
+        return
+    if min_pending_jobs is not None and settings.embedding_provider.lower() != "nvidia":
         return
 
     from app.services.embedding_service import index_missing_embeddings  # noqa: PLC0415
 
     async with async_session() as session:
         try:
-            counts = await index_missing_embeddings(session)
+            counts = await index_missing_embeddings(
+                session,
+                min_pending_jobs=min_pending_jobs,
+                include_profiles=min_pending_jobs is None,
+            )
         except Exception as exc:
             logger.exception("Embedding indexer failed: %s", exc)
             await record_ops_event(
                 "embedding_index",
                 "error",
-                source="gemini_embedding",
+                source=f"{settings.embedding_provider}_embedding",
                 message=f"{type(exc).__name__}: {exc}",
             )
             return
@@ -878,9 +896,12 @@ async def _embed_index():
     await record_ops_event(
         "embedding_index",
         "success",
-        source="gemini_embedding",
-        message=f"jobs={counts['jobs']} profiles={counts['profiles']}",
-        payload=counts,
+        source=f"{settings.embedding_provider}_embedding",
+        message=(
+            f"jobs={counts['jobs']} profiles={counts['profiles']} "
+            f"pending={counts.get('pending', -1)}"
+        ),
+        payload={**counts, "burst_threshold": min_pending_jobs},
     )
 
 

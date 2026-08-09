@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     gemini_daily_request_limit: int = 20
     gemini_detailed_analysis_enabled: bool = False
 
-    # NVIDIA Build is optional and used only by the explicitly enabled idle
-    # rescorer. It is not an automatic fallback for the Gemini bulk queue.
+    # NVIDIA Build is the automatic fallback when Gemini is unavailable. The
+    # optional idle rescorer is a separate, lower-priority maintenance job.
     nvidia_idle_rescore_enabled: bool = False
     nvidia_api_key: str = ""
     # google/gemma-4-31b-it was decommissioned from NVIDIA Build (404 / hangs).
@@ -72,6 +72,16 @@ class Settings(BaseSettings):
     embedding_jobs_per_run: int = 70
     embedding_profiles_per_run: int = 20
     embedding_index_interval_hours: int = 2
+    # Drain a material NVIDIA backlog faster, without polling an almost-empty
+    # queue or using the Gemini embedding quota.
+    embedding_burst_interval_minutes: int = 30
+    embedding_burst_queue_threshold: int = 100
+    # Do not spend embedding quota on the historical archive. Semantic search
+    # serves the active German feed, so only recent, open, already-promising
+    # vacancies are indexed.
+    embedding_index_max_age_days: int = 31
+    embedding_index_country: str = "de"
+    embedding_index_min_score: int = 60
     semantic_search_limit: int = 500
     nvidia_embedding_timeout_seconds: float = 30.0
 
@@ -134,6 +144,9 @@ class Settings(BaseSettings):
     billing_pro_price_usd: float = 10.0
     billing_pro_credits: int = 1000
     default_user_trial_credits: int = 50
+    # Development-only switch. It enables the sandbox checkout URL and test
+    # fulfilment endpoint; production must leave this false.
+    billing_test_mode: bool = False
 
     # Search
     default_results_limit: int = 50

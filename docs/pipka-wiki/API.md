@@ -102,12 +102,28 @@ excluded_keywords, excluded_companies, english_only (0/1), target_companies
 | POST | `/api/scan` | admin | Запустить scan вручную |
 | GET | `/api/scan/status` | публичный | `{next_run, running}` |
 
+## Billing (`app/api/billing.py`)
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| GET | `/api/billing/balance` | Текущий баланс, планы и история платежей текущего пользователя. |
+| POST | `/api/billing/checkout` | Создать Cryptomus invoice для `starter` или `pro`; возвращает 503, если live billing не настроен. |
+| POST | `/api/webhooks/crypto` | Cryptomus callback. Доступен только с настроенным ключом и корректной подписью. |
+
+`POST /api/billing/test-fulfill/{tx_id}` существует только при
+`BILLING_TEST_MODE=true` без live credentials и в production недоступен (404).
+Все POST кроме webhook требуют CSRF-токен.
+
 ## Ops (`app/api/ops.py`)
 
 | Метод | Путь | Доступ | Описание |
 |-------|------|--------|---------|
 | GET | `/api/ops/overview?window_hours=24` | admin | Health & throughput |
 | GET | `/api/ops/dedup?limit=200` | admin | Fuzzy-merged вакансии |
+
+`/api/ops/overview` также возвращает `queues.scoring`, `queues.embeddings` и
+`queues.archive`. Первые два повторяют scope реальных scheduler workers;
+`archive.unscored_total` — coverage-метрика всего архива, не рабочая очередь.
 
 Подробнее — [[Ops панель]].
 

@@ -3,15 +3,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
-from app.models.job import Job
+from app.models.job import Job, JobScore
 from app.models.user import UserProfile
 from app.scoring.gemini_client import get_gemini_client
 from app.scoring.nvidia_embedding_client import embed_nvidia_text
@@ -146,11 +146,46 @@ async def invalidate_profile_embedding(session: AsyncSession, profile_id: int) -
     )
 
 
-async def index_missing_embeddings(session: AsyncSession) -> dict[str, int]:
+def job_index_filters(cutoff: datetime):
+    """Return the shared scope for useful, unembedded vacancy vectors."""
+    posted_or_scraped = func.coalesce(Job.posted_at, Job.scraped_at)
+    has_strong_score = (
+        select(JobScore.id)
+        .where(
+            JobScore.job_id == Job.id,
+            JobScore.score >= settings.embedding_index_min_score,
+        )
+        .exists()
+    )
+    return (
+        text("jobs.embedding IS NULL"),
+        Job.country == settings.embedding_index_country.strip().lower(),
+        posted_or_scraped >= cutoff,
+        or_(Job.url_status.is_(None), Job.url_status == "active"),
+        has_strong_score,
+    )
+
+
+async def _count_indexable_jobs(session: AsyncSession, cutoff: datetime) -> int:
+    result = await session.execute(
+        select(func.count(Job.id)).where(*job_index_filters(cutoff))
+    )
+    return int(result.scalar_one())
+
+
+async def index_missing_embeddings(
+    session: AsyncSession,
+    *,
+    min_pending_jobs: int | None = None,
+    include_profiles: bool = True,
+) -> dict[str, int]:
     """Fill missing/stale job and profile embeddings.
 
     This is intentionally small-batch and scheduler-friendly: it never blocks
-    the core scan/scoring path, and it no-ops outside PostgreSQL/Gemini setups.
+    the core scan/scoring path, and it no-ops outside PostgreSQL/provider setups.
+
+    ``min_pending_jobs`` makes the NVIDIA burst worker conditional: it runs
+    only when the scoped vacancy queue is strictly larger than the threshold.
     """
     if not _enabled(session):
         return {"jobs": 0, "profiles": 0, "skipped": 1}
@@ -159,16 +194,36 @@ async def index_missing_embeddings(session: AsyncSession) -> dict[str, int]:
         return {"jobs": 0, "profiles": 0, "skipped": 1}
 
     async with _embed_lock:
-        indexed_jobs = await _index_jobs(session)
-        indexed_profiles = await _index_profiles(session)
-        return {"jobs": indexed_jobs, "profiles": indexed_profiles, "skipped": 0}
+        cutoff = datetime.now() - timedelta(days=settings.embedding_index_max_age_days)
+        if min_pending_jobs is not None:
+            pending_jobs = await _count_indexable_jobs(session, cutoff)
+            if pending_jobs <= min_pending_jobs:
+                return {
+                    "jobs": 0,
+                    "profiles": 0,
+                    "pending": pending_jobs,
+                    "skipped": 1,
+                }
+        else:
+            pending_jobs = -1
+
+        indexed_jobs = await _index_jobs(session, cutoff=cutoff)
+        indexed_profiles = await _index_profiles(session) if include_profiles else 0
+        return {
+            "jobs": indexed_jobs,
+            "profiles": indexed_profiles,
+            "pending": pending_jobs,
+            "skipped": 0,
+        }
 
 
-async def _index_jobs(session: AsyncSession) -> int:
+async def _index_jobs(session: AsyncSession, *, cutoff: datetime | None = None) -> int:
+    cutoff = cutoff or datetime.now() - timedelta(days=settings.embedding_index_max_age_days)
+    posted_or_scraped = func.coalesce(Job.posted_at, Job.scraped_at)
     result = await session.execute(
         select(Job)
-        .where(text("jobs.embedding IS NULL"))
-        .order_by(Job.scraped_at.desc())
+        .where(*job_index_filters(cutoff))
+        .order_by(posted_or_scraped.desc())
         .limit(settings.embedding_jobs_per_run)
     )
     jobs = list(result.scalars())

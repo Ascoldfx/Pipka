@@ -2,6 +2,22 @@
 
 # Changelog — август 2026
 
+## 8 августа — production guards для платежей, CSP и semantic index
+
+- `app/api/billing.py` и `app/services/billing_service.py`: live checkout и webhook теперь fail-closed без обоих Cryptomus credentials; test fulfilment доступен только в явном локальном sandbox-режиме без live credentials. Сравнение webhook-signature выполняется constant-time, а зачисление кредита блокирует строку транзакции и проверяет provider transaction ID.
+- `app/security_headers.py`, `app/static/dashboard.html`, `app/static/js/events.js`: восстановлены `script-src-attr 'none'` и запрет JavaScript `unsafe-inline`; оставшиеся inline event handlers переведены на существующую `data-action` delegation.
+- `app/services/embedding_service.py`: embedding queue ограничена открытыми German vacancies не старше 31 дня с AI score ≥60. Старый архив больше не будет постепенно расходовать embedding quota.
+- Обновлены `Настройки.md`, `Поиск и индексация.md` и `API.md`; добавлены regression tests и обновлены ожидания после удаления Claude.
+
+### NVIDIA burst для очереди embeddings
+
+- `embed_index_burst` запускается каждые 30 минут только при `EMBEDDING_PROVIDER=nvidia` и при scoped queue строго больше 100 вакансий. Один запуск обрабатывает обычный пакет из 70 вакансий; при малом остатке сохраняется двухчасовой основной запуск.
+- Ops events теперь корректно маркируют provider (`nvidia_embedding`), а не устаревший `gemini_embedding`.
+
+### Точные queue KPI в Ops
+
+- Заменена ложная карточка «все вакансии без score»: Ops отдельно показывает scope AI backfill, scope NVIDIA embeddings и исторический archive coverage. Alerts используют только первые две рабочие очереди.
+
 ## 7 августа — удаление Claude, NVIDIA-fallback и исправление блокировок БД
 
 - **Полное удаление Claude API:** Из проекта полностью вырезана библиотека `anthropic`, удалены все Claude-переменные из настроек (`app/config.py`).

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>pipka.net</title>
-<script src="/static/js/security.js?v=2.0.1"></script>
+<script src="/static/js/security.js?v=2.0.2"></script>
 <style>
   :root, html, body { --bg:#fff; --fg:#111; --muted:#777; --border:#e0e0e0; --hover:#f7f7f7; --green:#2d8a4e; --yellow:#b8860b; --red:#c0392b; --blue:#1565c0; --badge:#f0f0f0; }
   :root[data-theme="dark"], html[data-theme="dark"], body[data-theme="dark"], body.dark-mode {
@@ -781,7 +781,7 @@ window.toggleLogin = toggleLogin;
   <div style="display:flex;align-items:center;gap:10px">
     <!-- Guest Language Switcher -->
     <div id="guest-lang-select" class="guest-only" style="display:flex;align-items:center;">
-      <select id="guest-lang-dropdown" data-change-action="switch-guest-lang" onchange="window.switchGuestLanguage && window.switchGuestLanguage(this.value)" style="background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">
+      <select id="guest-lang-dropdown" data-change-action="switch-guest-lang" style="background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">
         <option value="ru">🇷🇺 RU</option>
         <option value="en">🇬🇧 EN</option>
         <option value="de">🇩🇪 DE</option>
@@ -790,12 +790,12 @@ window.toggleLogin = toggleLogin;
         <option value="ua">🇺🇦 UA</option>
       </select>
     </div>
-    <button id="theme-toggle" data-action="toggle-theme" onclick="window.toggleTheme && window.toggleTheme()" title="Toggle dark mode">🌙</button>
+    <button id="theme-toggle" data-action="toggle-theme" title="Toggle dark mode">🌙</button>
     <button id="scan-btn" data-action="trigger-scan" style="display:none">
       <span id="scan-btn-label">▶ Scan</span>
       <span class="scan-sub" id="scan-btn-sub"></span>
     </button>
-    <button id="user-btn" data-action="toggle-login" onclick="window.toggleLogin && window.toggleLogin()" style="display:flex;align-items:center;gap:7px;background:none;border:1.5px solid var(--border);border-radius:999px;padding:4px 10px 4px 5px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;color:var(--fg);transition:border-color .18s;" title="Account">
+    <button id="user-btn" data-action="toggle-login" style="display:flex;align-items:center;gap:7px;background:none;border:1.5px solid var(--border);border-radius:999px;padding:4px 10px 4px 5px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;color:var(--fg);transition:border-color .18s;" title="Account">
       <img id="user-avatar" src="" style="width:22px;height:22px;border-radius:50%;display:none;flex-shrink:0;" />
       <span id="user-avatar-icon" style="width:22px;height:22px;border-radius:50%;background:var(--hover);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">👤</span>
       <span id="role-badge">Guest</span>
@@ -1258,7 +1258,7 @@ window.toggleLogin = toggleLogin;
               <li>Мгновенное зачисление</li>
             </ul>
           </div>
-          <button type="button" class="btn-primary" style="width:100%;padding:10px;font-size:13px;" onclick="startCheckout('starter')">Купить Starter ($5)</button>
+          <button type="button" class="btn-primary" data-action="start-checkout" data-tier="starter" style="width:100%;padding:10px;font-size:13px;">Купить Starter ($5)</button>
         </div>
 
         <!-- Pro Plan -->
@@ -1274,7 +1274,7 @@ window.toggleLogin = toggleLogin;
               <li>Максимальная экономия (+$50% выгоды)</li>
             </ul>
           </div>
-          <button type="button" class="btn-primary" style="width:100%;padding:10px;font-size:13px;background:#2d8a4e;" onclick="startCheckout('pro')">Купить Pro ($10)</button>
+          <button type="button" class="btn-primary" data-action="start-checkout" data-tier="pro" style="width:100%;padding:10px;font-size:13px;background:#2d8a4e;">Купить Pro ($10)</button>
         </div>
       </div>
     </div>
@@ -1604,8 +1604,8 @@ async function loadBillingInfo() {
           let actionBtn = '—';
           if (tx.status === 'pending' && tx.payment_url) {
             actionBtn = `<a href="${tx.payment_url}" target="_blank" style="color:var(--blue);font-weight:600;text-decoration:none;">Оплатить ↗</a>`;
-            if (tx.payment_url.includes('checkout_test_id=')) {
-              actionBtn += ` &nbsp;|&nbsp; <button type="button" onclick="testFulfill('${tx.id}')" style="font-size:11px;padding:3px 8px;cursor:pointer;border-radius:4px;border:1px solid var(--border);background:#fff;">[Тестовая Оплата]</button>`;
+            if (data.test_mode) {
+              actionBtn += ` &nbsp;|&nbsp; <button type="button" data-action="test-fulfill" data-tx-id="${attr(tx.id)}" style="font-size:11px;padding:3px 8px;cursor:pointer;border-radius:4px;border:1px solid var(--border);background:#fff;">[Тестовая Оплата]</button>`;
             }
           }
 
@@ -2149,16 +2149,26 @@ function eventPill(status){
 
 function renderOpsAlerts(d){
   const alerts = [];
-  const queueRisk = d.kpis.pending_pct || 0;
+  const scoringQueue = d.queues?.scoring || { pending: d.kpis.unscored_total || 0, country: '—', max_age_days: '—', batch_size: 0 };
+  const embeddingQueue = d.queues?.embeddings || { pending: 0, provider: 'nvidia', batch_size: 0, burst_interval_minutes: 30, burst_threshold: 100 };
   const apiErrors = (d.kpis.api_401 || 0) + (d.kpis.api_500 || 0);
   const lastScanAgeHours = d.scan.last_at ? ((Date.now() - new Date(d.scan.last_at).getTime()) / 3600000) : null;
 
-  if(queueRisk >= 35 || d.kpis.unscored_total >= 150){
+  if(scoringQueue.pending >= 150){
     alerts.push(`
       <div class="ops-alert queue">
-        <strong>Давление очереди растёт</strong>
-        <p>${fmtNumber(d.kpis.unscored_total)} вакансий ещё без оценки (${queueRisk}%). Обычно это значит, что скоринг отстаёт от сбора.</p>
+        <strong>Очередь AI-скоринга</strong>
+        <p>${fmtNumber(scoringQueue.pending)} кандидатов: ${esc(scoringQueue.country.toUpperCase())}, до ${fmtNumber(scoringQueue.max_age_days)} дней. Это scope backfill до pre-filter, не исторический архив.</p>
         <button type="button" data-action="open-jobs" data-tab="jobs" data-min-score="0">Открыть все вакансии</button>
+      </div>
+    `);
+  }
+
+  if(embeddingQueue.pending > embeddingQueue.burst_threshold){
+    alerts.push(`
+      <div class="ops-alert queue">
+        <strong>Очередь NVIDIA embeddings</strong>
+        <p>${fmtNumber(embeddingQueue.pending)} вакансий подходят для индексации. Burst обрабатывает по ${fmtNumber(embeddingQueue.batch_size)} каждые ${fmtNumber(embeddingQueue.burst_interval_minutes)} минут, пока остаток больше ${fmtNumber(embeddingQueue.burst_threshold)}.</p>
       </div>
     `);
   }
@@ -2238,9 +2248,10 @@ async function loadOpsOverview(force=false){
       { kicker:'Сырых (посл. скан)', value:fmtNumber(aggregator.raw_count||0), sub:`уник. ${fmtNumber(aggregator.unique_count||0)} · слито ${fmtNumber(aggregator.fuzzy_removed||0)}`, delta:'до агрегатор-фильтра', action:'jobs_recent' },
       { kicker:'В базу (посл. скан)', value:fmtNumber(aggregator.filtered_count||0), sub:`neg. ${aggregator.rejected_negative||0} · стар. ${aggregator.rejected_old||0} · loc. ${aggregator.rejected_location||0}`, delta:'прошло агрегатор', action:'jobs_recent' },
       { kicker:'Вакансий в базе', value:fmtNumber(d.kpis.total_jobs), sub:`+${fmtNumber(d.kpis.jobs_recent)} за период`, delta:`${fmtNumber(d.kpis.active_sources)} источников активно`, action:'jobs_recent' },
-      { kicker:'Покрытие скорингом', value:`${d.kpis.coverage_pct}%`, sub:`${fmtNumber(d.kpis.scored_total)} оценено всего`, delta:`${fmtNumber(d.kpis.unscored_total)} в очереди`, action:'coverage' },
+      { kicker:'Покрытие скорингом', value:`${d.kpis.coverage_pct}%`, sub:`${fmtNumber(d.kpis.scored_total)} оценено всего`, delta:`архив: ${fmtNumber(d.queues?.archive?.unscored_total ?? d.kpis.unscored_total)} без score`, action:'coverage' },
       { kicker:'Топ-совпадения', value:fmtNumber(d.kpis.top_matches), sub:`${fmtNumber(d.kpis.top_recent)} новых топ-совпадений`, delta:d.kpis.avg_score_recent != null ? `ср. ${d.kpis.avg_score_recent}` : 'ср. —', action:'top_matches' },
-      { kicker:'Нагрузка очереди', value:`${d.kpis.pending_pct}%`, sub:'Вакансии без оценки', delta:`${fmtNumber(d.kpis.unscored_total)} вакансий`, action:'queue' },
+      { kicker:'AI scoring queue', value:fmtNumber(d.queues?.scoring?.pending ?? 0), sub:`${(d.queues?.scoring?.country || 'de').toUpperCase()} · ≤${fmtNumber(d.queues?.scoring?.max_age_days ?? 31)} дн. · до pre-filter`, delta:`до ${fmtNumber(d.queues?.scoring?.batch_size ?? 30)} вакансий / 2ч`, action:'queue' },
+      { kicker:'NVIDIA embeddings', value:fmtNumber(d.queues?.embeddings?.pending ?? 0), sub:`${(d.queues?.embeddings?.provider || 'nvidia')} · ${fmtNumber(d.queues?.embeddings?.min_score ?? 60)}+ score`, delta:`${fmtNumber(d.queues?.embeddings?.batch_size ?? 70)} / ${fmtNumber(d.queues?.embeddings?.burst_interval_minutes ?? 30)} мин при >${fmtNumber(d.queues?.embeddings?.burst_threshold ?? 100)}`, action:'queue' },
       { kicker:'Отсечено фильтром', value:fmtNumber(d.kpis.prefilter_rejected), sub:'pre-filter, без AI-оценки', delta:'hard reject (score=0)', action:'queue' },
       { kicker:'Ошибки API', value:fmtNumber(d.kpis.api_401 + d.kpis.api_500), sub:`${fmtNumber(d.kpis.api_401)} авт. · ${fmtNumber(d.kpis.api_500)} сервер`, delta:'Последние проблемы', action:'api' },
     ].map(card => `
@@ -2611,6 +2622,6 @@ async function initApp() {
 }
 initApp();
 </script>
-<script src="/static/js/events.js?v=2.0.1"></script>
+<script src="/static/js/events.js?v=2.0.2"></script>
 </body>
 </html>

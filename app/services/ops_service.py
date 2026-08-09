@@ -4,14 +4,17 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import aliased
 
 from app.database import async_session
+from app.config import settings
 from app.models.application import Application
 from app.models.job import Job, JobScore
 from app.models.ops_event import OpsEvent
 from app.models.user import User, UserProfile
+from app.scoring.profile_hash import compute_profile_hash, valid_score_model_versions
+from app.services.embedding_service import job_index_filters
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +126,56 @@ async def build_ops_overview(
 
     coverage_pct = round((scored_total / total_jobs) * 100, 1) if total_jobs else 0.0
     pending_pct = round((unscored_total / total_jobs) * 100, 1) if total_jobs else 0.0
+
+    # The old ``unscored_total`` intentionally remains as all-time coverage
+    # data, but it is not a scheduler queue. Calculate both actionable queues
+    # from the same conditions their workers actually use.
+    profile = await session.scalar(select(UserProfile).where(UserProfile.user_id == user_id))
+    scoring_queue = 0
+    if profile:
+        queue_cutoff = now - timedelta(days=settings.backfill_max_age_days)
+        prior_strong_score = (
+            select(JobScore.id)
+            .where(
+                JobScore.user_id == user_id,
+                JobScore.job_id == Job.id,
+                JobScore.score >= settings.backfill_min_previous_score,
+            )
+            .exists()
+        )
+        has_no_score = (
+            ~select(JobScore.id)
+            .where(JobScore.user_id == user_id, JobScore.job_id == Job.id)
+            .exists()
+        )
+        has_current_score = (
+            select(JobScore.id)
+            .where(
+                JobScore.user_id == user_id,
+                JobScore.job_id == Job.id,
+                JobScore.profile_hash == compute_profile_hash(profile),
+                JobScore.model_version.in_(valid_score_model_versions()),
+            )
+            .exists()
+        )
+        scoring_queue = (
+            await session.execute(
+                select(func.count(Job.id)).where(
+                    Job.country == settings.backfill_country.lower(),
+                    func.coalesce(Job.posted_at, Job.scraped_at) >= queue_cutoff,
+                    or_(Job.url_status.is_(None), Job.url_status == "active"),
+                    or_(prior_strong_score, has_no_score),
+                    ~has_current_score,
+                )
+            )
+        ).scalar() or 0
+
+    embedding_cutoff = now - timedelta(days=settings.embedding_index_max_age_days)
+    embedding_queue = (
+        await session.execute(
+            select(func.count(Job.id)).where(*job_index_filters(embedding_cutoff))
+        )
+    ).scalar() or 0
 
     source_rows = await session.execute(
         select(Job.source, func.count(Job.id))
@@ -315,6 +368,26 @@ async def build_ops_overview(
             "prefilter_rejected": prefilter_rejected,
             "api_401": api_401,
             "api_500": api_500,
+        },
+        "queues": {
+            "scoring": {
+                "pending": scoring_queue,
+                "country": settings.backfill_country.lower(),
+                "max_age_days": settings.backfill_max_age_days,
+                "batch_size": settings.backfill_ai_jobs_per_run,
+                "note": "before_pre_filter",
+            },
+            "embeddings": {
+                "pending": embedding_queue,
+                "provider": settings.embedding_provider,
+                "country": settings.embedding_index_country.lower(),
+                "max_age_days": settings.embedding_index_max_age_days,
+                "min_score": settings.embedding_index_min_score,
+                "batch_size": settings.embedding_jobs_per_run,
+                "burst_interval_minutes": settings.embedding_burst_interval_minutes,
+                "burst_threshold": settings.embedding_burst_queue_threshold,
+            },
+            "archive": {"unscored_total": unscored_total},
         },
         "pipeline": {
             "collected": jobs_recent,

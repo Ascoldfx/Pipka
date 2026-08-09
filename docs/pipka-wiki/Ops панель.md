@@ -88,3 +88,17 @@ Frontend: `loadOpsOverview()` в application-блоке `app/static/dashboard.ht
 - Dedup table — отдельно через `/api/ops/dedup`.
 
 → [[API#ops]] → [[Сервисы]] → [[Observability]] → [[База данных#ops_events]]
+# Очереди
+
+Ops больше не называет все исторические вакансии без `JobScore` рабочей
+очередью. API `/api/ops/overview` отдаёт три отдельных среза:
+
+- **AI scoring queue** — German вакансии не старше `BACKFILL_MAX_AGE_DAYS`,
+  которые backfill может передать в pre-filter/AI при текущем profile hash;
+- **NVIDIA embeddings** — вакансии, точно соответствующие scope индексатора:
+  страна, возраст, открытая ссылка и score ≥ `EMBEDDING_INDEX_MIN_SCORE`;
+- **archive unscored** — все исторические строки без score, только для
+  показателя покрытия, не для operational alert.
+
+Это исключает ложную тревогу вида «500 вакансий в очереди», когда старые,
+закрытые или нецелевые вакансии не могут попасть в планировщик.
