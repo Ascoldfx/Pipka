@@ -31,15 +31,18 @@ async def main():
     bot_app = create_bot_app()
     logger.info("Starting Telegram bot...")
 
+    # Keep collection, scoring and indexing independent from Telegram.  The
+    # web/API process may be healthy while Telegram is temporarily slow to
+    # initialise; in that case fresh vacancies still must not wait behind the
+    # bot connection before the scheduler begins its work.
+    start_scheduler(bot_app)
+    logger.info("Scheduler started")
+
     # Run bot polling (blocks until stopped)
     async with bot_app:
         await bot_app.initialize()
         await bot_app.start()
         await bot_app.updater.start_polling()
-
-        # Start scheduler AFTER bot is fully running
-        start_scheduler(bot_app)
-        logger.info("Scheduler started")
         logger.info("Bot is running")
 
         # Keep running until interrupted
