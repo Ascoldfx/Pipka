@@ -102,3 +102,9 @@
 Остались ручные/следующие шаги: включить Backblaze B2 write-only key; вынести inline CSS/`style=` и убрать оставшийся `style-src 'unsafe-inline'`.
 
 → [[Changelog 2026-07]] → [[Безопасность]] → [[Деплой]] → [[Миграции]] → [[Roadmap]]
+## 10 August — Gemini quota fallback for batch scoring
+
+- When the Gemini 3.6 Flash circuit breaker is open or opens during a batch,
+  the selected vacancies move to NVIDIA in the same scheduler run.
+- The fallback is recorded as `scoring_fallback`; NVIDIA retries remain bounded
+  and do not requeue an unlimited historical backlog.

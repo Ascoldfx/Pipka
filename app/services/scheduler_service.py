@@ -513,19 +513,57 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
 def _backfill_score_fn():
     """Return the appropriate scoring function for backfill.
 
-    Gemini 3.6 Flash is the only automatic bulk scorer when configured. Its
-    daily budget is enforced by the matcher; when depleted, this job becomes a
-    harmless no-op until UTC midnight. Do not fall back to NVIDIA: production
-    503/timeouts there previously created an endless retry queue.
+    Gemini 3.6 Flash is preferred while its circuit breaker is closed. Once
+    its daily quota is spent (or Google reports quota exhaustion), NVIDIA is
+    the automatic batch fallback. NVIDIA's own retry policy is bounded, so a
+    provider failure cannot create an endless retry queue.
     """
     if settings.gemini_api_key:
-        from app.scoring.gemini_matcher import score_jobs_gemini  # noqa: PLC0415
-        logger.debug("Backfill scorer: Gemini batch scoring (%s)", settings.gemini_scoring_model)
-        return score_jobs_gemini
+        from app.scoring.gemini_matcher import (  # noqa: PLC0415
+            is_gemini_available,
+            score_jobs_gemini,
+        )
+        if is_gemini_available():
+            logger.debug("Backfill scorer: Gemini batch scoring (%s)", settings.gemini_scoring_model)
+            return score_jobs_gemini
 
     logger.debug("Backfill scorer: using NVIDIA (%s)", settings.nvidia_model)
     from app.scoring.nvidia_matcher import score_jobs_nvidia  # noqa: PLC0415
     return score_jobs_nvidia
+
+
+async def _score_backfill_batch(score_fn, jobs: list[Job], user: User, session: AsyncSession):
+    """Score one selected batch and fail over to NVIDIA after Gemini exhausts.
+
+    The Gemini matcher opens its breaker immediately on a quota response.  A
+    fallback in the same scheduler run keeps fresh vacancies moving instead of
+    waiting for the next two-hour backfill tick (or the next quota reset).
+    """
+    if score_fn.__name__ != "score_jobs_gemini":
+        return await score_fn(jobs, user, session)
+
+    from app.scoring.gemini_matcher import is_gemini_available  # noqa: PLC0415
+    from app.scoring.nvidia_matcher import score_jobs_nvidia  # noqa: PLC0415
+
+    if not is_gemini_available() and settings.nvidia_api_key:
+        await record_ops_event(
+            "scoring_fallback",
+            "success",
+            source="nvidia",
+            message=f"gemini_breaker_open batch={len(jobs)}",
+        )
+        return await score_jobs_nvidia(jobs, user, session)
+
+    scores = await score_fn(jobs, user, session)
+    if not is_gemini_available() and settings.nvidia_api_key:
+        await record_ops_event(
+            "scoring_fallback",
+            "success",
+            source="nvidia",
+            message=f"gemini_exhausted batch={len(jobs)}",
+        )
+        return await score_jobs_nvidia(jobs, user, session)
+    return scores
 
 
 def _order_by_semantic_priority(
@@ -771,7 +809,7 @@ async def _backfill_score():
                         "Backfill tier1 [%s]: AI-scoring %d director-level jobs for user %s",
                         backend, len(to_score), user.telegram_id,
                     )
-                    await _score_fn(to_score, user, session)
+                    await _score_backfill_batch(_score_fn, to_score, user, session)
                     continue  # come back next run for tier2
 
                 # Tier 2: manager-level, only when tier1 is fully cleared
@@ -781,7 +819,7 @@ async def _backfill_score():
                         "Backfill tier2 [%s]: AI-scoring %d manager-level jobs for user %s",
                         backend, len(to_score), user.telegram_id,
                     )
-                    await _score_fn(to_score, user, session)
+                    await _score_backfill_batch(_score_fn, to_score, user, session)
                     continue  # recheck only after tier2 is also empty
 
                 # Both queues empty → safety recheck of pre-filter rejects
