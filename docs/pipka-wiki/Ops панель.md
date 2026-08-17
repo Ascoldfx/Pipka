@@ -93,8 +93,8 @@ Frontend: `loadOpsOverview()` в application-блоке `app/static/dashboard.ht
 Ops больше не называет все исторические вакансии без `JobScore` рабочей
 очередью. API `/api/ops/overview` отдаёт три отдельных среза:
 
-- **AI scoring queue** — German вакансии не старше `BACKFILL_MAX_AGE_DAYS`,
-  которые backfill может передать в pre-filter/AI при текущем profile hash;
+- **AI scoring queue** — отдельный срез для текущего user по его
+  `preferred_countries`, возрасту, URL status и profile hash;
 - **NVIDIA embeddings** — вакансии, точно соответствующие scope индексатора:
   страна, возраст, открытая ссылка и score ≥ `EMBEDDING_INDEX_MIN_SCORE`;
 - **archive unscored** — все исторические строки без score, только для
@@ -102,3 +102,9 @@ Ops больше не называет все исторические вака�
 
 Это исключает ложную тревогу вида «500 вакансий в очереди», когда старые,
 закрытые или нецелевые вакансии не могут попасть в планировщик.
+
+Админская таблица Users показывает для каждого активного user:
+
+- его целевые страны;
+- текущую actionable scoring queue;
+- скорость обработки за выбранное Ops-окно.

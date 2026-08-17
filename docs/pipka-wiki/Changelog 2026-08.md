@@ -116,3 +116,12 @@
   допускает параллельных прогонов.
 - 30-минутный интервал не выбран: worst-case Adzuna crawl превысил бы дневную
   бесплатную квоту, тогда как hourly режим остаётся в её пределах.
+
+## 17 August — multi-user search and scoring fairness
+
+- Для каждого активного профиля строится отдельный search plan (`target_titles` + `preferred_countries`). Планы round-robin объединяются в один provider pass с точными `country_queries`, чтобы сохранить общую дедупликацию и API-квоты.
+- Real-time и backfill скоринг берут до 15 самых свежих вакансий на user за проход; первый user ротируется между прогонами.
+- Backfill больше не использует глобальный `BACKFILL_COUNTRY=de`; рынки берутся из профиля. Неполный профиль не получает неявную Германию.
+- NVIDIA embeddings индексируют объединение целевых стран всех активных users и только score активных users.
+- Ops показывает целевые рынки, queue depth и throughput отдельно для каждого активного user.
+- Миграция БД не требуется: связка `JobScore(job_id, user_id)` уже является persistent персональной очередью.

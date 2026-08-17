@@ -79,9 +79,9 @@ class Settings(BaseSettings):
     # queue or using the Gemini embedding quota.
     embedding_burst_interval_minutes: int = 30
     embedding_burst_queue_threshold: int = 100
-    # Do not spend embedding quota on the historical archive. Semantic search
-    # serves the active German feed, so only recent, open, already-promising
-    # vacancies are indexed.
+    # Do not spend embedding quota on the historical archive. The scheduler
+    # indexes the union of active users' preferred countries. The country
+    # value remains only as a backwards-compatible helper fallback.
     embedding_index_max_age_days: int = 31
     embedding_index_country: str = "de"
     embedding_index_min_score: int = 60
@@ -110,6 +110,8 @@ class Settings(BaseSettings):
     # target market. New jobs are scored by the real-time scan separately.
     backfill_max_age_days: int = 31
     backfill_ai_jobs_per_run: int = 30
+    # Legacy env compatibility only. Multi-user backfill uses each profile's
+    # explicit preferred_countries and never reads this global value.
     backfill_country: str = "de"
     backfill_min_previous_score: int = 60
     score_cache_hours: int = 168  # 7 days

@@ -5,11 +5,17 @@ import pytest
 
 from app.config import settings
 from app.services import embedding_service, scheduler_service
+from app.services.user_scope_service import ActiveTargetScope
 
 
 @pytest.mark.asyncio
 async def test_burst_runs_only_when_pending_queue_is_strictly_above_threshold(monkeypatch):
     monkeypatch.setattr(embedding_service, "_enabled", lambda _session: True)
+    monkeypatch.setattr(
+        embedding_service,
+        "active_target_scope",
+        AsyncMock(return_value=ActiveTargetScope((1,), ("de",))),
+    )
     pending = AsyncMock(return_value=100)
     index_jobs = AsyncMock(return_value=70)
     monkeypatch.setattr(embedding_service, "_count_indexable_jobs", pending)

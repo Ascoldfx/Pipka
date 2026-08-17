@@ -13,6 +13,7 @@ the snippet limitation.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from datetime import datetime

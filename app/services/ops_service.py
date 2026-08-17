@@ -5,18 +5,63 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import aliased
+from sqlalchemy.orm import aliased, selectinload
 
-from app.database import async_session
 from app.config import settings
+from app.database import async_session
 from app.models.application import Application
 from app.models.job import Job, JobScore
 from app.models.ops_event import OpsEvent
 from app.models.user import User, UserProfile
 from app.scoring.profile_hash import compute_profile_hash, valid_score_model_versions
 from app.services.embedding_service import job_index_filters
+from app.services.user_scope_service import active_target_scope, profile_target_countries
 
 logger = logging.getLogger(__name__)
+
+
+async def _scoring_queue_for_profile(session, user_id: int, profile: UserProfile, now: datetime) -> int:
+    """Count the same profile-scoped candidates consumed by backfill."""
+
+    countries = profile_target_countries(profile)
+    if not countries:
+        return 0
+    queue_cutoff = now - timedelta(days=settings.backfill_max_age_days)
+    prior_strong_score = (
+        select(JobScore.id)
+        .where(
+            JobScore.user_id == user_id,
+            JobScore.job_id == Job.id,
+            JobScore.score >= settings.backfill_min_previous_score,
+        )
+        .exists()
+    )
+    has_no_score = (
+        ~select(JobScore.id)
+        .where(JobScore.user_id == user_id, JobScore.job_id == Job.id)
+        .exists()
+    )
+    has_current_score = (
+        select(JobScore.id)
+        .where(
+            JobScore.user_id == user_id,
+            JobScore.job_id == Job.id,
+            JobScore.profile_hash == compute_profile_hash(profile),
+            JobScore.model_version.in_(valid_score_model_versions()),
+        )
+        .exists()
+    )
+    return int((
+        await session.execute(
+            select(func.count(Job.id)).where(
+                Job.country.in_(countries),
+                func.coalesce(Job.posted_at, Job.scraped_at) >= queue_cutoff,
+                or_(Job.url_status.is_(None), Job.url_status == "active"),
+                or_(prior_strong_score, has_no_score),
+                ~has_current_score,
+            )
+        )
+    ).scalar() or 0)
 
 
 async def record_ops_event(
@@ -131,49 +176,23 @@ async def build_ops_overview(
     # data, but it is not a scheduler queue. Calculate both actionable queues
     # from the same conditions their workers actually use.
     profile = await session.scalar(select(UserProfile).where(UserProfile.user_id == user_id))
-    scoring_queue = 0
-    if profile:
-        queue_cutoff = now - timedelta(days=settings.backfill_max_age_days)
-        prior_strong_score = (
-            select(JobScore.id)
-            .where(
-                JobScore.user_id == user_id,
-                JobScore.job_id == Job.id,
-                JobScore.score >= settings.backfill_min_previous_score,
-            )
-            .exists()
-        )
-        has_no_score = (
-            ~select(JobScore.id)
-            .where(JobScore.user_id == user_id, JobScore.job_id == Job.id)
-            .exists()
-        )
-        has_current_score = (
-            select(JobScore.id)
-            .where(
-                JobScore.user_id == user_id,
-                JobScore.job_id == Job.id,
-                JobScore.profile_hash == compute_profile_hash(profile),
-                JobScore.model_version.in_(valid_score_model_versions()),
-            )
-            .exists()
-        )
-        scoring_queue = (
-            await session.execute(
-                select(func.count(Job.id)).where(
-                    Job.country == settings.backfill_country.lower(),
-                    func.coalesce(Job.posted_at, Job.scraped_at) >= queue_cutoff,
-                    or_(Job.url_status.is_(None), Job.url_status == "active"),
-                    or_(prior_strong_score, has_no_score),
-                    ~has_current_score,
-                )
-            )
-        ).scalar() or 0
+    scoring_queue = (
+        await _scoring_queue_for_profile(session, user_id, profile, now)
+        if profile else 0
+    )
+    scoring_countries = list(profile_target_countries(profile))
 
     embedding_cutoff = now - timedelta(days=settings.embedding_index_max_age_days)
+    embedding_scope = await active_target_scope(session)
     embedding_queue = (
         await session.execute(
-            select(func.count(Job.id)).where(*job_index_filters(embedding_cutoff))
+            select(func.count(Job.id)).where(
+                *job_index_filters(
+                    embedding_cutoff,
+                    countries=embedding_scope.countries,
+                    user_ids=embedding_scope.user_ids,
+                )
+            )
         )
     ).scalar() or 0
 
@@ -297,7 +316,10 @@ async def build_ops_overview(
 
     # Per-user activity: scores + actions in window
     user_rows = await session.execute(
-        select(User).where(User.is_active.is_(True)).order_by(User.created_at.desc())
+        select(User)
+        .options(selectinload(User.profile))
+        .where(User.is_active.is_(True))
+        .order_by(User.created_at.desc())
     )
     all_users = list(user_rows.scalars())
 
@@ -334,6 +356,11 @@ async def build_ops_overview(
                 select(func.max(JobScore.scored_at)).where(JobScore.user_id == u.id)
             )
         ).scalar()
+        queue_pending = (
+            await _scoring_queue_for_profile(session, u.id, u.profile, now)
+            if u.profile else 0
+        )
+        velocity_per_hour = round(scores_window / window_hours, 2) if window_hours else 0.0
         user_activity.append({
             "id": u.id,
             "name": u.name or "—",
@@ -344,6 +371,9 @@ async def build_ops_overview(
             "has_profile": scores_total > 0 or actions_total > 0,
             "scores_total": scores_total,
             "scores_window": scores_window,
+            "queue_pending": queue_pending,
+            "velocity_per_hour": velocity_per_hour,
+            "target_countries": list(profile_target_countries(u.profile)),
             "actions_total": actions_total,
             "actions_window": actions_window,
             "last_active": last_score_at.isoformat() + "Z" if last_score_at else None,
@@ -372,15 +402,18 @@ async def build_ops_overview(
         "queues": {
             "scoring": {
                 "pending": scoring_queue,
-                "country": settings.backfill_country.lower(),
+                "countries": scoring_countries,
                 "max_age_days": settings.backfill_max_age_days,
-                "batch_size": settings.backfill_ai_jobs_per_run,
+                "batch_size": min(
+                    settings.max_jobs_per_scoring_batch,
+                    settings.backfill_ai_jobs_per_run,
+                ),
                 "note": "before_pre_filter",
             },
             "embeddings": {
                 "pending": embedding_queue,
                 "provider": settings.embedding_provider,
-                "country": settings.embedding_index_country.lower(),
+                "countries": list(embedding_scope.countries),
                 "max_age_days": settings.embedding_index_max_age_days,
                 "min_score": settings.embedding_index_min_score,
                 "batch_size": settings.embedding_jobs_per_run,

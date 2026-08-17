@@ -9,6 +9,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.bot.formatters import format_job_card
@@ -23,6 +24,12 @@ from app.scoring.rules import matches_explicit_target_title, pre_filter
 from app.services.backup_service import run_backup, verify_latest_backup_restore
 from app.services.ops_service import record_ops_event
 from app.services.tracker_service import get_hidden_dedup_hashes, get_hidden_job_ids
+from app.services.user_scope_service import (
+    build_user_search_plans,
+    merge_user_search_plans,
+    profile_target_countries,
+    rotate_items,
+)
 from app.sources import (
     AdzunaSource,
     ArbeitnowSource,
@@ -39,30 +46,12 @@ from app.sources import (
 )
 from app.sources.aggregator import JobAggregator
 from app.sources.base import SearchParams
-from app.sources.country_queries import expand_queries_for_country
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
 _scan_lock = asyncio.Lock()
-
-# All search queries for background scanning
-SCAN_QUERIES = [
-    "Director Supply Chain",
-    "Head of Procurement",
-    "VP Supply Chain",
-    "Director Operations",
-    "Head of Logistics",
-    "Chief Operating Officer",
-    "VP Procurement",
-    "Director Purchasing",
-    "Head of Sourcing",
-    "Global Supply Chain Director",
-    "Director Supply Chain English",
-    "Head of Procurement international",
-    "VP Operations international",
-    "Director Global Sourcing",
-    "Chief Procurement Officer",
-]
+_search_round_robin_offset = 0
+_backfill_round_robin_offset = 0
 
 TOP_SCORE_THRESHOLD = 80  # Push to Telegram if score >= this
 
@@ -222,65 +211,53 @@ async def _background_scan(bot_app, trigger: str = "scheduled"):
 
         try:
             async with async_session() as session:
-                # 1. Find all users with profiles to determine dynamic search scope
+                global _search_round_robin_offset
+
+                # 1. Build an explicit search plan for every configured user.
+                # Plans are merged only at the provider boundary so shared API
+                # quotas and global vacancy de-duplication remain efficient.
                 users_result = await session.execute(
-                    select(User).options(selectinload(User.profile)).where(User.is_active.is_(True))
+                    select(User)
+                    .options(selectinload(User.profile))
+                    .where(User.is_active.is_(True))
+                    .order_by(User.id)
                 )
-                users = users_result.scalars().all()
-
-                # Ordered dedupe, NOT a set: profile order = user's priority ranking.
-                # Sources cap their query lists (JobSpy top-N, Adzuna combo cap), so
-                # with a set the "lucky" titles were arbitrary and reshuffled on every
-                # container restart — most titles were never searched at all.
-                dynamic_queries: list[str] = []
-                dynamic_countries: list[str] = []
-                seen_q: set[str] = set()
-                seen_c: set[str] = set()
-
-                for user in users:
-                    if user.profile:
-                        for title in (user.profile.target_titles or []):
-                            norm = " ".join(title.split())  # collapse stray double spaces
-                            if norm and norm.lower() not in seen_q:
-                                seen_q.add(norm.lower())
-                                dynamic_queries.append(norm)
-                        for c in (user.profile.preferred_countries or []):
-                            code = c.strip().lower()
-                            if code and code not in seen_c:
-                                seen_c.add(code)
-                                dynamic_countries.append(code)
-
-                # Fallbacks to defaults if nothing found in profiles
-                final_queries = dynamic_queries if dynamic_queries else SCAN_QUERIES
-                final_countries = dynamic_countries if dynamic_countries else ["de", "at", "nl", "ch", "be", "si", "sk", "ro", "hu"]
-                country_queries = {
-                    country: expand_queries_for_country(final_queries, country)
-                    for country in final_countries
-                    if country == "br"
-                }
-
-                params = SearchParams(
-                    queries=final_queries,
-                    countries=final_countries,
-                    locations=[],
-                    country_queries=country_queries,
+                users = list(users_result.scalars())
+                plans = build_user_search_plans(users)
+                scan_start_offset = _search_round_robin_offset
+                params = merge_user_search_plans(
+                    plans, start_offset=scan_start_offset
                 )
+                if plans:
+                    _search_round_robin_offset = (
+                        _search_round_robin_offset + 1
+                    ) % len(plans)
+                users_by_id = {user.id: user for user in users}
+                scoring_users = [
+                    users_by_id[plan.user_id]
+                    for plan in rotate_items(plans, scan_start_offset)
+                ]
 
                 await session.commit()
 
                 # 2. Collect and store jobs (aggregator handles dedup + upsert)
-                all_jobs = await aggregator.search(params, session)
-                logger.info("Background scan: %d jobs in DB after aggregation (Params: %s / %s)", len(all_jobs), final_queries, final_countries)
+                if params is None:
+                    all_jobs = []
+                    logger.info("Background scan: no complete active user search plans")
+                else:
+                    all_jobs = await aggregator.search(params, session)
+                    logger.info(
+                        "Background scan: %d jobs after %d user plans (%s / %s)",
+                        len(all_jobs), len(plans), params.queries, params.countries,
+                    )
 
                 user_summaries = []
-                for user in users:
-                    if not user.profile:
-                        continue
-
+                for user in scoring_users:
                     try:
                         summary = await _score_and_notify(bot_app, user, all_jobs, session)
                         user_summaries.append(summary)
                     except Exception as e:
+                        await session.rollback()
                         logger.error("Background scan failed for user %s: %s", user.telegram_id, e)
                         user_summaries.append(
                             {
@@ -303,8 +280,16 @@ async def _background_scan(bot_app, trigger: str = "scheduled"):
                     payload={
                         "started_at": started_at.isoformat(),
                         "duration_seconds": duration_seconds,
-                        "query_count": len(final_queries),
-                        "country_count": len(final_countries),
+                        "query_count": len(params.queries) if params else 0,
+                        "country_count": len(params.countries) if params else 0,
+                        "search_plans": [
+                            {
+                                "user_id": plan.user_id,
+                                "query_count": len(plan.queries),
+                                "countries": list(plan.countries),
+                            }
+                            for plan in plans
+                        ],
                         "db_jobs_after_scan": len(all_jobs),
                         "aggregator": aggregator.last_stats,
                         "users": user_summaries,
@@ -402,12 +387,23 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
             "error": "credits_exhausted",
         }
 
+    new_jobs.sort(
+        key=lambda job: (
+            (job.posted_at or job.scraped_at).timestamp()
+            if (job.posted_at or job.scraped_at) else 0.0,
+            job.id or 0,
+        ),
+        reverse=True,
+    )
+    per_user_batch = settings.max_jobs_per_scoring_batch
+    priority_window = new_jobs[:per_user_batch]
+
     logger.info("Scoring %d new jobs for user %s (credits: %d)", len(new_jobs), user.telegram_id, user.credits)
 
     # Similarity is a ranking hint, never a rejection. Explicit target-title
     # matches lead even when an embedding is misleading.
     prioritized_jobs, deprioritized = await _semantic_priority_filter(
-        session, user, profile_hash, new_jobs
+        session, user, profile_hash, priority_window
     )
     if deprioritized:
         logger.info(
@@ -418,7 +414,7 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
 
     # Low-similarity jobs stay eligible for a later run instead of being
     # permanently marked as scored.
-    to_score = prioritized_jobs[:80]
+    to_score = prioritized_jobs[:per_user_batch]
 
     score_fn = _backfill_score_fn()
     if score_fn.__name__ == "score_jobs_gemini":
@@ -674,6 +670,8 @@ async def _backfill_score():
          target market to the AI scorer. A profile edit must not enqueue the
          full archive or re-score weak old vacancies.
     """
+    global _backfill_round_robin_offset
+
     _score_fn = _backfill_score_fn()
     backend = _score_fn.__name__.replace("score_jobs_", "").replace("score_jobs", "claude") or "claude"
     logger.info("Backfill scorer started (backend=%s)", backend)
@@ -682,10 +680,17 @@ async def _backfill_score():
         users_result = await session.execute(
             select(User).options(selectinload(User.profile)).where(User.is_active.is_(True))
         )
-        users = users_result.scalars().all()
+        users = [user for user in users_result.scalars() if user.profile]
+        users = rotate_items(sorted(users, key=lambda item: item.id), _backfill_round_robin_offset)
+        if users:
+            _backfill_round_robin_offset = (
+                _backfill_round_robin_offset + 1
+            ) % len(users)
 
         for user in users:
-            if not user.profile:
+            countries = profile_target_countries(user.profile)
+            if not countries:
+                logger.info("Backfill skipped user %s: no preferred countries", user.id)
                 continue
             try:
                 cutoff = datetime.now() - timedelta(days=settings.backfill_max_age_days)
@@ -709,7 +714,7 @@ async def _backfill_score():
                 all_jobs_result = await session.execute(
                     select(Job)
                     .where(
-                        Job.country == settings.backfill_country.lower(),
+                        Job.country.in_(countries),
                         func.coalesce(Job.posted_at, Job.scraped_at) >= cutoff,
                         or_(Job.url_status.is_(None), Job.url_status == "active"),
                         or_(prior_strong_score, has_no_score),
@@ -790,6 +795,17 @@ async def _backfill_score():
                         len(capped), user.telegram_id,
                     )
 
+                # Keep the queue freshness-first. Semantic similarity may
+                # reorder only a bounded window of the newest candidates, so
+                # an older high-similarity job cannot starve today's arrivals.
+                per_user_batch = min(
+                    settings.max_jobs_per_scoring_batch,
+                    settings.backfill_ai_jobs_per_run,
+                )
+                priority_window = per_user_batch
+                need_ai_t1 = need_ai_t1[:priority_window]
+                need_ai_t2 = need_ai_t2[:priority_window]
+
                 # Similarity only orders candidates; it cannot discard them.
                 need_ai_t1, t1_deprioritized = await _semantic_priority_filter(
                     session, user, profile_hash, need_ai_t1
@@ -807,7 +823,7 @@ async def _backfill_score():
 
                 # Tier 1 first: director / head of / VP
                 if need_ai_t1:
-                    to_score = need_ai_t1[:settings.backfill_ai_jobs_per_run]
+                    to_score = need_ai_t1[:per_user_batch]
                     logger.info(
                         "Backfill tier1 [%s]: AI-scoring %d director-level jobs for user %s",
                         backend, len(to_score), user.telegram_id,
@@ -817,7 +833,7 @@ async def _backfill_score():
 
                 # Tier 2: manager-level, only when tier1 is fully cleared
                 if need_ai_t2:
-                    to_score = need_ai_t2[:settings.backfill_ai_jobs_per_run]
+                    to_score = need_ai_t2[:per_user_batch]
                     logger.info(
                         "Backfill tier2 [%s]: AI-scoring %d manager-level jobs for user %s",
                         backend, len(to_score), user.telegram_id,
@@ -838,17 +854,18 @@ async def _backfill_score():
                         )
 
             except Exception as e:
+                await session.rollback()
                 logger.error("Backfill scorer failed for user %s: %s", user.telegram_id, e)
 
     logger.info("Backfill scorer completed")
 
 
 async def _nvidia_idle_rescore():
-    """Rescore DE jobs via NVIDIA Build (Gemma) when the Gemini queue is drained.
+    """Rescore user-market jobs via NVIDIA when the main queue is drained.
 
     Runs every 30 min but is a no-op unless:
       • `NVIDIA_API_KEY` is set in .env
-      • the user has no unscored jobs in the last 45 days for country=DE
+      • the user has no unscored jobs in their preferred countries
 
     Two priorities per user:
       (a) recheck pre-filter rejects (score=0, ai_analysis IS NULL)
@@ -859,7 +876,6 @@ async def _nvidia_idle_rescore():
 
     from app.scoring.nvidia_matcher import idle_rescore_for_user  # noqa: PLC0415
 
-    country = settings.nvidia_country.lower()
     cutoff = datetime.now() - timedelta(days=settings.job_max_age_days)
 
     async with async_session() as session:
@@ -871,11 +887,14 @@ async def _nvidia_idle_rescore():
         for user in users:
             if not user.profile:
                 continue
+            countries = profile_target_countries(user.profile)
+            if not countries:
+                continue
 
-            # Guard: only fire when the Gemini backfill queue is fully drained for DE.
+            # Guard: only fire when the main queue is drained for this profile.
             unscored_count_result = await session.execute(
                 select(func.count(Job.id)).where(
-                    Job.country == country,
+                    Job.country.in_(countries),
                     Job.scraped_at >= cutoff,
                     ~Job.id.in_(
                         select(JobScore.job_id).where(JobScore.user_id == user.id)
@@ -891,7 +910,9 @@ async def _nvidia_idle_rescore():
                 continue
 
             try:
-                checked, upgraded, refreshed = await idle_rescore_for_user(user, session)
+                checked, upgraded, refreshed = await idle_rescore_for_user(
+                    user, session, countries=countries
+                )
                 if checked or refreshed:
                     await record_ops_event(
                         "nvidia_rescore", "success", source="nvidia",
@@ -1041,7 +1062,9 @@ async def _watchlist_scan(bot_app):
                 continue
 
             try:
-                countries = user.profile.preferred_countries or ["de"]
+                countries = list(profile_target_countries(user.profile))
+                if not countries:
+                    continue
                 params = SearchParams(
                     queries=companies,      # WatchlistSource treats queries as company names
                     countries=countries,

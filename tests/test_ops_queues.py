@@ -24,8 +24,14 @@ async def test_ops_reports_actionable_queues_separately_from_archive():
 
     now = datetime.now()
     async with factory() as session:
-        profile = UserProfile(target_titles=["Director Supply Chain"])
+        profile = UserProfile(
+            target_titles=["Director Supply Chain"], preferred_countries=["de"]
+        )
         user = User(id=1, name="Owner", role="admin", profile=profile)
+        sg_profile = UserProfile(
+            target_titles=["Head of Procurement"], preferred_countries=["sg"]
+        )
+        sg_user = User(id=2, name="Singapore", profile=sg_profile)
         fresh_unscored_de = Job(
             external_id="fresh-de",
             source="test",
@@ -58,7 +64,7 @@ async def test_ops_reports_actionable_queues_separately_from_archive():
             posted_at=now - timedelta(days=40),
             dedup_hash="old-de",
         )
-        session.add_all([user, fresh_unscored_de, fresh_scored_de, fresh_unscored_sg, old_unscored_de])
+        session.add_all([user, sg_user, fresh_unscored_de, fresh_scored_de, fresh_unscored_sg, old_unscored_de])
         await session.flush()
         session.add(
             JobScore(
@@ -66,6 +72,15 @@ async def test_ops_reports_actionable_queues_separately_from_archive():
                 job_id=fresh_scored_de.id,
                 score=85,
                 profile_hash=compute_profile_hash(profile),
+                model_version="prefilter",
+            )
+        )
+        session.add(
+            JobScore(
+                user_id=sg_user.id,
+                job_id=fresh_unscored_sg.id,
+                score=85,
+                profile_hash=compute_profile_hash(sg_profile),
                 model_version="prefilter",
             )
         )
@@ -80,6 +95,12 @@ async def test_ops_reports_actionable_queues_separately_from_archive():
         )
 
     assert overview["queues"]["scoring"]["pending"] == 1
-    assert overview["queues"]["embeddings"]["pending"] == 1
+    assert overview["queues"]["scoring"]["countries"] == ["de"]
+    assert overview["queues"]["embeddings"]["pending"] == 2
+    assert overview["queues"]["embeddings"]["countries"] == ["de", "sg"]
+    users = {item["id"]: item for item in overview["users"]["activity"]}
+    assert users[1]["queue_pending"] == 1
+    assert users[1]["target_countries"] == ["de"]
+    assert users[2]["queue_pending"] == 0
     assert overview["queues"]["archive"]["unscored_total"] == 3
     await engine.dispose()

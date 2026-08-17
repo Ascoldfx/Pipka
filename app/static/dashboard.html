@@ -2250,8 +2250,8 @@ async function loadOpsOverview(force=false){
       { kicker:'Вакансий в базе', value:fmtNumber(d.kpis.total_jobs), sub:`+${fmtNumber(d.kpis.jobs_recent)} за период`, delta:`${fmtNumber(d.kpis.active_sources)} источников активно`, action:'jobs_recent' },
       { kicker:'Покрытие скорингом', value:`${d.kpis.coverage_pct}%`, sub:`${fmtNumber(d.kpis.scored_total)} оценено всего`, delta:`архив: ${fmtNumber(d.queues?.archive?.unscored_total ?? d.kpis.unscored_total)} без score`, action:'coverage' },
       { kicker:'Топ-совпадения', value:fmtNumber(d.kpis.top_matches), sub:`${fmtNumber(d.kpis.top_recent)} новых топ-совпадений`, delta:d.kpis.avg_score_recent != null ? `ср. ${d.kpis.avg_score_recent}` : 'ср. —', action:'top_matches' },
-      { kicker:'AI scoring queue', value:fmtNumber(d.queues?.scoring?.pending ?? 0), sub:`${(d.queues?.scoring?.country || 'de').toUpperCase()} · ≤${fmtNumber(d.queues?.scoring?.max_age_days ?? 31)} дн. · до pre-filter`, delta:`до ${fmtNumber(d.queues?.scoring?.batch_size ?? 30)} вакансий / 2ч`, action:'queue' },
-      { kicker:'NVIDIA embeddings', value:fmtNumber(d.queues?.embeddings?.pending ?? 0), sub:`${(d.queues?.embeddings?.provider || 'nvidia')} · ${fmtNumber(d.queues?.embeddings?.min_score ?? 60)}+ score`, delta:`${fmtNumber(d.queues?.embeddings?.batch_size ?? 70)} / ${fmtNumber(d.queues?.embeddings?.burst_interval_minutes ?? 30)} мин при >${fmtNumber(d.queues?.embeddings?.burst_threshold ?? 100)}`, action:'queue' },
+      { kicker:'AI scoring queue', value:fmtNumber(d.queues?.scoring?.pending ?? 0), sub:`${(d.queues?.scoring?.countries || []).join(', ').toUpperCase() || 'не настроено'} · ≤${fmtNumber(d.queues?.scoring?.max_age_days ?? 31)} дн. · до pre-filter`, delta:`до ${fmtNumber(d.queues?.scoring?.batch_size ?? 15)} свежих / пользователь / 2ч`, action:'queue' },
+      { kicker:'NVIDIA embeddings', value:fmtNumber(d.queues?.embeddings?.pending ?? 0), sub:`${(d.queues?.embeddings?.provider || 'nvidia')} · ${(d.queues?.embeddings?.countries || []).join(', ').toUpperCase() || 'нет рынков'} · ${fmtNumber(d.queues?.embeddings?.min_score ?? 60)}+ score`, delta:`${fmtNumber(d.queues?.embeddings?.batch_size ?? 70)} / ${fmtNumber(d.queues?.embeddings?.burst_interval_minutes ?? 30)} мин при >${fmtNumber(d.queues?.embeddings?.burst_threshold ?? 100)}`, action:'queue' },
       { kicker:'Отсечено фильтром', value:fmtNumber(d.kpis.prefilter_rejected), sub:'pre-filter, без AI-оценки', delta:'hard reject (score=0)', action:'queue' },
       { kicker:'Ошибки API', value:fmtNumber(d.kpis.api_401 + d.kpis.api_500), sub:`${fmtNumber(d.kpis.api_401)} авт. · ${fmtNumber(d.kpis.api_500)} сервер`, delta:'Последние проблемы', action:'api' },
     ].map(card => `
@@ -2361,6 +2361,8 @@ async function loadOpsOverview(force=false){
               <th>Email</th>
               <th>Авторизация</th>
               <th>Роль</th>
+              <th>Рынки</th>
+              <th>Очередь / скорость</th>
               <th>Оценок (период)</th>
               <th>Действий (период)</th>
               <th>Активность</th>
@@ -2375,6 +2377,11 @@ async function loadOpsOverview(force=false){
                 <td><span style="font-size:11px;color:var(--muted)">${esc(a.email)}</span></td>
                 <td><span class="pill ${a.auth.includes('telegram') ? 'running' : 'success'}" style="font-size:10px">${esc(a.auth||'—')}</span></td>
                 <td>${a.role === 'admin' ? '<span class="pill warning">admin</span>' : '<span style="color:var(--muted)">user</span>'}</td>
+                <td><span style="font-size:11px">${esc((a.target_countries || []).join(', ').toUpperCase() || '—')}</span></td>
+                <td>
+                  <strong>${fmtNumber(a.queue_pending || 0)}</strong>
+                  <span style="font-size:10px;color:var(--muted);display:block">${fmtNumber(a.velocity_per_hour || 0)} / ч</span>
+                </td>
                 <td>
                   <div class="u-bar-wrap">
                     <div class="u-bar"><div class="u-fill" style="width:${Math.round((a.scores_total/maxScores)*100)}%"></div></div>

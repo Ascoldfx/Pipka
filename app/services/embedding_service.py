@@ -12,10 +12,11 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.models.job import Job, JobScore
-from app.models.user import UserProfile
+from app.models.user import User, UserProfile
 from app.scoring.gemini_client import get_gemini_client
 from app.scoring.nvidia_embedding_client import embed_nvidia_text
 from app.scoring.profile_hash import compute_profile_hash
+from app.services.user_scope_service import ActiveTargetScope, active_target_scope
 
 logger = logging.getLogger(__name__)
 
@@ -146,29 +147,44 @@ async def invalidate_profile_embedding(session: AsyncSession, profile_id: int) -
     )
 
 
-def job_index_filters(cutoff: datetime):
+def job_index_filters(
+    cutoff: datetime,
+    *,
+    countries: tuple[str, ...] | None = None,
+    user_ids: tuple[int, ...] | None = None,
+):
     """Return the shared scope for useful, unembedded vacancy vectors."""
+    if countries is None:
+        countries = (settings.embedding_index_country.strip().lower(),)
     posted_or_scraped = func.coalesce(Job.posted_at, Job.scraped_at)
-    has_strong_score = (
-        select(JobScore.id)
-        .where(
-            JobScore.job_id == Job.id,
-            JobScore.score >= settings.embedding_index_min_score,
-        )
-        .exists()
-    )
+    score_conditions = [
+        JobScore.job_id == Job.id,
+        JobScore.score >= settings.embedding_index_min_score,
+    ]
+    if user_ids is not None:
+        score_conditions.append(JobScore.user_id.in_(user_ids))
+    has_strong_score = select(JobScore.id).where(*score_conditions).exists()
     return (
         text("jobs.embedding IS NULL"),
-        Job.country == settings.embedding_index_country.strip().lower(),
+        Job.country.in_(countries),
         posted_or_scraped >= cutoff,
         or_(Job.url_status.is_(None), Job.url_status == "active"),
         has_strong_score,
     )
 
 
-async def _count_indexable_jobs(session: AsyncSession, cutoff: datetime) -> int:
+async def _count_indexable_jobs(
+    session: AsyncSession,
+    cutoff: datetime,
+    scope: ActiveTargetScope | None = None,
+) -> int:
+    scope = scope or await active_target_scope(session)
     result = await session.execute(
-        select(func.count(Job.id)).where(*job_index_filters(cutoff))
+        select(func.count(Job.id)).where(
+            *job_index_filters(
+                cutoff, countries=scope.countries, user_ids=scope.user_ids
+            )
+        )
     )
     return int(result.scalar_one())
 
@@ -195,8 +211,9 @@ async def index_missing_embeddings(
 
     async with _embed_lock:
         cutoff = datetime.now() - timedelta(days=settings.embedding_index_max_age_days)
+        scope = await active_target_scope(session)
         if min_pending_jobs is not None:
-            pending_jobs = await _count_indexable_jobs(session, cutoff)
+            pending_jobs = await _count_indexable_jobs(session, cutoff, scope)
             if pending_jobs <= min_pending_jobs:
                 return {
                     "jobs": 0,
@@ -207,7 +224,7 @@ async def index_missing_embeddings(
         else:
             pending_jobs = -1
 
-        indexed_jobs = await _index_jobs(session, cutoff=cutoff)
+        indexed_jobs = await _index_jobs(session, cutoff=cutoff, scope=scope)
         indexed_profiles = await _index_profiles(session) if include_profiles else 0
         return {
             "jobs": indexed_jobs,
@@ -217,12 +234,22 @@ async def index_missing_embeddings(
         }
 
 
-async def _index_jobs(session: AsyncSession, *, cutoff: datetime | None = None) -> int:
+async def _index_jobs(
+    session: AsyncSession,
+    *,
+    cutoff: datetime | None = None,
+    scope: ActiveTargetScope | None = None,
+) -> int:
     cutoff = cutoff or datetime.now() - timedelta(days=settings.embedding_index_max_age_days)
+    scope = scope or await active_target_scope(session)
     posted_or_scraped = func.coalesce(Job.posted_at, Job.scraped_at)
     result = await session.execute(
         select(Job)
-        .where(*job_index_filters(cutoff))
+        .where(
+            *job_index_filters(
+                cutoff, countries=scope.countries, user_ids=scope.user_ids
+            )
+        )
         .order_by(posted_or_scraped.desc())
         .limit(settings.embedding_jobs_per_run)
     )
@@ -263,6 +290,8 @@ async def _index_jobs(session: AsyncSession, *, cutoff: datetime | None = None) 
 async def _index_profiles(session: AsyncSession) -> int:
     result = await session.execute(
         select(UserProfile)
+        .join(User, User.id == UserProfile.user_id)
+        .where(User.is_active.is_(True))
         .options(selectinload(UserProfile.user))
         .order_by(UserProfile.updated_at.desc())
         .limit(200)

@@ -291,8 +291,10 @@ async def score_jobs_nvidia(
 async def idle_rescore_for_user(
     user: User,
     session: AsyncSession,
+    *,
+    countries: tuple[str, ...] | None = None,
 ) -> tuple[int, int, int]:
-    """Two-phase rescore for a single user (Germany, ≤45 days).
+    """Two-phase rescore for one user's active markets (≤45 days).
 
     Returns (checked, upgraded, refreshed):
       checked   — priority (a): pre-filter rejects re-evaluated
@@ -308,7 +310,7 @@ async def idle_rescore_for_user(
     model_version = MODEL_NVIDIA()
     budget = settings.nvidia_max_per_run
     batch_size = settings.max_jobs_per_scoring_batch
-    country = settings.nvidia_country.lower()
+    countries = countries or (settings.nvidia_country.lower(),)
     age_cutoff = datetime.now() - timedelta(days=settings.job_max_age_days)
     stale_cutoff = datetime.now() - timedelta(days=settings.nvidia_rescore_stale_days)
 
@@ -322,7 +324,7 @@ async def idle_rescore_for_user(
             JobScore.user_id == user.id,
             JobScore.score == 0,
             JobScore.ai_analysis.is_(None),
-            Job.country == country,
+            Job.country.in_(countries),
             Job.scraped_at >= age_cutoff,
         )
         .limit(budget)
@@ -361,7 +363,7 @@ async def idle_rescore_for_user(
                 JobScore.user_id == user.id,
                 JobScore.score > 0,
                 JobScore.scored_at < stale_cutoff,
-                Job.country == country,
+                Job.country.in_(countries),
                 Job.scraped_at >= age_cutoff,
             )
             .order_by(JobScore.scored_at.asc())
