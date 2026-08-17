@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     #   Re-enable with JOBSPY_SITES="indeed,linkedin".
     disabled_sources: str = "arbeitsagentur"
     jobspy_sites: str = "indeed"
+    # One hour keeps the worst-case Adzuna crawl (80 combinations × 2 pages)
+    # below the daily free-tier request budget while surfacing fresh jobs fast.
+    scan_interval_minutes: int = 60
 
     # Search / semantic indexing. Nemotron is deliberately separate from the
     # Gemini scorer quota. Its 2048-dimensional vectors need migration 0010.

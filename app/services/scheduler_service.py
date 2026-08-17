@@ -73,11 +73,11 @@ def is_scan_running() -> bool:
 
 def start_scheduler(bot_app):
     """Start background job scanner and cleanup tasks."""
-    # Run every 3 hours
+    # The lock in _background_scan prevents overlap if one source is slow.
     scheduler.add_job(
         _background_scan,
         "interval",
-        hours=3,
+        minutes=settings.scan_interval_minutes,
         args=[bot_app],
         id="background_scan",
         replace_existing=True,
@@ -185,7 +185,10 @@ def start_scheduler(bot_app):
         replace_existing=True,
     )
     scheduler.start()
-    logger.info("Background scanner started (every 3 hours, first scan in 30s)")
+    logger.info(
+        "Background scanner started (every %d minutes, first scan in 30s)",
+        settings.scan_interval_minutes,
+    )
 
 
 async def _background_scan(bot_app, trigger: str = "scheduled"):

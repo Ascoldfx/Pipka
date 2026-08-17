@@ -108,3 +108,11 @@
   the selected vacancies move to NVIDIA in the same scheduler run.
 - The fallback is recorded as `scoring_fallback`; NVIDIA retries remain bounded
   and do not requeue an unlimited historical backlog.
+
+## 17 August — hourly fresh-vacancy scans
+
+- `background_scan` запускается каждые 60 минут вместо 3 часов.
+- Интервал вынесен в `SCAN_INTERVAL_MINUTES`; `_scan_lock` по-прежнему не
+  допускает параллельных прогонов.
+- 30-минутный интервал не выбран: worst-case Adzuna crawl превысил бы дневную
+  бесплатную квоту, тогда как hourly режим остаётся в её пределах.
