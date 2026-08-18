@@ -1,5 +1,5 @@
-from pathlib import Path
 import re
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -31,7 +31,7 @@ def test_dashboard_loads_csrf_fetch_wrapper_before_inline_application_code() -> 
     dashboard = (ROOT / "app/static/dashboard.html").read_text()
     security_js = (ROOT / "app/static/js/security.js").read_text()
 
-    assert '<script src="/static/js/security.js"></script>' in dashboard
+    assert '/static/js/security.js' in dashboard
     assert dashboard.index('/static/js/security.js') < dashboard.index('<script>')
     assert "X-CSRF-Token" in security_js
     assert "window.fetch" in security_js
@@ -42,7 +42,7 @@ def test_dashboard_uses_csp_safe_event_delegation() -> None:
     events_js = (ROOT / "app/static/js/events.js").read_text()
 
     assert not re.search(r"\son[a-z]+\s*=", dashboard, re.IGNORECASE)
-    assert '<script src="/static/js/events.js"></script>' in dashboard
+    assert '/static/js/events.js' in dashboard
     assert "data-action" in dashboard
     assert "closest('[data-action]')" in events_js
     assert not (ROOT / "app/static/js/app.js").exists()

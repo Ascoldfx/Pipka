@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,8 +13,11 @@ from app.config import settings
 from app.database import get_db
 from app.models.user import PaymentTransaction, User
 from app.services.billing_service import (
+    BillingUnavailableError,
     create_checkout_invoice,
     fulfill_payment_transaction,
+    live_billing_configured,
+    sandbox_billing_enabled,
     verify_cryptomus_signature,
 )
 
@@ -68,6 +72,7 @@ async def get_billing_balance(
                 "credits": settings.billing_pro_credits,
             },
         },
+        "test_mode": sandbox_billing_enabled(),
         "history": tx_history,
     }
 
@@ -83,7 +88,11 @@ async def checkout(
     if tier not in ("starter", "pro"):
         raise HTTPException(status_code=400, detail="Invalid package tier. Must be 'starter' or 'pro'.")
 
-    tx, payment_url = await create_checkout_invoice(current_user, tier, session)
+    try:
+        tx, payment_url = await create_checkout_invoice(current_user, tier, session)
+    except BillingUnavailableError:
+        logger.warning("Billing checkout unavailable for user_id=%s", current_user.id)
+        raise HTTPException(status_code=503, detail="Payments are temporarily unavailable") from None
 
     return {
         "transaction_id": tx.id,
@@ -103,11 +112,13 @@ async def crypto_webhook(
     raw_body = await request.body()
     sign_header = request.headers.get("sign", "")
 
-    # Live verification
-    if settings.cryptomus_payment_key:
-        if not verify_cryptomus_signature(raw_body, sign_header):
-            logger.warning("Crypto webhook signature verification failed")
-            raise HTTPException(status_code=400, detail="Invalid signature")
+    # Fail closed. A missing secret must disable webhooks, never turn them
+    # into an unauthenticated credit-issuing endpoint.
+    if not live_billing_configured():
+        raise HTTPException(status_code=503, detail="Payments are not configured")
+    if not verify_cryptomus_signature(raw_body, sign_header):
+        logger.warning("Crypto webhook signature verification failed")
+        raise HTTPException(status_code=400, detail="Invalid signature")
 
     try:
         payload = await request.json()
@@ -137,6 +148,8 @@ async def test_fulfill_checkout(
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Sandbox endpoint to complete a test transaction during development."""
+    if not sandbox_billing_enabled():
+        raise HTTPException(status_code=404, detail="Not found")
     res = await session.execute(
         select(PaymentTransaction).where(
             PaymentTransaction.id == tx_id,

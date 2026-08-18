@@ -33,7 +33,11 @@ MAX_RESUME_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 # ``compute_profile_hash`` (sha256 over JSON of every entry), the per-job
 # pre_filter loop (O(jobs × keywords)), and the watchlist scanner
 # (Adzuna call per company × per country).
-MAX_PROFILE_LIST = 50  # target_titles, countries, exclusions, target_companies
+MAX_PROFILE_LIST = 50  # target_titles, countries, keywords, target_companies
+# Company exclusions grow over time as the user hides employers from the feed.
+# Keep their bound separate so a legitimate long-lived blocklist cannot make
+# every subsequent profile update fail (the production profile already has 58).
+MAX_EXCLUDED_COMPANIES = 200
 MAX_PROFILE_FIELD_LEN = 200  # one entry's max length
 
 # Hard wall on parse time. Parsing happens in a resource-bounded subprocess,
@@ -99,7 +103,12 @@ def _parse_country_codes(raw: str, field_name: str) -> list[str]:
     return codes
 
 
-def _parse_exclusion_list(raw: str, field_name: str) -> list[str]:
+def _parse_exclusion_list(
+    raw: str,
+    field_name: str,
+    *,
+    max_items: int = MAX_PROFILE_LIST,
+) -> list[str]:
     """Normalise exclusions and discard invalid upstream placeholders."""
     items: list[str] = []
     seen: set[str] = set()
@@ -110,8 +119,8 @@ def _parse_exclusion_list(raw: str, field_name: str) -> list[str]:
             continue
         items.append(value)
         seen.add(normalised)
-    if len(items) > MAX_PROFILE_LIST:
-        raise HTTPException(status_code=400, detail=f"{field_name}: max {MAX_PROFILE_LIST} entries")
+    if len(items) > max_items:
+        raise HTTPException(status_code=400, detail=f"{field_name}: max {max_items} entries")
     return items
 
 
@@ -188,7 +197,11 @@ async def update_profile(
             if excluded_keywords is not None:
                 p.excluded_keywords = _parse_exclusion_list(excluded_keywords, "excluded_keywords")
             if excluded_companies is not None:
-                p.excluded_companies = _parse_exclusion_list(excluded_companies, "excluded_companies")
+                p.excluded_companies = _parse_exclusion_list(
+                    excluded_companies,
+                    "excluded_companies",
+                    max_items=MAX_EXCLUDED_COMPANIES,
+                )
             if english_only is not None:
                 p.english_only = english_only in ("1", "true", "True", "yes", "on")
             if target_companies is not None:

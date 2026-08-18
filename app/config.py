@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     nvidia_model: str = "meta/llama-3.3-70b-instruct"
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
     nvidia_batch_delay: float = 2.0      # seconds between batches (conservative)
+    # Chat scoring is materially slower than Gemini. Eight jobs fit the free
+    # endpoint reliably; larger batches have repeatedly timed out in production.
+    nvidia_scoring_batch_size: int = 8
+    nvidia_scoring_timeout_seconds: float = 90.0
+    nvidia_scoring_max_attempts: int = 2
     nvidia_max_per_run: int = 300        # hard cap per scheduler tick
     nvidia_country: str = "de"           # ISO country filter for idle rescore
     nvidia_rescore_stale_days: int = 7   # refresh successful scores older than N days

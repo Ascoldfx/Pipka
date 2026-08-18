@@ -1,4 +1,4 @@
-"""NVIDIA Build API scorer — idle rescorer for Germany-only jobs.
+"""NVIDIA Build API scorer — fallback and idle rescorer for active markets.
 
 Runs only when the Gemini backfill queue is drained. Two priorities per pass:
   (a) recheck pre-filter rejects (score=0, ai_analysis IS NULL)
@@ -41,6 +41,17 @@ logger = logging.getLogger(__name__)
 _nvidia_semaphore = asyncio.Semaphore(1)
 _pacer_lock = asyncio.Lock()
 _last_call_monotonic: float = 0.0
+
+
+def _nvidia_batch_size() -> int:
+    """Return the bounded NVIDIA chat batch size used by every scoring path."""
+    return max(
+        1,
+        min(
+            settings.max_jobs_per_scoring_batch,
+            settings.nvidia_scoring_batch_size,
+        ),
+    )
 
 
 async def _pace() -> None:
@@ -97,7 +108,7 @@ async def _call_nvidia(prompt: str, batch_size: int) -> str | None:
     async def _once() -> str | None:
         async with _nvidia_semaphore:
             await _pace()
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx.AsyncClient(timeout=settings.nvidia_scoring_timeout_seconds) as client:
                 resp = await client.post(url, headers=headers, json=payload)
                 resp.raise_for_status()
                 data = resp.json()
@@ -120,8 +131,8 @@ async def _call_nvidia(prompt: str, batch_size: int) -> str | None:
         # nvidia_exhausted OpsEvents were silently lost. Same bug class as the
         # Gemini breaker fix (27.05.2026).
         async for attempt in AsyncRetrying(
-            stop=stop_after_attempt(3),
-            wait=wait_exponential(multiplier=3, min=3, max=60),
+            stop=stop_after_attempt(max(1, settings.nvidia_scoring_max_attempts)),
+            wait=wait_exponential(multiplier=2, min=2, max=15),
             retry=retry_if_exception(_is_retryable),
             reraise=False,
         ):
@@ -231,7 +242,7 @@ async def score_jobs_nvidia(
     profile_hash = compute_profile_hash(profile)
     model_version = MODEL_NVIDIA()
     new_scores: list[JobScore] = []
-    batch_size = settings.max_jobs_per_scoring_batch
+    batch_size = _nvidia_batch_size()
 
     for i in range(0, len(jobs), batch_size):
         batch = jobs[i : i + batch_size]
@@ -309,7 +320,7 @@ async def idle_rescore_for_user(
     profile_hash = compute_profile_hash(profile)
     model_version = MODEL_NVIDIA()
     budget = settings.nvidia_max_per_run
-    batch_size = settings.max_jobs_per_scoring_batch
+    batch_size = _nvidia_batch_size()
     countries = countries or (settings.nvidia_country.lower(),)
     age_cutoff = datetime.now() - timedelta(days=settings.job_max_age_days)
     stale_cutoff = datetime.now() - timedelta(days=settings.nvidia_rescore_stale_days)

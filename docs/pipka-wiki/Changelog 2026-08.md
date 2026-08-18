@@ -125,3 +125,10 @@
 - NVIDIA embeddings индексируют объединение целевых стран всех активных users и только score активных users.
 - Ops показывает целевые рынки, queue depth и throughput отдельно для каждого активного user.
 - Миграция БД не требуется: связка `JobScore(job_id, user_id)` уже является persistent персональной очередью.
+
+## 18 August — reliability, profile save and security hardening
+
+- `excluded_companies` получил отдельный hard cap 200: накопленный blocklist из 58 компаний больше не блокирует сохранение всего профиля. Dashboard показывает точную server validation error.
+- NVIDIA chat scoring разделён на пакеты по 8 вакансий, timeout снижен до 90 секунд, retries ограничены двумя попытками. Это не даёт одному slow batch задерживать весь scheduler pass на 20+ минут.
+- CSP запрещает JavaScript `unsafe-inline` и inline event attributes; известные inline scripts разрешаются только per-response nonce.
+- Billing работает fail-closed без live credentials; sandbox fulfilment скрыт в production и проверяет ownership, webhook signature сравнивается constant-time, а credit deductions стали атомарными.

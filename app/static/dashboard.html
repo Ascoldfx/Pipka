@@ -1932,7 +1932,8 @@ async function saveProfile(){
   try{
     const r=await fetch('/api/profile',{method:'POST',body:fd});
     const d=await r.json();
-    $('settings-msg').innerHTML=d.ok?'<div class="msg ok">Settings saved!</div>':'<div class="msg err">Error saving</div>';
+    const errorMessage=esc(d.detail||d.error||'Error saving');
+    $('settings-msg').innerHTML=d.ok?'<div class="msg ok">Settings saved!</div>':`<div class="msg err">${errorMessage}</div>`;
     setTimeout(()=>$('settings-msg').innerHTML='',3000);
   }catch(e){$('settings-msg').innerHTML='<div class="msg err">Network error</div>';}
 }
