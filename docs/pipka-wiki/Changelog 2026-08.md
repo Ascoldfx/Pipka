@@ -132,3 +132,9 @@
 - NVIDIA chat scoring разделён на пакеты по 8 вакансий, timeout снижен до 90 секунд, retries ограничены двумя попытками. Это не даёт одному slow batch задерживать весь scheduler pass на 20+ минут.
 - CSP запрещает JavaScript `unsafe-inline` и inline event attributes; известные inline scripts разрешаются только per-response nonce.
 - Billing работает fail-closed без live credentials; sandbox fulfilment скрыт в production и проверяет ownership, webhook signature сравнивается constant-time, а credit deductions стали атомарными.
+
+## 19 August — Reject survives provider reposts
+
+- Production audit нашёл 38 replacement rows с тем же `source + external_id`: provider менял metadata, создавался новый `Job.id`, и отклонённая вакансия снова попадала в feed.
+- Default feed, Inbox и scoring queues теперь переносят action на replacement row по доказанной identity: одинаковый provider ID или точный URL. Title/company-only matching не используется, чтобы не отсечь другую целевую роль.
+- Migration `0013_application_identity` сохраняет самое новое action при исторических дублях и делает `(user_id, job_id)` unique.

@@ -16,6 +16,7 @@ from app.models.job import Job, JobScore
 from app.scoring.matcher import analyze_single_job
 from app.services.tracker_service import (
     check_auto_exclude_company,
+    hidden_application_equivalent_exists,
     mark_applied,
     mark_rejected,
     save_job,
@@ -142,6 +143,7 @@ async def get_jobs(
                     filters.append(
                         Job.title.ilike(pattern, escape="\\") | Job.company_name.ilike(pattern, escape="\\")
                     )
+        is_default_feed = status in (None, "", "new")
         if status == "new":
             filters.append(Application.status.is_(None))
         elif status:
@@ -152,6 +154,8 @@ async def get_jobs(
             # users read that as "rejected jobs keep coming back". Rejected
             # jobs remain reachable via the dedicated Rejected tab.
             filters.append(or_(Application.status.is_(None), Application.status != "rejected"))
+        if user_id and is_default_feed:
+            filters.append(~hidden_application_equivalent_exists(user_id))
 
         if region == "saxony":
             filters.append(
@@ -183,7 +187,6 @@ async def get_jobs(
             explicit_country_filter = True
 
         hidden_countries: list[str] = []
-        is_default_feed = status in (None, "", "new")
         if (
             is_default_feed
             and not explicit_country_filter

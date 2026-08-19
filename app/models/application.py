@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, JSON, String, Text, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models import Base
@@ -10,7 +10,9 @@ class Application(Base):
     __tablename__ = "applications"
     __table_args__ = (
         # Hot paths: LEFT JOIN apps on (job_id, user_id) + status filter + recent-activity aggregates.
-        Index("ix_applications_user_job", "user_id", "job_id"),
+        # One user can have only one current action per vacancy.  The index is
+        # unique so concurrent clicks/tabs cannot create conflicting rows.
+        Index("ix_applications_user_job", "user_id", "job_id", unique=True),
         Index("ix_applications_user_status", "user_id", "status"),
         Index("ix_applications_updated_at", "updated_at"),
     )
@@ -56,5 +58,5 @@ class SearchSubscription(Base):
     user: Mapped["User"] = relationship(back_populates="subscriptions")
 
 
-from app.models.user import User  # noqa: E402
 from app.models.job import Job  # noqa: E402
+from app.models.user import User  # noqa: E402

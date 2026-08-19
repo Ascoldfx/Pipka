@@ -23,7 +23,12 @@ from app.scoring.profile_hash import compute_profile_hash, valid_score_model_ver
 from app.scoring.rules import matches_explicit_target_title, pre_filter
 from app.services.backup_service import run_backup, verify_latest_backup_restore
 from app.services.ops_service import record_ops_event
-from app.services.tracker_service import get_hidden_dedup_hashes, get_hidden_job_ids
+from app.services.tracker_service import (
+    get_hidden_dedup_hashes,
+    get_hidden_job_identities,
+    get_hidden_job_ids,
+    matches_hidden_job_identity,
+)
 from app.services.user_scope_service import (
     build_user_search_plans,
     merge_user_search_plans,
@@ -339,13 +344,18 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
     # Get hidden (applied + rejected)
     hidden_ids = await get_hidden_job_ids(user.id, session)
     hidden_hashes = await get_hidden_dedup_hashes(user.id, session)
+    hidden_provider_ids, hidden_urls = await get_hidden_job_identities(user.id, session)
 
     # Filter to only NEW, unhidden jobs
     new_jobs = []
     for job in all_jobs:
         if job.id in already_scored_ids:
             continue
-        if job.id in hidden_ids or job.dedup_hash in hidden_hashes:
+        if (
+            job.id in hidden_ids
+            or job.dedup_hash in hidden_hashes
+            or matches_hidden_job_identity(job, hidden_provider_ids, hidden_urls)
+        ):
             continue
         passed, bucket = pre_filter(job, user.profile)
         if passed and bucket in ("high", "medium"):
@@ -737,6 +747,10 @@ async def _backfill_score():
 
                 hidden_ids = await get_hidden_job_ids(user.id, session)
                 hidden_hashes = await get_hidden_dedup_hashes(user.id, session)
+                hidden_provider_ids, hidden_urls = await get_hidden_job_identities(
+                    user.id,
+                    session,
+                )
 
                 need_ai_t1: list[Job] = []   # director/head/VP + domain
                 need_ai_t2: list[Job] = []   # plain manager + domain (lower priority)
@@ -745,7 +759,11 @@ async def _backfill_score():
                 for job in all_jobs:
                     if job.id in already_scored_ids:
                         continue
-                    if job.id in hidden_ids or job.dedup_hash in hidden_hashes:
+                    if (
+                        job.id in hidden_ids
+                        or job.dedup_hash in hidden_hashes
+                        or matches_hidden_job_identity(job, hidden_provider_ids, hidden_urls)
+                    ):
                         continue
                     passed, bucket = pre_filter(job, user.profile)
                     if passed and bucket in ("high", "medium"):

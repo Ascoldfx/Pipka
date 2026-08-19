@@ -3,9 +3,10 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
-from sqlalchemy import func, select, update as sa_update
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 
 from app.models.application import Application, ApplicationHistory
 from app.models.job import Job, JobScore
@@ -17,6 +18,81 @@ logger = logging.getLogger(__name__)
 VALID_STATUSES = ("saved", "applied", "interviewing", "offer", "rejected", "withdrawn")
 
 AUTO_EXCLUDE_THRESHOLD = 5  # rejections from one company → auto-add to excluded_companies
+
+
+def hidden_application_equivalent_exists(user_id: int):
+    """Correlated EXISTS for a repost of an already actioned vacancy.
+
+    A provider can change location/title metadata and create a new ``jobs``
+    row while keeping its external ID or exact URL.  The action still belongs
+    to that vacancy, so default feeds must hide the replacement row as well.
+    Deliberately do not match only title/company: that could suppress a real,
+    separate opening and lose an important target role.
+    """
+    hidden_app = aliased(Application)
+    hidden_job = aliased(Job)
+    same_provider_id = and_(
+        Job.source == hidden_job.source,
+        Job.external_id == hidden_job.external_id,
+        Job.external_id.is_not(None),
+        Job.external_id != "",
+    )
+    same_exact_url = and_(
+        Job.url == hidden_job.url,
+        Job.url.is_not(None),
+        Job.url != "",
+    )
+    return (
+        select(hidden_app.id)
+        .join(hidden_job, hidden_job.id == hidden_app.job_id)
+        .where(
+            hidden_app.user_id == user_id,
+            hidden_app.status == "rejected",
+            or_(same_provider_id, same_exact_url),
+        )
+        .correlate(Job)
+        .exists()
+    )
+
+
+async def get_hidden_job_identities(
+    user_id: int,
+    session: AsyncSession,
+) -> tuple[set[tuple[str, str]], set[str]]:
+    """Return provider IDs and exact URLs hidden by applied/rejected actions."""
+    result = await session.execute(
+        select(Job.source, Job.external_id, Job.url)
+        .join(Application, Application.job_id == Job.id)
+        .where(
+            Application.user_id == user_id,
+            Application.status.in_(["applied", "rejected"]),
+        )
+    )
+    provider_ids: set[tuple[str, str]] = set()
+    urls: set[str] = set()
+    for source, external_id, url in result.all():
+        if source and external_id:
+            provider_ids.add((source.casefold(), external_id.strip()))
+        if url:
+            urls.add(url.strip())
+    return provider_ids, urls
+
+
+def matches_hidden_job_identity(
+    job: Job,
+    provider_ids: set[tuple[str, str]],
+    urls: set[str],
+) -> bool:
+    """Return true when ``job`` is a replacement row for a hidden vacancy."""
+    provider_id = (
+        (job.source.casefold(), job.external_id.strip())
+        if job.source and job.external_id
+        else None
+    )
+    return bool(
+        (provider_id and provider_id in provider_ids)
+        or (job.url and job.url.strip() in urls)
+    )
 
 
 async def save_job(user_id: int, job_id: int, session: AsyncSession) -> Application:

@@ -9,7 +9,12 @@ from app.models.job import Job, JobScore
 from app.models.user import User
 from app.scoring.matcher import score_jobs
 from app.scoring.rules import pre_filter
-from app.services.tracker_service import get_hidden_dedup_hashes, get_hidden_job_ids
+from app.services.tracker_service import (
+    get_hidden_dedup_hashes,
+    get_hidden_job_identities,
+    get_hidden_job_ids,
+    matches_hidden_job_identity,
+)
 from app.sources.aggregator import JobAggregator
 from app.sources.base import SearchParams
 
@@ -36,6 +41,7 @@ async def search_and_score(
     # Get hidden jobs (applied + rejected) — by ID and dedup_hash for robustness
     hidden_ids = await get_hidden_job_ids(user.id, session)
     hidden_hashes = await get_hidden_dedup_hashes(user.id, session)
+    hidden_provider_ids, hidden_urls = await get_hidden_job_identities(user.id, session)
 
     profile = user.profile
     new_high: list[Job] = []
@@ -44,7 +50,11 @@ async def search_and_score(
     seen_medium: list[Job] = []
 
     for job in all_jobs:
-        if job.id in hidden_ids or job.dedup_hash in hidden_hashes:
+        if (
+            job.id in hidden_ids
+            or job.dedup_hash in hidden_hashes
+            or matches_hidden_job_identity(job, hidden_provider_ids, hidden_urls)
+        ):
             continue
         passed, bucket = pre_filter(job, profile)
         if not passed:
