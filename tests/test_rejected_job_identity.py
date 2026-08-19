@@ -141,3 +141,42 @@ async def test_rejected_exact_url_is_hidden_across_sources(monkeypatch):
     assert (await _get_jobs(request))["jobs"] == []
 
     await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_jobs_response_tolerates_legacy_non_object_raw_data(monkeypatch):
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async with factory() as session:
+        user = User(id=1, name="Test", profile=UserProfile())
+        legacy = Job(
+            external_id="legacy-raw-data",
+            source="indeed",
+            title="Supply Chain Director",
+            country="de",
+            url="https://example.com/jobs/legacy",
+            dedup_hash="legacy-raw-data",
+            raw_data="legacy-string",
+        )
+        session.add_all([user, legacy])
+        await session.commit()
+
+    monkeypatch.setattr(jobs_api, "async_session", factory)
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/jobs",
+            "headers": [],
+            "query_string": b"",
+            "session": {"user_id": 1},
+        }
+    )
+
+    response = await _get_jobs(request)
+    assert response["jobs"][0]["merged_sources"] is None
+
+    await engine.dispose()

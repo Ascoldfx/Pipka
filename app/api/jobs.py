@@ -284,6 +284,7 @@ async def get_jobs(
         jobs = []
         for row in rows:
             job = row[0]
+            raw_data = job.raw_data if isinstance(job.raw_data, dict) else {}
             jobs.append({
                 "id": job.id,
                 "title": job.title,
@@ -291,7 +292,7 @@ async def get_jobs(
                 "location": job.location or "N/A",
                 "country": job.country or "?",
                 "source": job.source,
-                "merged_sources": (job.raw_data or {}).get("merged_sources"),
+                "merged_sources": raw_data.get("merged_sources"),
                 "url": job.url,
                 "salary_min": job.salary_min,
                 "salary_max": job.salary_max,

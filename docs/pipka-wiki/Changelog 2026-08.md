@@ -138,3 +138,10 @@
 - Production audit нашёл 38 replacement rows с тем же `source + external_id`: provider менял metadata, создавался новый `Job.id`, и отклонённая вакансия снова попадала в feed.
 - Default feed, Inbox и scoring queues теперь переносят action на replacement row по доказанной identity: одинаковый provider ID или точный URL. Title/company-only matching не используется, чтобы не отсечь другую целевую роль.
 - Migration `0013_application_identity` сохраняет самое новое action при исторических дублях и делает `(user_id, job_id)` unique.
+
+## 19 August — Feedback and dashboard recovery
+
+- Feedback получил прямой click binding и явные `window` exports; версии static scripts подняты для инвалидации browser/CDN cache.
+- Feedback status больше не вставляет server text через `innerHTML`; Telegram HTML экранирует user fields, а API принимает только известные категории.
+- Ops alerts читают multi-user `queues.scoring.countries` и не падают на устаревшем `country.toUpperCase()`.
+- `/api/jobs` устойчив к legacy `raw_data`, записанному не JSON-object; frontend показывает точный HTTP status вместо вторичного `Unexpected token`.

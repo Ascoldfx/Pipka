@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+from html import escape
 from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +13,8 @@ from app.database import get_db
 from app.models.user import User, UserFeedback
 
 logger = logging.getLogger(__name__)
+
+VALID_FEEDBACK_CATEGORIES = {"general", "bug", "feature", "question"}
 
 router = APIRouter(prefix="/api", tags=["feedback"])
 
@@ -28,9 +32,13 @@ async def submit_feedback(
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Submit user feedback or bug report."""
+    category = req.category.strip().lower()
+    if category not in VALID_FEEDBACK_CATEGORIES:
+        raise HTTPException(status_code=422, detail="Unknown feedback category")
+
     fb = UserFeedback(
         user_id=current_user.id,
-        category=req.category.strip(),
+        category=category,
         message=req.message.strip(),
         contact=req.contact.strip() if req.contact else current_user.email,
     )
@@ -38,12 +46,13 @@ async def submit_feedback(
     await session.commit()
     await session.refresh(fb)
 
-    logger.info("New user feedback from user_id=%s category=%s", current_user.id, req.category)
+    logger.info("New user feedback from user_id=%s category=%s", current_user.id, category)
 
     # Send instant Telegram notification to admin Telegram IDs
     try:
-        from app.config import settings
         import httpx
+
+        from app.config import settings
 
         admin_ids = [
             tid.strip()
@@ -56,17 +65,18 @@ async def submit_feedback(
                 "feature": "💡 ИДЕЯ / ПРЕДЛОЖЕНИЕ",
                 "question": "❓ ВОПРОС",
                 "general": "💬 ОТЗЫВ",
-            }.get(req.category.strip().lower(), "💬 ОТЗЫВ")
+            }.get(category, "💬 ОТЗЫВ")
 
-            user_disp = current_user.name or current_user.email or f"ID {current_user.id}"
-            contact_disp = req.contact.strip() if req.contact else (current_user.email or "—")
+            user_disp = escape(current_user.name or current_user.email or f"ID {current_user.id}")
+            contact_disp = escape(req.contact.strip() if req.contact else (current_user.email or "—"))
+            message_disp = escape(req.message.strip())
 
             tg_text = (
                 f"📩 <b>Новая Обратная Связь!</b>\n\n"
                 f"<b>Тип:</b> {category_icon}\n"
                 f"<b>От:</b> {user_disp}\n"
                 f"<b>Контакт:</b> <code>{contact_disp}</code>\n\n"
-                f"<b>Сообщение:</b>\n<i>{req.message.strip()}</i>"
+                f"<b>Сообщение:</b>\n<i>{message_disp}</i>"
             )
             async with httpx.AsyncClient(timeout=5.0) as client:
                 for aid in admin_ids:

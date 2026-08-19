@@ -48,6 +48,23 @@ def test_dashboard_uses_csp_safe_event_delegation() -> None:
     assert not (ROOT / "app/static/js/app.js").exists()
 
 
+def test_feedback_control_has_direct_binding_and_explicit_global_exports() -> None:
+    dashboard = (ROOT / "app/static/dashboard.html").read_text()
+
+    assert 'id="feedback-trigger"' in dashboard
+    assert "feedbackTrigger.addEventListener('click'" in dashboard
+    assert "window.openFeedbackModal = openFeedbackModal" in dashboard
+    assert "window.submitFeedback = submitFeedback" in dashboard
+    assert '/static/js/events.js?v=2.0.3' in dashboard
+
+
+def test_ops_scoring_alert_accepts_multi_country_payload() -> None:
+    dashboard = (ROOT / "app/static/dashboard.html").read_text()
+
+    assert "scoringQueue.country.toUpperCase()" not in dashboard
+    assert "const scoringCountryLabel = scoringCountries.join(', ').toUpperCase()" in dashboard
+
+
 def test_admin_profile_ui_uses_only_server_truncated_resume_preview() -> None:
     dashboard = (ROOT / "app/static/dashboard.html").read_text()
 
