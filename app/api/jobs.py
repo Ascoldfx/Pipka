@@ -16,9 +16,9 @@ from app.models.job import Job, JobScore
 from app.scoring.matcher import analyze_single_job
 from app.services.tracker_service import (
     check_auto_exclude_company,
-    hidden_application_equivalent_exists,
     mark_applied,
     mark_rejected,
+    rejected_job_identity_visible,
     save_job,
 )
 
@@ -155,7 +155,7 @@ async def get_jobs(
             # jobs remain reachable via the dedicated Rejected tab.
             filters.append(or_(Application.status.is_(None), Application.status != "rejected"))
         if user_id and is_default_feed:
-            filters.append(~hidden_application_equivalent_exists(user_id))
+            filters.append(rejected_job_identity_visible(user_id))
 
         if region == "saxony":
             filters.append(

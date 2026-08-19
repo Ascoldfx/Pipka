@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, tuple_
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, selectinload
@@ -20,38 +20,33 @@ VALID_STATUSES = ("saved", "applied", "interviewing", "offer", "rejected", "with
 AUTO_EXCLUDE_THRESHOLD = 5  # rejections from one company → auto-add to excluded_companies
 
 
-def hidden_application_equivalent_exists(user_id: int):
-    """Correlated EXISTS for a repost of an already actioned vacancy.
+def rejected_job_identity_visible(user_id: int):
+    """Predicate that keeps jobs not equivalent to a rejected posting.
 
-    A provider can change location/title metadata and create a new ``jobs``
-    row while keeping its external ID or exact URL.  The action still belongs
-    to that vacancy, so default feeds must hide the replacement row as well.
-    Deliberately do not match only title/company: that could suppress a real,
-    separate opening and lose an important target role.
+    The earlier correlated ``EXISTS`` was logically correct, but it ran the
+    rejected-applications lookup for every row in the default feed and hit
+    Postgres' 30-second statement timeout.  Two uncorrelated identity sets
+    are materialised once and used as hashable anti-filters instead.
     """
     hidden_app = aliased(Application)
     hidden_job = aliased(Job)
-    same_provider_id = and_(
-        Job.source == hidden_job.source,
-        Job.external_id == hidden_job.external_id,
-        Job.external_id.is_not(None),
-        Job.external_id != "",
+    rejected = (
+        select(hidden_job.source, hidden_job.external_id, hidden_job.url)
+        .join(hidden_app, hidden_job.id == hidden_app.job_id)
+        .where(hidden_app.user_id == user_id, hidden_app.status == "rejected")
+        .subquery()
     )
-    same_exact_url = and_(
-        Job.url == hidden_job.url,
-        Job.url.is_not(None),
-        Job.url != "",
+    provider_ids = select(rejected.c.source, rejected.c.external_id).where(
+        rejected.c.external_id.is_not(None), rejected.c.external_id != ""
     )
-    return (
-        select(hidden_app.id)
-        .join(hidden_job, hidden_job.id == hidden_app.job_id)
-        .where(
-            hidden_app.user_id == user_id,
-            hidden_app.status == "rejected",
-            or_(same_provider_id, same_exact_url),
-        )
-        .correlate(Job)
-        .exists()
+    urls = select(rejected.c.url).where(rejected.c.url.is_not(None), rejected.c.url != "")
+    return and_(
+        or_(
+            Job.external_id.is_(None),
+            Job.external_id == "",
+            ~tuple_(Job.source, Job.external_id).in_(provider_ids),
+        ),
+        or_(Job.url.is_(None), Job.url == "", ~Job.url.in_(urls)),
     )
 
 

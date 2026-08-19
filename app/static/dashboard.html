@@ -1591,6 +1591,13 @@ if (feedbackTrigger) feedbackTrigger.addEventListener('click', event => {
   event.stopPropagation();
   openFeedbackModal();
 });
+document.querySelectorAll('[data-action="close-feedback"]').forEach(button => {
+  button.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeFeedbackModal();
+  });
+});
 
 async function completeOnboarding() {
   const m = $('modal-onboarding');

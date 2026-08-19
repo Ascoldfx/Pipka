@@ -53,6 +53,7 @@ def test_feedback_control_has_direct_binding_and_explicit_global_exports() -> No
 
     assert 'id="feedback-trigger"' in dashboard
     assert "feedbackTrigger.addEventListener('click'" in dashboard
+    assert "[data-action=\"close-feedback\"]" in dashboard
     assert "window.openFeedbackModal = openFeedbackModal" in dashboard
     assert "window.submitFeedback = submitFeedback" in dashboard
     assert '/static/js/events.js?v=2.0.3' in dashboard
