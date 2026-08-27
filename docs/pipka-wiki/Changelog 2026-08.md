@@ -2,6 +2,12 @@
 
 # Changelog — август 2026
 
+## 27 август — freshness-first очереди
+
+- Парсер упорядочивает прошедшие фильтр вакансии от новых к старым ещё до upsert; DB-result имеет детерминированные fallback по `scraped_at` и `id`.
+- NVIDIA embeddings и режим NVIDIA recheck берут вакансии от самых свежих `posted_at`/времени сбора. Исторический backlog не вытесняет новые поступления.
+- Внутри каждого target-role bucket свежесть является первым критерием. Между bucket новые целевые роли по-прежнему превыше уже обработанных.
+
 ## 8 августа — production guards для платежей, CSP и semantic index
 
 - `app/api/billing.py` и `app/services/billing_service.py`: live checkout и webhook теперь fail-closed без обоих Cryptomus credentials; test fulfilment доступен только в явном локальном sandbox-режиме без live credentials. Сравнение webhook-signature выполняется constant-time, а зачисление кредита блокирует строку транзакции и проверяет provider transaction ID.

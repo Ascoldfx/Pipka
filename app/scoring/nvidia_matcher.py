@@ -17,7 +17,7 @@ import time
 from datetime import datetime, timedelta
 
 import httpx
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import (
@@ -337,6 +337,11 @@ async def idle_rescore_for_user(
             JobScore.ai_analysis.is_(None),
             Job.country.in_(countries),
             Job.scraped_at >= age_cutoff,
+        )
+        .order_by(
+            func.coalesce(Job.posted_at, Job.scraped_at).desc().nulls_last(),
+            Job.scraped_at.desc().nulls_last(),
+            Job.id.desc(),
         )
         .limit(budget)
     )

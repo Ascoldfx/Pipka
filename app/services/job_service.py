@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,11 @@ from app.sources.aggregator import JobAggregator
 from app.sources.base import SearchParams
 
 logger = logging.getLogger(__name__)
+
+
+def _freshness_key(job: Job) -> tuple[datetime, int]:
+    """Newest posting first, with collection time and ID as stable fallbacks."""
+    return (job.posted_at or job.scraped_at or datetime.min, job.id or 0)
 
 
 async def search_and_score(
@@ -64,6 +70,12 @@ async def search_and_score(
             (seen_high if is_seen else new_high).append(job)
         elif bucket == "medium":
             (seen_medium if is_seen else new_medium).append(job)
+
+    # Target-role buckets remain deliberate, but every bucket is newest first.
+    # A provider's response order must never push fresh roles behind its own
+    # older page of results.
+    for bucket in (new_high, new_medium, seen_high, seen_medium):
+        bucket.sort(key=_freshness_key, reverse=True)
 
     # Prioritize: new high → new medium → seen high → seen medium
     candidates = new_high + new_medium + seen_high + seen_medium

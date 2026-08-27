@@ -250,7 +250,14 @@ async def _index_jobs(
                 cutoff, countries=scope.countries, user_ids=scope.user_ids
             )
         )
-        .order_by(posted_or_scraped.desc())
+        # Embeddings are a queue, not an archive task: today's vacancies must
+        # be searchable before an older backlog.  Keep a deterministic order
+        # when a board gives several jobs the same publication timestamp.
+        .order_by(
+            posted_or_scraped.desc().nulls_last(),
+            Job.scraped_at.desc().nulls_last(),
+            Job.id.desc(),
+        )
         .limit(settings.embedding_jobs_per_run)
     )
     jobs = list(result.scalars())

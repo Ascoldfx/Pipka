@@ -203,8 +203,8 @@ class JobAggregator:
         timeout = self.SOURCE_TIMEOUT_OVERRIDES.get(source.source_name, self.SOURCE_TIMEOUT)
         try:
             return await asyncio.wait_for(source.search(params), timeout=timeout)
-        except asyncio.TimeoutError:
-            raise asyncio.TimeoutError(
+        except TimeoutError:
+            raise TimeoutError(
                 f"{source.source_name} timed out after {timeout}s"
             )
 
@@ -306,6 +306,11 @@ class JobAggregator:
             if job.location and not any(m in (job.location or "").lower() for m in DACH_MARKERS):
                 logger.debug("Location passed (no DACH marker): '%s' — %s @ %s", job.location, job.title, job.company_name)
 
+        # Preserve freshness from the moment a provider response enters the
+        # pipeline.  This ordering feeds the immediate AI scorer and avoids a
+        # source returning an older page ahead of a newer posting.
+        filtered.sort(key=lambda job: job.posted_at or datetime.min, reverse=True)
+
         logger.info(
             "After filter: %d jobs (rejected: %d negative/german, %d old, %d wrong location)",
             len(filtered), rejected_negative, rejected_old, rejected_location,
@@ -403,7 +408,10 @@ class JobAggregator:
             if r.dedup_hash in existing_by_hash
         ]
         # Sort: newest first
-        db_jobs.sort(key=lambda j: j.posted_at or datetime.min, reverse=True)
+        db_jobs.sort(
+            key=lambda job: (job.posted_at or job.scraped_at or datetime.min, job.id or 0),
+            reverse=True,
+        )
         return db_jobs
 
 
