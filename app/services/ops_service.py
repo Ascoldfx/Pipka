@@ -14,6 +14,7 @@ from app.models.job import Job, JobScore
 from app.models.ops_event import OpsEvent
 from app.models.user import User, UserProfile
 from app.scoring.profile_hash import compute_profile_hash, valid_score_model_versions
+from app.security_probes import KNOWN_SECURITY_PROBE_PATHS
 from app.services.embedding_service import job_index_filters
 from app.services.user_scope_service import active_target_scope, profile_target_countries
 
@@ -271,7 +272,15 @@ async def build_ops_overview(
     ).scalar() or 0
 
     event_rows = await session.execute(
-        select(OpsEvent).order_by(OpsEvent.created_at.desc()).limit(12)
+        select(OpsEvent)
+        .where(
+            or_(
+                OpsEvent.event_type != "api_error",
+                OpsEvent.source.not_in(KNOWN_SECURITY_PROBE_PATHS),
+            )
+        )
+        .order_by(OpsEvent.created_at.desc())
+        .limit(12)
     )
     recent_events = list(event_rows.scalars())
 

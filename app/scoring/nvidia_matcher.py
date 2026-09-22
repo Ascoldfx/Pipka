@@ -54,6 +54,20 @@ def _nvidia_batch_size() -> int:
     )
 
 
+def _nvidia_generation_options() -> dict[str, object]:
+    """Return bounded generation settings for the configured hosted model."""
+
+    options: dict[str, object] = {
+        "max_tokens": settings.nvidia_scoring_max_tokens,
+        "temperature": 0.3,
+        "top_p": 0.95,
+        "stream": False,
+    }
+    if settings.nvidia_model == "openai/gpt-oss-20b":
+        options["reasoning_effort"] = settings.nvidia_scoring_reasoning_effort
+    return options
+
+
 async def _pace() -> None:
     global _last_call_monotonic
     async with _pacer_lock:
@@ -99,10 +113,7 @@ async def _call_nvidia(prompt: str, batch_size: int) -> str | None:
     payload = {
         "model": settings.nvidia_model,
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 8000,
-        "temperature": 0.3,
-        "top_p": 0.95,
-        "stream": False,
+        **_nvidia_generation_options(),
     }
 
     async def _once() -> str | None:
@@ -117,7 +128,8 @@ async def _call_nvidia(prompt: str, batch_size: int) -> str | None:
                 # so the batch is skipped cleanly rather than crashing downstream.
                 return data["choices"][0]["message"].get("content")
 
-    # llama-3.3-70b-instruct typically responds in ~30s for a batch of 8.
+    # GPT-OSS 20B with low reasoning typically responds in under a minute for
+    # a batch of four vacancies.
     # Retries handle transient ReadTimeouts (cold starts). Per-attempt noise is
     # logged at DEBUG; one WARNING summarises an exhausted batch below. 429s go
     # to OpsEvent because they're rare and quota-meaningful.

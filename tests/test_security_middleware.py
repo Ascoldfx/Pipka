@@ -1,8 +1,10 @@
 import re
+from unittest.mock import AsyncMock
 
 from fastapi.testclient import TestClient
 
 from app.main import _scrub, app
+from app.security_probes import is_known_security_probe
 
 
 def test_api_schema_is_not_public_by_default() -> None:
@@ -58,6 +60,38 @@ def test_security_headers_cover_csrf_rejections() -> None:
     assert response.status_code == 403
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["cache-control"] == "no-store, no-cache, must-revalidate, max-age=0"
+
+
+def test_known_framework_probes_are_distinct_from_real_api_errors() -> None:
+    assert is_known_security_probe("/api/templates/preview", "POST", 403)
+    assert is_known_security_probe("/api/graphql", "POST", 404)
+    assert not is_known_security_probe("/api/profile", "POST", 403)
+    assert not is_known_security_probe("/api/templates/preview", "GET", 403)
+    assert not is_known_security_probe("/api/templates/preview", "POST", 500)
+
+
+def test_known_probe_is_rejected_without_creating_ops_error(monkeypatch) -> None:
+    recorder = AsyncMock()
+    monkeypatch.setattr("app.main.record_ops_event", recorder)
+    client = TestClient(app, base_url="https://localhost")
+    client.get("/api/me")
+
+    response = client.post("/api/templates/preview")
+
+    assert response.status_code == 403
+    recorder.assert_not_awaited()
+
+
+def test_real_api_csrf_error_is_still_recorded(monkeypatch) -> None:
+    recorder = AsyncMock()
+    monkeypatch.setattr("app.main.record_ops_event", recorder)
+    client = TestClient(app, base_url="https://localhost")
+    client.get("/api/me")
+
+    response = client.post("/api/profile")
+
+    assert response.status_code == 403
+    recorder.assert_awaited_once()
 
 
 def test_html_pages_nonce_only_their_known_inline_scripts() -> None:

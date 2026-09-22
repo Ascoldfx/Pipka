@@ -27,6 +27,7 @@ from app.api.stats import router as stats_router
 from app.config import settings
 from app.database import init_db
 from app.security_headers import content_security_policy
+from app.security_probes import is_known_security_probe
 from app.services.ops_service import record_ops_event
 
 _access_log = logging.getLogger("pipka.access")
@@ -340,7 +341,12 @@ class NoCacheAPIMiddleware(BaseHTTPMiddleware):
             if response.status_code >= 400 and path.startswith("/api"):
                 # Skip GET 404 — scanner probes (/api/.env, /api/config…), not our errors
                 is_probe = response.status_code == 404 and request.method == "GET"
-                if not is_probe:
+                is_security_probe = is_known_security_probe(
+                    path,
+                    request.method,
+                    response.status_code,
+                )
+                if not is_probe and not is_security_probe:
                     await record_ops_event(
                         "api_error",
                         "error" if response.status_code >= 500 else "warn",

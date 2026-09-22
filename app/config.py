@@ -26,18 +26,19 @@ class Settings(BaseSettings):
     # optional idle rescorer is a separate, lower-priority maintenance job.
     nvidia_idle_rescore_enabled: bool = False
     nvidia_api_key: str = ""
-    # google/gemma-4-31b-it was decommissioned from NVIDIA Build (404 / hangs).
-    # llama-3.3-70b-instruct is live, free, non-reasoning, fast (~30s/8 jobs) and
-    # returns clean JSON. (Avoid nemotron reasoning models here: they blow past
-    # the 120s timeout on the strict multi-job scoring prompt.)
-    nvidia_model: str = "meta/llama-3.3-70b-instruct"
+    # Hosted catalog models are retired periodically. llama-3.3-70b-instruct
+    # began returning HTTP 410 in production in September 2026. GPT-OSS 20B
+    # is the currently verified structured-output fallback.
+    nvidia_model: str = "openai/gpt-oss-20b"
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
     nvidia_batch_delay: float = 2.0      # seconds between batches (conservative)
-    # Chat scoring is materially slower than Gemini. Eight jobs fit the free
-    # endpoint reliably; larger batches have repeatedly timed out in production.
-    nvidia_scoring_batch_size: int = 8
-    nvidia_scoring_timeout_seconds: float = 90.0
+    # Chat scoring is materially slower than Gemini. Four jobs with low
+    # reasoning fit the hosted endpoint reliably; larger batches time out.
+    nvidia_scoring_batch_size: int = 4
+    nvidia_scoring_timeout_seconds: float = 120.0
     nvidia_scoring_max_attempts: int = 2
+    nvidia_scoring_max_tokens: int = 1536
+    nvidia_scoring_reasoning_effort: str = "low"
     nvidia_max_per_run: int = 300        # hard cap per scheduler tick
     nvidia_country: str = "de"           # ISO country filter for idle rescore
     nvidia_rescore_stale_days: int = 7   # refresh successful scores older than N days
