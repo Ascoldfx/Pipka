@@ -48,7 +48,9 @@ Callback отклоняет identity без `sub`, email или без буле�
    - email есть в `ADMIN_EMAILS` (первичное создание владельца).
 5. Роль нового пользователя: `admin` для `ADMIN_EMAILS`, иначе `user`.
 
-Public registration по умолчанию закрыта. Telegram следует той же политике: существующий active user проходит, новый Telegram ID должен быть в `ALLOWED_TELEGRAM_IDS` либо `ALLOW_PUBLIC_REGISTRATION=true`. Перед любым Telegram handler выполняется общий access guard, поэтому inactive user не может обойти revoke через pagination/cached callbacks.
+Кодовый default `ALLOW_PUBLIC_REGISTRATION=true`. В production переменная не задана, поэтому public registration фактически включена; `ALLOWED_USER_EMAILS` и `ALLOWED_TELEGRAM_IDS` также не заданы. Если регистрацию требуется закрыть, явно установить `ALLOW_PUBLIC_REGISTRATION=false` и поддерживать allowlist. Telegram следует той же политике: существующий active user проходит, новый Telegram ID должен быть в `ALLOWED_TELEGRAM_IDS` либо public registration должна быть включена. Перед любым Telegram handler выполняется общий access guard.
+
+Production environment содержит `DASHBOARD_USERNAME/PASSWORD` и `GUEST_USERNAME/PASSWORD`, но текущий app-код их не использует; в проверенных nginx configs `auth_basic` не найден. Не считать эти значения действующим auth барьером. См. [[Текущее состояние и доступы]].
 
 ## Сессия
 
@@ -61,7 +63,7 @@ Public registration по умолчанию закрыта. Telegram следу�
 | `https_only` | `True` |
 | Тип | подписанный JWT-like (itsdangerous) |
 
-В session кладутся: `user_id`, `user_email`, `user_name`, `user_avatar`, `user_role`, `csrf_token` (см. [[Безопасность#csrf]]).
+В session кладутся: `user_id`, `user_email`, `user_name`, `user_avatar`, `user_role`, `csrf_token` (см. [[Безопасность]]).
 
 ## Хелперы (доступ к user/role)
 
@@ -77,7 +79,7 @@ Public registration по умолчанию закрыта. Telegram следу�
 
 ## Гостевой режим
 
-Без логина (`user_id` не в сессии) — `/api/me` возвращает `{authenticated: false, role: "guest"}`. Frontend (см. [[API#jobs]]) показывает кнопку "Sign in with Google", скрывает Inbox/Applied/Settings, выставляет `min_score=0`. Можно листать всю агрегированную базу вакансий read-only.
+Без логина (`user_id` не в сессии) — `/api/me` возвращает `{authenticated: false, role: "guest"}`. Frontend (см. [[API]]) показывает кнопку "Sign in with Google", скрывает Inbox/Applied/Settings, выставляет `min_score=0`. Можно листать всю агрегированную базу вакансий read-only.
 
 ## Logout
 
@@ -85,9 +87,9 @@ Public registration по умолчанию закрыта. Telegram следу�
 
 ## Safety / связи
 
-- CSRF на POST/PUT/PATCH/DELETE — см. [[Безопасность#csrf]].
+- CSRF на POST/PUT/PATCH/DELETE — см. [[Безопасность]].
 - `admin_emails` — единственный механизм назначения роли admin при первом логине. После логина роль хранится в БД; изменение env не понизит уже-admin'а до user.
 - `is_active=false` блокирует и Google login, и все Telegram updates.
 - Сессия не привязывается к IP, поэтому работает из мобильного приложения / разных устройств. Подмена cookie невозможна без `SESSION_SECRET`.
 
-→ [[API#auth]] → [[Безопасность]] → [[Настройки#google-oauth]]
+→ [[API]] → [[Безопасность]] → [[Настройки#Google OAuth]]

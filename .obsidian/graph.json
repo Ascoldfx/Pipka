@@ -8,14 +8,14 @@
   "collapse-color-groups": false,
   "colorGroups": [
     {
-      "query": "tag:#api OR tag:#auth OR tag:#security OR tag:#ratelimit OR tag:#frontend OR tag:#ui",
+      "query": "tag:#api OR tag:#auth OR tag:#security OR tag:#ratelimit OR tag:#frontend OR tag:#ui OR tag:#feedback OR tag:#resume",
       "color": {
         "a": 1,
         "rgb": 5212927
       }
     },
     {
-      "query": "tag:#service OR tag:#tracker OR tag:#bot OR tag:#watchlist",
+      "query": "tag:#service OR tag:#tracker OR tag:#bot OR tag:#watchlist OR tag:#billing",
       "color": {
         "a": 1,
         "rgb": 5294200
@@ -43,7 +43,7 @@
       }
     },
     {
-      "query": "tag:#config OR tag:#tests OR tag:#changelog OR tag:#roadmap OR tag:#database",
+      "query": "tag:#config OR tag:#tests OR tag:#changelog OR tag:#roadmap OR tag:#database OR tag:#index",
       "color": {
         "a": 1,
         "rgb": 5294335
@@ -60,6 +60,6 @@
   "repelStrength": 10,
   "linkStrength": 1,
   "linkDistance": 250,
-  "scale": 1,
+  "scale": 1.4081592126251037,
   "close": true
 }

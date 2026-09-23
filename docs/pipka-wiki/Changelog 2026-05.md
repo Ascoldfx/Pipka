@@ -83,7 +83,7 @@ Wired: `admin.py`, `scan.py`, `ops.py`.
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()`
 
-Mounted innermost — заголовки попадают на все ответы включая `/static/*`. См. [[Безопасность#day-1-фиксы-перед-prod-релизом]].
+Mounted innermost — заголовки попадают на все ответы включая `/static/*`. См. [[Безопасность]].
 
 **4. Resume upload OOM.** Был `content = await file.read()` — буферилось ВСЁ тело до проверки 10MB. Атакующий шлёт 1GB → OOM контейнера. Теперь:
 
@@ -112,7 +112,7 @@ content-security-policy: default-src 'self'; ...
 - Day-2 (high): TrustedHostMiddleware, global per-IP rate-limit, `?search=` length cap, profile-list size limits, Sentry PII filter.
 - Day-3 (medium): jsq → htmlEscape combo, PDF/DOCX parse timeout, Telegram Forbidden auto-deactivate, ON DELETE CASCADE на FK, validate job_id existence в actions.
 
-См. [[Roadmap#day-1-security-hardening]] и [[Безопасность#day-1-фиксы-перед-prod-релизом]].
+См. [[Roadmap]] и [[Безопасность]].
 
 ---
 
@@ -162,7 +162,7 @@ Client IP резолвится через цепочку: `CF-Connecting-IP` →
 
 Recursive walk с depth-limit 6. Список PII-ключей в `_SENTRY_PII_KEYS` frozenset'е.
 
-См. [[Безопасность#day-2-фиксы]], [[Rate limiting#per-ip-middleware]].
+См. [[Безопасность]], [[Rate limiting]].
 
 ## 27 мая 2026
 
@@ -176,7 +176,7 @@ Recursive walk с depth-limit 6. Список PII-ключей в `_SENTRY_PII_K
 - `app/static/dashboard.html` + `js/app.js` — убраны UI-поля и i18n-ключи (EN/RU/DE/ES).
 - Колонки БД (`min_salary`, `languages`, `experience_years`) остаются orphaned (без миграции на удаление).
 
-См. [[Настройки#настройки-профиля-пользователя-ui]], [[API#профиль]].
+См. [[Настройки#Настройки профиля пользователя (UI)]], [[API]].
 
 ### Тоглы источников: LinkedIn + Arbeitsagentur off
 
@@ -202,7 +202,7 @@ Recursive walk с depth-limit 6. Список PII-ключей в `_SENTRY_PII_K
 
 - `app/scoring/gemini_matcher.py` — `reraise=False` + defence-in-depth в `except Exception` (вызов `_record_exhaust` если `_is_retryable`).
 
-См. [[Скоринг#circuit-breaker]].
+См. [[Скоринг]].
 
 ### Ускорение скоринга: батч 8 → 15
 
@@ -212,7 +212,7 @@ Recursive walk с depth-limit 6. Список PII-ключей в `_SENTRY_PII_K
 - `CLAUDE_SCORING_MAX_TOKENS` 5000 → 8000 — запас под больший батч (Claude — fallback-путь).
 - NVIDIA (`max_tokens=8000`) и Gemini (дефолт 8192) уже вмещают 15. Авто-починка обрезанного JSON gracefully отбрасывает хвост при переполнении.
 
-См. [[Настройки#скоринг-scoring]], [[Скоринг]].
+См. [[Настройки]], [[Скоринг]].
 
 ### Очередь застряла: мёртвый NVIDIA-fallback (decommissioned model)
 
@@ -224,7 +224,7 @@ Recursive walk с depth-limit 6. Список PII-ключей в `_SENTRY_PII_K
 
 **Архитектурный вывод:** backfill выбирает скорер один раз за прогон (раз в 2ч). Когда Gemini исчерпан, единственный фолбэк — NVIDIA; если он мёртв, очередь стоит до следующего тика без сигнала. → реализовано NVIDIA-first (ниже).
 
-См. [[Настройки#nvidia-build-idle-rescorer-для-de]], [[Скоринг]].
+См. [[Настройки]], [[Скоринг]].
 
 ### Backfill стал NVIDIA-first + ротация NVIDIA-ключа
 
@@ -235,7 +235,7 @@ Recursive walk с depth-limit 6. Список PII-ключей в `_SENTRY_PII_K
 - Второй Gemini-ключ НЕ добавлен: лимиты free-tier считаются на проект, а доступный ключ — из того же проекта (квоту не удвоит).
 - 🚩 Замечен рост `404 NotFound` на Gemini-дашборде — возможный признак депрекейта `gemini-3.1-flash-lite-preview`. Под наблюдением (real-time push path).
 
-См. [[Скоринг#текущий-backend]], [[Настройки#nvidia-build-idle-rescorer-для-de]].
+См. [[Скоринг]], [[Настройки]].
 
 ---
 

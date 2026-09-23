@@ -7,13 +7,13 @@ SSH ключ: `~/.ssh/id_ed25519`.
 
 ## Структура
 - `app/` — основной код
-  - `api/` — FastAPI роутеры (auth, dashboard, jobs, tracker)
+  - `api/` — 11 FastAPI роутеров (auth, health, pages, jobs, stats, profile, scan, ops, admin, billing, feedback)
   - `bot/` — Telegram бот (handlers, keyboards, formatters)
-  - `models/` — SQLAlchemy модели (User, UserProfile, Job, JobScore, Application, OpsEvent)
+  - `models/` — SQLAlchemy модели (User, UserProfile, PaymentTransaction, UserFeedback, Job, JobScore, Application, ApplicationHistory, SearchSubscription, OpsEvent)
   - `schemas/` — Pydantic-схемы
-  - `scoring/` — `rules.py` (pre_filter) + `matcher.py` (Claude/fallback) + `gemini_matcher.py` (Gemini) + `gemini_client.py` (Google GenAI SDK)
-  - `sources/` — Adzuna, JobSpy, Arbeitnow, Remotive, Arbeitsagentur, Xing, BerlinStartupJobs, WTTJ, Jooble + aggregator
-  - `services/` — scheduler, user_service, tracker_service, ops_service, backup_service, job_service
+  - `scoring/` — `rules.py` (pre_filter) + `matcher.py` (промпт + маршрутизатор) + `gemini_matcher.py` (Gemini) + `gemini_client.py` (Google GenAI SDK) + `nvidia_matcher.py` (NVIDIA fallback) + `nvidia_embedding_client.py` + `profile_hash.py`
+  - `sources/` — Adzuna, JobSpy, Arbeitnow, Remotive, Arbeitsagentur, Xing, BerlinStartupJobs, WTTJ, Jooble, BuiltIn, Gupy + Watchlist + aggregator
+  - `services/` — scheduler, user_scope_service (мульти-юзер очереди), billing_service, embedding_service, resume_parser, url_checker, user_service, tracker_service, ops_service, backup_service, job_service
   - `static/` — dashboard.html, infographic.html, js/security.js, js/events.js, css/styles.css
 - `alembic/` — миграции (единственный способ менять схему БД)
 - `docs/pipka-wiki/` — Obsidian wiki (хранится **в репозитории**)
@@ -38,9 +38,10 @@ cd /opt/pipka && sudo git pull && sudo docker compose up -d --build
 - Запрещено добавлять soft-миграции (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`) в `app/database.py` или куда-либо ещё в рантайме.
 
 ## Скоринг — текущий backend
-- **Реальное время** (`_score_and_notify` → Telegram push): Gemini `gemini-3.5-flash-lite`, если задан `GEMINI_API_KEY`; иначе Claude.
-- **Backfill** (APScheduler, каждые 2ч): Gemini `gemini-3.5-flash-lite` → NVIDIA при открытом breaker → Claude.
-- **Детальный анализ** (`analyze_single_job`, кнопка «AI-анализ»): Gemini `gemini-3.6-flash`, если задан ключ; иначе Claude.
+- **Реальное время** (`_score_and_notify` → Telegram push): Gemini `gemini-3.6-flash` (лимит `GEMINI_DAILY_REQUEST_LIMIT=20`/сутки); при breaker/исчерпании квоты → NVIDIA `poolside/laguna-xs-2.1` (streaming, по 1 вакансии). Списывает 1 кредит за AI-оценку (админы бесплатно).
+- **Backfill** (APScheduler, каждые 2ч): Gemini `gemini-3.6-flash` → NVIDIA при открытом breaker. Пользователи обходятся round-robin. Claude полностью удалён из кода 07.08.2026.
+- **Детальный анализ** (`analyze_single_job`, кнопка «AI-анализ»): Gemini `gemini-3.6-flash` только при `GEMINI_DETAILED_ANALYSIS_ENABLED=true` (по умолчанию выключено ради квоты); иначе NVIDIA.
+- **Embeddings:** NVIDIA `nvidia/nemotron-3-embed-1b`, 2048-мерные, pgvector.
 - Google SDK: только `google-genai`; legacy `google-generativeai` не использовать.
 
 Источник истины по скорингу: [[docs/pipka-wiki/Скоринг.md]].

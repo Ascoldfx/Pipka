@@ -2,55 +2,6 @@
 
 # Changelog июль 2026
 
-## 31 июля 2026 — оценённые вакансии: новые публикации первыми
-
-- Дефолт списка изменён с `score desc` на `posted_at desc`; высокая старая
-  оценка больше не поднимается выше новой публикации.
-- Для одинаковых/отсутствующих дат добавлены стабильные tie-breaker'ы
-  `scraped_at` и `id`; ручной `sort=score` сохранён.
-- Даты с timezone нормализуются в UTC-naive до bulk insert, чтобы отдельная
-  запись Jooble/JobSpy не могла уронить весь background scan.
-- Добавлены регрессии порядка выдачи и нормализации дат.
-
-## 29 июля 2026 — массовый скоринг снова Gemini-first
-
-- Production-аудит за 24 часа: NVIDIA исчерпал все повторы в 105 пакетах
-  (`503`/`ReadTimeout`), тогда как Gemini 3.5 Flash Lite имел свободную
-  квоту.
-- Backfill переключён на цепочку Gemini 3.5 Flash Lite → NVIDIA при открытом
-  Gemini breaker → Claude.
-- 30-минутный NVIDIA idle-rescore стал opt-in и по умолчанию выключен;
-  fallback остаётся активным при наличии `NVIDIA_API_KEY`.
-- Добавлены регрессионные тесты приоритета и fallback.
-
-## 28 июля 2026 — история SMM-инфографики
-
-- `/api/public/stats` отдаёт два сопоставимых среза: последние 30 дней и всё
-  время — jobs, pre-filter, AI analyses, top matches и число источников.
-- `/infographic` показывает оба периода одновременно в screenshot-friendly
-  композиции; сохранены desktop и mobile layouts.
-- Flat-поля public stats оставлены для обратной совместимости.
-
-## 28 июля 2026 — Brazil country pack + официальный Gupy feed
-
-- Добавлена Бразилия (`br`) в UI активных/скрытых стран, JobSpy/Indeed и
-  Jooble; Adzuna BR теперь сохраняет зарплату в BRL.
-- Геофильтр знает Brazil/Бразилию и основные business hubs; São Paulo
-  разрешён только при opt-in BR.
-- Страновые поисковые алиасы находят португальские executive titles без
-  дублирования переводов в профиле пользователя.
-- Скоринг распознаёт португальские senior/domain/junior/commercial термины.
-  Португальский текст разрешён, но явное fluent/native/advanced requirement
-  отклоняется.
-- Добавлен `GupyFeedSource` для официального job-board partner JSON feed.
-  Без `GUPY_FEED_URL` источник остаётся выключенным.
-- `hidden_countries` теперь подавляет не только дефолтную веб-ленту, но и
-  Telegram push; сбор и скоринг скрытых стран продолжаются.
-- По результатам первого live-скана расширен ранний PT-BR noise-фильтр:
-  estágio/auxiliar/operador/recepcionista/supervisor/jr и
-  executivo de negócios/gerente comercial/key account больше не расходуют
-  AI-скоринг.
-
 ## 4 июля 2026
 
 ### «Отклонённые вакансии возвращаются» — скрыты из дефолтного списка
@@ -84,7 +35,7 @@
 - `app/sources/jobspy_source.py` — ротация окна по 3ч-слоту (`hour // 3`): за 8 сканов/сутки все титулы проходят через Indeed ≥2 раза.
 - `app/sources/jooble.py` — ищет топ-8 титулов профиля; `JOOBLE_QUERIES` остался фолбэком при пустом профиле.
 
-См. [[Источники вакансий#покрытие-запросов-04072026]], [[Сервисы#scheduler]].
+См. [[Источники вакансий#Покрытие запросов (04.07.2026)]], [[Сервисы#scheduler]].
 
 ## 10 июля 2026
 
@@ -107,7 +58,7 @@
 - `app/sources/watchlist.py` — сканер компаний бил Adzuna по всем странам профиля без белого списка → 404 на каждую компанию × ae/id каждые 6ч. Теперь фильтр по `ADZUNA_SUPPORTED`.
 - `app/services/scheduler_service.py` — `_semantic_skip_filter` проверял только наличие embedding профиля, но не свежесть: устаревший вектор (страны сменились, embed_index ещё не пере-индексировал) мог зря обнулять вакансии новых регионов. Теперь требуется `embedding_profile_hash = текущий profile_hash`, иначе всё идёт в AI без skip.
 
-См. [[Источники вакансий#регионы-за-пределами-европы-gulf--океания--юва--10072026]].
+См. [[Источники вакансий]].
 
 ## 26 июля 2026
 
@@ -208,6 +159,55 @@
 - `Business Development Manager` явно отнесён к коммерческой функции.
 
 Версия правил поднята до `2026-07-27.2`; Gulf-score от предыдущего hash переносится только для вакансий, которые проходят новые правила.
+
+## 28 июля 2026 — история SMM-инфографики
+
+- `/api/public/stats` отдаёт два сопоставимых среза: последние 30 дней и всё
+  время — jobs, pre-filter, AI analyses, top matches и число источников.
+- `/infographic` показывает оба периода одновременно в screenshot-friendly
+  композиции; сохранены desktop и mobile layouts.
+- Flat-поля public stats оставлены для обратной совместимости.
+
+## 28 июля 2026 — Brazil country pack + официальный Gupy feed
+
+- Добавлена Бразилия (`br`) в UI активных/скрытых стран, JobSpy/Indeed и
+  Jooble; Adzuna BR теперь сохраняет зарплату в BRL.
+- Геофильтр знает Brazil/Бразилию и основные business hubs; São Paulo
+  разрешён только при opt-in BR.
+- Страновые поисковые алиасы находят португальские executive titles без
+  дублирования переводов в профиле пользователя.
+- Скоринг распознаёт португальские senior/domain/junior/commercial термины.
+  Португальский текст разрешён, но явное fluent/native/advanced requirement
+  отклоняется.
+- Добавлен `GupyFeedSource` для официального job-board partner JSON feed.
+  Без `GUPY_FEED_URL` источник остаётся выключенным.
+- `hidden_countries` теперь подавляет не только дефолтную веб-ленту, но и
+  Telegram push; сбор и скоринг скрытых стран продолжаются.
+- По результатам первого live-скана расширен ранний PT-BR noise-фильтр:
+  estágio/auxiliar/operador/recepcionista/supervisor/jr и
+  executivo de negócios/gerente comercial/key account больше не расходуют
+  AI-скоринг.
+
+## 29 июля 2026 — массовый скоринг снова Gemini-first
+
+- Production-аудит за 24 часа: NVIDIA исчерпал все повторы в 105 пакетах
+  (`503`/`ReadTimeout`), тогда как Gemini 3.5 Flash Lite имел свободную
+  квоту.
+- Backfill переключён на цепочку Gemini 3.5 Flash Lite → NVIDIA при открытом
+  Gemini breaker → Claude.
+- 30-минутный NVIDIA idle-rescore стал opt-in и по умолчанию выключен;
+  fallback остаётся активным при наличии `NVIDIA_API_KEY`.
+- Добавлены регрессионные тесты приоритета и fallback.
+
+## 31 июля 2026 — оценённые вакансии: новые публикации первыми
+
+- Дефолт списка изменён с `score desc` на `posted_at desc`; высокая старая
+  оценка больше не поднимается выше новой публикации.
+- Для одинаковых/отсутствующих дат добавлены стабильные tie-breaker'ы
+  `scraped_at` и `id`; ручной `sort=score` сохранён.
+- Даты с timezone нормализуются в UTC-naive до bulk insert, чтобы отдельная
+  запись Jooble/JobSpy не могла уронить весь background scan.
+- Добавлены регрессии порядка выдачи и нормализации дат.
 
 ---
 

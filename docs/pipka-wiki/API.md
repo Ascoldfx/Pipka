@@ -2,7 +2,7 @@
 
 # API Endpoints
 
-Все эндпоинты на `https://pipka.net`. После рефакторинга `dashboard.py` (26.04.2026) разнесены по 8 файлам в `app/api/` (см. [[Архитектура]]). Один `APIRouter` на файл, все включаются в `app/main.py`.
+Все эндпоинты на `https://pipka.net`. После рефакторинга `dashboard.py` (26.04.2026) разнесены по файлам в `app/api/` — сейчас 11 роутеров, включая billing и feedback (см. [[Архитектура]]). Один `APIRouter` на файл, все включаются в `app/main.py`.
 
 ## Auth (`app/api/auth.py`)
 
@@ -47,7 +47,7 @@
 
 `search=…` на PostgreSQL использует tsvector + `websearch_to_tsquery`. На SQLite (dev) — fallback `ILIKE`.
 
-> **Значения `source`:** `adzuna`, `linkedin`, `indeed`, `glassdoor`, `arbeitnow`, `remotive`, `arbeitsagentur`, `xing`, `berlinstartupjobs`, `wttj`, `jooble`, `watchlist`
+> **Значения `source`:** `adzuna`, `linkedin`, `indeed`, `glassdoor`, `arbeitnow`, `remotive`, `arbeitsagentur`, `xing`, `berlinstartupjobs`, `wttj`, `jooble`, `builtin`, `gupy`, `watchlist`
 > **Значения `region`:** `saxony`, `germany`, `dach`, `europe`, `cee`
 > **Значения `sort`:** `score`, `date`, `salary`, `title`, `company`
 
@@ -56,9 +56,9 @@
 | Метод | Путь | Параметры | Описание |
 |-------|------|-----------|---------|
 | POST | `/api/jobs/{job_id}/action` | `action=save/applied/reject` | Действие через [[Трекер]] |
-| GET | `/api/jobs/{job_id}/analyze` | — | AI-анализ через Gemini/Claude. **Rate-limit: 30/час/user** ([[Rate limiting]]) |
+| GET | `/api/jobs/{job_id}/analyze` | — | Детальный AI-анализ через включённый scorer/fallback; Gemini detail выключен по умолчанию. **Rate-limit: 30/час/user** ([[Rate limiting]]) |
 
-POST требует CSRF-заголовок — [[Безопасность#3-csrf-double-submit]].
+POST требует CSRF-заголовок — [[Безопасность#3. CSRF (double-submit)]].
 
 ## Stats (`app/api/stats.py`)
 
@@ -79,7 +79,7 @@ POST требует CSRF-заголовок — [[Безопасность#3-csr
 |-------|------|---------|
 | GET | `/api/profile` | Профиль текущего пользователя |
 | POST | `/api/profile` | Сохранить профиль (Form data) |
-| POST | `/api/profile/resume` | Upload резюме (PDF/DOCX/TXT, ≤10 MB) |
+| POST | `/api/profile/resume` | Upload резюме (PDF/DOCX/TXT, ≤10 MB) — парсинг в изолированном процессе, см. [[Resume parsing]] |
 
 ### Поля POST /api/profile
 
@@ -91,7 +91,7 @@ excluded_keywords, excluded_companies, english_only (0/1), target_companies
 > `min_salary` удалён из API/модели/БД миграцией `0006_profile_feed_preferences`; зарплата вакансии хранится только как исходное отображаемое поле. `languages` / `experience_years` удалены из API и скоринга, их старые DB-колонки пока orphaned.
 > `excluded_keywords` — фразы в title/description; `excluded_companies` — только точные названия работодателей. Заглушки `nan/null/none/n/a/unknown` при сохранении отбрасываются.
 
-Валидация — [[Безопасность#4-input-validation]].
+Валидация — [[Безопасность#4. Input validation]].
 
 Изменение скоринг-релевантного профиля → новый `profile_hash` → постепенная пере-оценка stale-строк ([[Кэш и инвалидация]]). `hidden_countries` — presentation-only: не меняет hash, не инвалидирует embedding и не запускает пере-скоринг.
 
@@ -114,6 +114,17 @@ excluded_keywords, excluded_companies, english_only (0/1), target_companies
 `BILLING_TEST_MODE=true` без live credentials и в production недоступен (404).
 Все POST кроме webhook требуют CSRF-токен.
 
+Модель кредитов, списание и платёжный поток — [[Биллинг и кредиты]].
+
+## Feedback и онбординг (`app/api/feedback.py`)
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| POST | `/api/feedback` | Отзыв (`category`, `message` 5–4000, `contact`) → `user_feedbacks` + Telegram-уведомление на `ALLOWED_TELEGRAM_IDS` |
+| POST | `/api/onboarding/complete` | Выставить `users.onboarded = true` |
+
+Оба требуют сессию и CSRF. Подробнее — [[Онбординг и обратная связь]].
+
 ## Ops (`app/api/ops.py`)
 
 | Метод | Путь | Доступ | Описание |
@@ -134,7 +145,7 @@ excluded_keywords, excluded_companies, english_only (0/1), target_companies
 | GET | `/api/admin/user/{user_id}/profile` | Метаданные профиля + preview резюме до 1500 символов; полный `resume_text` не возвращается |
 | DELETE | `/api/admin/user/{user_id}` | Soft-delete (`is_active=False`); нельзя деактивировать себя или другого admin |
 
-Все требуют `require_admin_async` ([[Auth#хелперы]]). Успешные просмотры/деактивации и запрещённые admin attempts пишутся в `ops_events` как `admin_action`.
+Все требуют `require_admin_async` ([[Auth]]). Успешные просмотры/деактивации и запрещённые admin attempts пишутся в `ops_events` как `admin_action`.
 
 ## Health (`app/api/health.py`)
 
@@ -147,7 +158,7 @@ excluded_keywords, excluded_companies, english_only (0/1), target_companies
 
 ## CSRF на mutating запросах
 
-POST/PUT/PATCH/DELETE требуют заголовок `X-CSRF-Token`, равный `csrf_token` cookie. JS-обёртка fetch автоматически подмешивает (см. [[Безопасность#3-csrf-double-submit]]).
+POST/PUT/PATCH/DELETE требуют заголовок `X-CSRF-Token`, равный `csrf_token` cookie. JS-обёртка fetch автоматически подмешивает (см. [[Безопасность#3. CSRF (double-submit)]]).
 
 Исключения: `/auth/*` (Google callback), `/health`.
 
@@ -159,6 +170,6 @@ POST/PUT/PATCH/DELETE требуют заголовок `X-CSRF-Token`, равн
 - Скрыты Inbox, Applied, Rejected, Settings вкладки.
 - Нет кнопок действий.
 
-Подробнее — [[Auth#гостевой-режим]].
+Подробнее — [[Auth#Гостевой режим]].
 
 → [[Архитектура]] → [[Auth]] → [[База данных]] → [[Безопасность]] → [[Frontend]] → [[Поиск и индексация]] → [[Проверка ссылок]] → [[Настройки]]

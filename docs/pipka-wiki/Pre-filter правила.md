@@ -2,7 +2,7 @@
 
 # Pre-filter правила
 
-Файл: `app/scoring/rules.py`. Чисто-Python, без сетевых вызовов и без БД. Запускается в горячем пути `_score_and_notify` и `_backfill_score` ([[Сервисы#scheduler]]) ДО любого AI-обращения, чтобы не сжигать квоту Gemini/Claude/NVIDIA на заведомо нерелевантные вакансии.
+Файл: `app/scoring/rules.py`. Чисто-Python, без сетевых вызовов и без БД. Запускается в горячем пути `_score_and_notify` и `_backfill_score` ([[Сервисы#scheduler]]) ДО любого AI-обращения, чтобы не сжигать квоту Gemini/NVIDIA на заведомо нерелевантные вакансии.
 
 Возвращает `tuple[bool, str]`:
 - `True, "high"` — director/VP/head + domain match → AI-скоринг tier 1 ([[Скоринг]])
@@ -80,7 +80,7 @@ Crisis-related: `crisis management`, `turnaround`, `transformation`, `restructur
 
 ## Эволюция
 
-- **22 апреля 2026:** введён `manager_tier2` бакет — `plain manager + domain` теперь не reject, а откладывается на второй тур backfill'а ([[Changelog 2026-04#двухуровневый-скоринг]]).
+- **22 апреля 2026:** введён `manager_tier2` бакет — `plain manager + domain` теперь не reject, а откладывается на второй тур backfill'а ([[Changelog 2026-04]]).
 - **22 апреля 2026:** расширены `DIRECTOR_KEYWORDS` под Interim/Crisis/Turnaround/CRO/growth-роли.
 - **апрель 2026:** удалён salary-floor check.
 - **26 июля 2026:** зарплата полностью исключена и из AI-промптов/вердиктов: большинство источников её не отдаёт, поэтому сравнение было систематически неполным и несправедливым.

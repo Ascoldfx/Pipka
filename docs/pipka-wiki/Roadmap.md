@@ -8,21 +8,23 @@
 
 ### Performance
 - Bulk upsert в `JobAggregator.search` — 500+ N+1 SELECT'ов → 3 round-trip'а.
-- `pg_insert(...).on_conflict_do_update(...)` во всех JobScore writes (Gemini, Claude, NVIDIA, prefilter).
+- `pg_insert(...).on_conflict_do_update(...)` во всех JobScore writes (Gemini, NVIDIA, prefilter).
 - Индексы: `ix_jobs_scraped_at`, `ix_jobs_country_scraped`, `ix_job_scores_user_scored_at`, GIN `ix_jobs_merged_sources`.
 - JSON → JSONB для `jobs.raw_data` и `ops_events.payload`.
 - `statement_timeout=30s`, `lock_timeout=5s` на коннекте → защита от runaway queries.
 
 ### Security
-- [[Безопасность#3-csrf-double-submit|CSRF middleware]] (double-submit), `secrets.compare_digest`.
+- [[Безопасность#3. CSRF (double-submit)|CSRF middleware]] (double-submit), `secrets.compare_digest`.
 - Magic-bytes валидация на resume upload.
 - LIKE escape в search.
 - [[Rate limiting]] на `/api/jobs/{id}/analyze` (30/час/user).
 
 ### Reliability
-- Gemini circuit breaker — 3 подряд exhausted → отрубаем до полуночи UTC, fallback на NVIDIA для backfill (см. [[Скоринг#circuit-breaker]]).
-- NVIDIA Build как 3-й AI backend (`google/gemma-4-31b-it`), idle rescorer для DE.
-- [[Observability#3-sentry|Sentry SDK]] (опциональный, через `SENTRY_DSN`).
+- Gemini circuit breaker — 3 подряд exhausted → отрубаем до полуночи UTC, fallback на NVIDIA для backfill (см. [[Скоринг]]).
+- NVIDIA chat fallback со streaming по одной вакансии (`poolside/laguna-xs-2.1`); idle rescorer остаётся отдельным opt-in.
+- Multi-user job pipeline: поисковые планы строятся из `preferred_countries` и целевых ролей каждого активного пользователя; provider queries объединяются для общей дедупликации, scoring/backfill идут round-robin с приоритетом свежих вакансий.
+- Embedding index scope объединяет рынки всех активных пользователей; burst worker чаще индексирует очередь, если она выше порога.
+- [[Observability#3. Sentry|Sentry SDK]] (опциональный, через `SENTRY_DSN`).
 
 ### Schema-as-code
 - [[Миграции|Bootstrap Alembic]] — две миграции (`0001_baseline`, `0002_phase2_profile_hash`).
@@ -39,8 +41,8 @@
 
 ### Phase 3 — full-text search + embeddings
 - `jobs.search_vector` (generated tsvector + GIN). `?search=` через `websearch_to_tsquery('simple', term)`.
-- `pgvector` extension + `jobs.embedding vector(768)` + `user_profiles.embedding`. HNSW cosine indexes.
-- Gemini Embedding API для индексации (`embed_index` каждые 2ч, `embedding_jobs_per_run=70`, RPD-friendly).
+- `pgvector` extension + `jobs.embedding vector(2048)` + `user_profiles.embedding`; HNSW не используется из-за ограничения размерности, поиск — exact cosine.
+- NVIDIA Nemotron embeddings для индексации (`embed_index` каждые 2ч, до 70 вакансий; burst каждые 30 мин при очереди >100). Статус/детали — [[Поиск и индексация]].
 - `?semantic=1` опция в `/api/jobs` — pre-rank по cosine-similarity к profile-embedding.
 - Подробнее — [[Поиск и индексация]].
 
@@ -50,7 +52,7 @@ Pre-launch блокеры из глубокого аудита:
 
 - **Stale admin role** — `require_admin_async` + per-user TTL-cache 60s проверяет роль в БД. Sync-вариант помечен deprecated.
 - **Logout CSRF** — `GET /auth/logout` → `POST /auth/logout`, требует X-CSRF-Token. Frontend через `fetch('POST')`.
-- **Security headers** — HSTS, CSP, X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy, Permissions-Policy. См. [[Безопасность#day-1-фиксы]].
+- **Security headers** — HSTS, CSP, X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy, Permissions-Policy. См. [[Безопасность]].
 - **Resume upload OOM** — buffered `await file.read()` → стрим 64KB-чанками с running counter и Content-Length pre-check. 1GB upload больше не сажает контейнер.
 - **DOCX zip-bomb** — `ZipInfo.file_size` проверка до `read()`, лимит 8 MB uncompressed.
 - **Session fixation** — `request.session.clear()` перед записью identity в OAuth callback.
@@ -60,10 +62,10 @@ Pre-launch блокеры из глубокого аудита:
 High-severity пункты из аудита (severity 6-7):
 
 - **TrustedHostMiddleware** outermost — отбивает forged `Host:` headers до session-state allocation. Allowed: `pipka.net`, `*.pipka.net`, `localhost`, `127.0.0.1`.
-- **Per-IP rate-limit middleware** — sliding-window per IP, three buckets; IP только из sanitized `X-Real-IP` от loopback nginx или socket. См. [[Rate limiting#per-ip-middleware]].
+- **Per-IP rate-limit middleware** — sliding-window per IP, three buckets; IP только из sanitized `X-Real-IP` от loopback nginx или socket. См. [[Rate limiting]].
 - **`?search=` length cap** — `Query(None, max_length=200)` против 1MB substring-attack под `statement_timeout=30s`.
 - **Profile-list size limits** — 50 entries × 200 chars per list (`target_titles`/`preferred_countries`/`excluded_keywords`/`target_companies`); 20-key dict с 50-char key/value для `languages`. JSON-bomb path закрыт.
-- **Sentry PII filter** — `_sentry_before_send` рекурсивно scrub'ит 13 ключей (resume_text, email, telegram_id, google_sub, csrf_token, ...) из stack-frame locals, breadcrumb data, request headers/body, extra context. См. [[Observability#3-sentry]] и [[Безопасность#day-2-фиксы]].
+- **Sentry PII filter** — `_sentry_before_send` рекурсивно scrub'ит 13 ключей (resume_text, email, telegram_id, google_sub, csrf_token, ...) из stack-frame locals, breadcrumb data, request headers/body, extra context. См. [[Observability#3. Sentry]] и [[Безопасность]].
 
 ### Day-3 security hardening (7 мая 2026)
 
@@ -78,7 +80,7 @@ Medium-severity (4-5):
 
 ### Refactoring
 - `dashboard.py` (750 строк) → 8 файлов по concern'ам (см. [[API]]).
-- Per-row `flush+IntegrityError` антипаттерн в Claude `_score_batch` → batch UPSERT.
+- Per-row `flush+IntegrityError` pattern in a retired scoring backend заменён batch UPSERT.
 
 ### Июль 2026 — профиль и AI
 
@@ -92,11 +94,13 @@ Medium-severity (4-5):
 
 ### P0 — оставшиеся production-риски
 
-1. Отозвать ранее опубликованные Telegram/Adzuna credentials у providers; после ротации согласованно очистить public Git history.
-2. Включить off-site Backblaze B2 с write-only application key; локальный volume не защищает от потери VPS.
-3. Удалить с VPS устаревшие `.env.bak*` после ручного подтверждения актуального `.env`.
-4. Разделить application/migration/backup DB roles; текущий runtime role не должен быть PostgreSQL superuser.
-5. Вынести inline CSS/`style=` из dashboard и убрать оставшийся `style-src 'unsafe-inline'`; JavaScript CSP уже nonce-only, event attributes запрещены.
+1. Проверить ротацию NVIDIA API key, попавшего на screenshot 22.09.2026; при совпадении немедленно отозвать у provider и заменить production secret. Проверить, нет ли других опубликованных действующих ключей; значения в wiki не сохранять.
+2. Production registration сейчас открыта из code default. Подтвердить желаемую политику; если доступ должен быть invite-only — выставить `ALLOW_PUBLIC_REGISTRATION=false` и allowlist.
+3. Включить off-site Backblaze B2 с write-only application key; локальный volume не защищает от потери VPS.
+4. Удалить с VPS устаревшие `.env.bak*` после ручного подтверждения актуального `.env`.
+5. Разделить application/migration/backup DB roles; текущий runtime role не должен быть PostgreSQL superuser.
+6. Вынести inline CSS/`style=` из dashboard и убрать оставшийся `style-src 'unsafe-inline'`; JavaScript CSP уже nonce-only, event attributes запрещены.
+7. **Синхронизировать Git:** локальный `main` в рабочей папке на 51 коммит впереди GitHub (02.08 → 23.09.2026), VPS деплоится file-overlay'ем поверх своего HEAD `4a29d79`. Запушить `main`, затем привести VPS к `git pull` — иначе следующий `git pull` на сервере может откатить runtime-изменения.
 
 ### P1 — качество и стоимость pipeline
 
@@ -104,6 +108,8 @@ Medium-severity (4-5):
 3. Ввести per-backend latency/token/cost counters и вывести их в Ops.
 4. Кэшировать detailed analysis по `(user, job, profile_hash, analysis_model)` с TTL; идею из старого `pipka-latest` реализовать заново в текущих роутерах, не переносить устаревший монолит.
 5. Разделить AI-квоты real-time и backfill, чтобы массовая очередь не вытесняла пользовательский анализ.
+6. JobSpy ротирует окно запросов/стран по `hour // 3`, хотя сканы с 17.08 ежечасные — перейти на часовой слот (втрое больше разнообразия запросов при том же объёме) — [[Источники вакансий]].
+7. Тесты биллинга: сценарий списания кредитов в `_score_and_notify` (нулевой баланс → `credits_exhausted`, admin bypass) не покрыт; фидбек — не покрыта Telegram-нотификация — [[Тесты]].
 
 ### P1 — frontend/UX
 
@@ -143,8 +149,10 @@ Medium-severity (4-5):
 ### Cleanup
 
 - **Дроп orphaned profile-колонок** — `industries`, `languages`, `experience_years`, `base_location`, `max_commute_km` удалить отдельной миграцией после проверки, что Telegram/старые клиенты их не читают.
-- **Раздробить `Скоринг.md`** на под-страницы (Gemini / Claude / NVIDIA / Pre-filter / Recheck) — единая страница уже разрослась.
+- **Раздробить `Скоринг.md`** на под-страницы (Gemini / NVIDIA / Pre-filter / Recheck) — единая страница уже разрослась.
 - **`scripts/2026_04_add_hot_path_indexes.sql`** — устаревший, индексы создаются через [[Миграции]].
+- Удалить мёртвый `deduct_user_credits()` или перевести на него инлайн-списание в шедулере (он атомарный) — [[Биллинг и кредиты]].
+- Убрать неиспользуемые `DASHBOARD_*` / `GUEST_*` из `config.py` и production `.env` — [[Настройки]].
 
 ## Принципы приоритизации
 

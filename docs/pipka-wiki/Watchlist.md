@@ -14,7 +14,7 @@
 
 ## Профиль
 
-`UserProfile.target_companies: list[str]` — список компаний (`["Nestlé", "Bayer", "Unilever"]`). Редактируется через UI / `POST /api/profile`. Хранится в [[База данных#user_profiles]].
+`UserProfile.target_companies: list[str]` — список компаний (`["Nestlé", "Bayer", "Unilever"]`). Редактируется через UI / `POST /api/profile`. Хранится в [[База данных]].
 
 ## Источник: WatchlistSource
 

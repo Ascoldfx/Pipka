@@ -26,7 +26,7 @@ Dedicated access logger `pipka.access` логирует:
 
 ## 2. OpsEvent — структурированный журнал в БД
 
-Таблица [[База данных#ops_events|ops_events]] — централизованный журнал доменных событий. В отличие от docker-логов, переживает рестарты и доступен через [[Ops панель|UI]].
+Таблица [[База данных|ops_events]] — централизованный журнал доменных событий. В отличие от docker-логов, переживает рестарты и доступен через [[Ops панель|UI]].
 
 Запись: `await record_ops_event(event_type, status, source=, message=, payload=)` (`app/services/ops_service.py`).
 
@@ -64,7 +64,7 @@ if settings.sentry_dsn:
 - payload из `OpsEvent` (только то, что попадает в exception).
 - **PII в stack-frame locals + breadcrumbs** — `_sentry_before_send` рекурсивно скрабит ключи case-insensitive: profile/resume fields, identity, cookies/authorization, DB/provider secrets и любой ключ с `password/secret/api_key/access_token/refresh_token`. Secret-shaped Telegram/Bearer tokens и emails редактируются также внутри произвольных строк и breadcrumb messages. Walk depth-limit 6 защищает от циклических структур. См. [[Безопасность]].
 
-См. [[Настройки#sentry-опционально]] для всех env-параметров.
+См. [[Настройки#Sentry (опционально)]] для всех env-параметров.
 
 ## NoCacheAPIMiddleware
 
@@ -84,7 +84,7 @@ if settings.sentry_dsn:
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()`
 
-Mounted innermost — заголовки попадают и на `/static/*` тоже. Подробнее — [[Безопасность#day-1-фиксы-перед-prod-релизом]].
+Mounted innermost — заголовки попадают и на `/static/*` тоже. Подробнее — [[Безопасность]].
 
 ## Метрики, которых пока нет
 
@@ -92,4 +92,4 @@ Mounted innermost — заголовки попадают и на `/static/*` т
 - **Healthcheck:** `/health` отдаёт DB ping, scheduler state, `last_scan_at` и `last_scan_age_seconds`; `/health/live` — liveness процесса.
 - **Tracing** — Sentry traces покрывают; OpenTelemetry не настраивали.
 
-→ [[Ops панель]] → [[Настройки#sentry-опционально]] → [[Безопасность]]
+→ [[Ops панель]] → [[Настройки#Sentry (опционально)]] → [[Безопасность]]

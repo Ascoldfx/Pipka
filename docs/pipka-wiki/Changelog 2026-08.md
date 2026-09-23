@@ -2,67 +2,7 @@
 
 # Changelog — август 2026
 
-## 27 август — freshness-first очереди
-
-- Парсер упорядочивает прошедшие фильтр вакансии от новых к старым ещё до upsert; DB-result имеет детерминированные fallback по `scraped_at` и `id`.
-- NVIDIA embeddings и режим NVIDIA recheck берут вакансии от самых свежих `posted_at`/времени сбора. Исторический backlog не вытесняет новые поступления.
-- Внутри каждого target-role bucket свежесть является первым критерием. Между bucket новые целевые роли по-прежнему превыше уже обработанных.
-
-## 8 августа — production guards для платежей, CSP и semantic index
-
-- `app/api/billing.py` и `app/services/billing_service.py`: live checkout и webhook теперь fail-closed без обоих Cryptomus credentials; test fulfilment доступен только в явном локальном sandbox-режиме без live credentials. Сравнение webhook-signature выполняется constant-time, а зачисление кредита блокирует строку транзакции и проверяет provider transaction ID.
-- `app/security_headers.py`, `app/static/dashboard.html`, `app/static/js/events.js`: восстановлены `script-src-attr 'none'` и запрет JavaScript `unsafe-inline`; оставшиеся inline event handlers переведены на существующую `data-action` delegation.
-- `app/services/embedding_service.py`: embedding queue ограничена открытыми German vacancies не старше 31 дня с AI score ≥60. Старый архив больше не будет постепенно расходовать embedding quota.
-- Обновлены `Настройки.md`, `Поиск и индексация.md` и `API.md`; добавлены regression tests и обновлены ожидания после удаления Claude.
-
-### NVIDIA burst для очереди embeddings
-
-- `embed_index_burst` запускается каждые 30 минут только при `EMBEDDING_PROVIDER=nvidia` и при scoped queue строго больше 100 вакансий. Один запуск обрабатывает обычный пакет из 70 вакансий; при малом остатке сохраняется двухчасовой основной запуск.
-- Ops events теперь корректно маркируют provider (`nvidia_embedding`), а не устаревший `gemini_embedding`.
-
-### Точные queue KPI в Ops
-
-- Заменена ложная карточка «все вакансии без score»: Ops отдельно показывает scope AI backfill, scope NVIDIA embeddings и исторический archive coverage. Alerts используют только первые две рабочие очереди.
-
-## 7 августа — удаление Claude, NVIDIA-fallback и исправление блокировок БД
-
-- **Полное удаление Claude API:** Из проекта полностью вырезана библиотека `anthropic`, удалены все Claude-переменные из настроек (`app/config.py`).
-- **Перенаправление на NVIDIA:**
-  - Логика общего скоринга (`score_jobs`) теперь автоматически маршрутизирует запросы на Gemini (основной) или NVIDIA (резервный).
-  - Реальный скоринг и детальный анализ вакансий по кнопке в Telegram теперь автоматически переключаются на бесплатный **NVIDIA Nemotron/Llama** при исчерпании лимитов Gemini.
-- **Исправление LockTimeout / LockNotAvailableError:**
-  - Устранена гонка при старте: `run.py` теперь строго дожидается применения Alembic-миграций (`await init_db()`) перед запуском планировщика и Telegram-бота, предотвращая конкуренцию запросов за таблицы.
-  - Транзакции в `embedding_service.py` теперь фиксируются (`commit()`) сразу после SELECT-запросов и после обновления каждого отдельного эмбеддинга, не блокируя БД во время длительных внешних HTTP-запросов к API NVIDIA.
-- **Синхронизация суточных лимитов:** Время сброса лимитов и сброса circuit breaker'а Gemini синхронизировано с Тихоокеанским временем (полночь в Калифорнии = 08:00 UTC), решая проблему ложных 429-блокировок в утреннее время.
-- **Исправление багов очереди (Backfill Scorer):**
-  - Исправлен критический баг, из-за которого фоновый скоринг игнорировал новые вакансии, пропустившие оценку в реальном времени. В запрос добавлен выбор `or_(prior_strong_score, has_no_score)`.
-  - При ручном запуске из очереди мгновенно убрано **252 вакансии** (отсеяны правилами pre-filter без затрат лимитов API), общее число неразобранных вакансий упало с 693 до 441.
-
-## 6 августа — Gemini 3.6: пакетная очередь без quota storm
-
-- Primary batch scorer переведён на `gemini-3.6-flash`; один запрос оценивает до 15 вакансий.
-- Добавлен persistent `GEMINI_DAILY_REQUEST_LIMIT=20`: до 300 вакансий в UTC-день при полных пакетах. Попытки сохраняются в `ops_events`, поэтому рестарт контейнера лимит не обходит.
-- `429/ResourceExhausted` больше не ретраится: breaker ставит Gemini на паузу до полуночи UTC. NVIDIA не подхватывает backfill автоматически, что устраняет поток `503`/`ReadTimeout`.
-- Ручной detailed analysis выключен по умолчанию и скрыт в Telegram, чтобы не расходовать 3.6-квоту.
-- После изменения профиля backfill берёт лишь ранее сильные (score ≥60) немецкие вакансии не старше 31 дня, исключает closed/unreachable и берёт 30 наиболее приоритетных за тик; исторические ~19k оценок не становятся массовой работой.
-
-## 6 августа — NVIDIA Nemotron embeddings
-
-- Semantic index переведён с Gemini Embedding на `nvidia/nemotron-3-embed-1b`: отдельная NVIDIA-квота, multilingual retrieval и обязательные `passage` (вакансия) / `query` (профиль) режимы.
-- Alembic `0010` очищает несовместимые Gemini-векторы, меняет pgvector 768 → 2048 и пересоздаёт HNSW-индексы. Смешивать векторы двух моделей запрещено.
-
-## 2 августа — access control и credential hardening
-
-- Public Google/Telegram registration закрыта по умолчанию; добавлены email/Telegram allowlists. Inactive users блокируются в обоих каналах.
-- Telegram получил общий pre-handler access guard, 6 search/hour и 10 detailed AI analysis/hour. Невалидная vacancy/profile больше не расходует AI quota.
-- Telegram profile editor получил те же размерные cap'ы, что web.
-- Admin API отдаёт только 1500-character resume preview, запрещает деактивацию себя/другого admin и пишет success/denied actions в `ops_events`.
-- AI prompts явно маркируют profile/job text как untrusted data; model instructions из вакансии игнорируются. Невалидные/negative job indexes из model JSON отбрасываются единым validator'ом.
-- Sentry scrub стал case-insensitive и редактирует secret-shaped tokens/emails даже в произвольных строках и breadcrumb messages. Raw model response при JSON parse error больше не логируется.
-- CI получил tracked-file credential scan (`scripts/check_secrets.py`).
-- Добавлены security regression tests; полный suite: 192 passed.
-
-## 1 августа — полный code/security audit и production hardening
+## 1 августа 2026 — полный code/security audit и production hardening
 
 ### Фильтры без ложных отсечений
 
@@ -107,15 +47,87 @@
 
 Остались ручные/следующие шаги: включить Backblaze B2 write-only key; вынести inline CSS/`style=` и убрать оставшийся `style-src 'unsafe-inline'`.
 
-→ [[Changelog 2026-07]] → [[Безопасность]] → [[Деплой]] → [[Миграции]] → [[Roadmap]]
-## 10 August — Gemini quota fallback for batch scoring
+
+## 2 августа 2026 — access control и credential hardening
+
+- Public Google/Telegram registration закрыта по умолчанию; добавлены email/Telegram allowlists. Inactive users блокируются в обоих каналах.
+- Telegram получил общий pre-handler access guard, 6 search/hour и 10 detailed AI analysis/hour. Невалидная vacancy/profile больше не расходует AI quota.
+- Telegram profile editor получил те же размерные cap'ы, что web.
+- Admin API отдаёт только 1500-character resume preview, запрещает деактивацию себя/другого admin и пишет success/denied actions в `ops_events`.
+- AI prompts явно маркируют profile/job text как untrusted data; model instructions из вакансии игнорируются. Невалидные/negative job indexes из model JSON отбрасываются единым validator'ом.
+- Sentry scrub стал case-insensitive и редактирует secret-shaped tokens/emails даже в произвольных строках и breadcrumb messages. Raw model response при JSON parse error больше не логируется.
+- CI получил tracked-file credential scan (`scripts/check_secrets.py`).
+- Добавлены security regression tests; полный suite: 192 passed.
+
+## 6 августа 2026 — Gemini 3.6: пакетная очередь без quota storm
+
+- Primary batch scorer переведён на `gemini-3.6-flash`; один запрос оценивает до 15 вакансий.
+- Добавлен persistent `GEMINI_DAILY_REQUEST_LIMIT=20`: до 300 вакансий в UTC-день при полных пакетах. Попытки сохраняются в `ops_events`, поэтому рестарт контейнера лимит не обходит.
+- `429/ResourceExhausted` больше не ретраится: breaker ставит Gemini на паузу до полуночи UTC. NVIDIA не подхватывает backfill автоматически, что устраняет поток `503`/`ReadTimeout`.
+- Ручной detailed analysis выключен по умолчанию и скрыт в Telegram, чтобы не расходовать 3.6-квоту.
+- После изменения профиля backfill берёт лишь ранее сильные (score ≥60) немецкие вакансии не старше 31 дня, исключает closed/unreachable и берёт 30 наиболее приоритетных за тик; исторические ~19k оценок не становятся массовой работой.
+
+## 6 августа 2026 — NVIDIA Nemotron embeddings
+
+- Semantic index переведён с Gemini Embedding на `nvidia/nemotron-3-embed-1b`: отдельная NVIDIA-квота, multilingual retrieval и обязательные `passage` (вакансия) / `query` (профиль) режимы.
+- Alembic `0010` очищает несовместимые Gemini-векторы, меняет pgvector 768 → 2048 и пересоздаёт HNSW-индексы. Смешивать векторы двух моделей запрещено.
+
+## 7 августа 2026 — удаление Claude, NVIDIA-fallback и исправление блокировок БД
+
+- **Полное удаление Claude API:** Из проекта полностью вырезана библиотека `anthropic`, удалены все Claude-переменные из настроек (`app/config.py`).
+- **Перенаправление на NVIDIA:**
+  - Логика общего скоринга (`score_jobs`) теперь автоматически маршрутизирует запросы на Gemini (основной) или NVIDIA (резервный).
+  - Реальный скоринг и детальный анализ вакансий по кнопке в Telegram теперь автоматически переключаются на бесплатный **NVIDIA Nemotron/Llama** при исчерпании лимитов Gemini.
+- **Исправление LockTimeout / LockNotAvailableError:**
+  - Устранена гонка при старте: `run.py` теперь строго дожидается применения Alembic-миграций (`await init_db()`) перед запуском планировщика и Telegram-бота, предотвращая конкуренцию запросов за таблицы.
+  - Транзакции в `embedding_service.py` теперь фиксируются (`commit()`) сразу после SELECT-запросов и после обновления каждого отдельного эмбеддинга, не блокируя БД во время длительных внешних HTTP-запросов к API NVIDIA.
+- **Синхронизация суточных лимитов:** Время сброса лимитов и сброса circuit breaker'а Gemini синхронизировано с Тихоокеанским временем (полночь в Калифорнии = 08:00 UTC), решая проблему ложных 429-блокировок в утреннее время.
+- **Исправление багов очереди (Backfill Scorer):**
+  - Исправлен критический баг, из-за которого фоновый скоринг игнорировал новые вакансии, пропустившие оценку в реальном времени. В запрос добавлен выбор `or_(prior_strong_score, has_no_score)`.
+  - При ручном запуске из очереди мгновенно убрано **252 вакансии** (отсеяны правилами pre-filter без затрат лимитов API), общее число неразобранных вакансий упало с 693 до 441.
+
+## 7 августа 2026 — монетизация, BuiltIn, онбординг и гостевой режим
+
+Продуктовая часть дня (32 коммита), не вошедшая в блок об удалении Claude:
+
+- **Кредитная монетизация:** `app/services/billing_service.py`, `app/api/billing.py`, модель `PaymentTransaction`, migration `0011_user_billing_and_transactions`. 1 кредит = 1 AI-оценка в real-time скоринге, пакеты starter/pro, оплата через Cryptomus — [[Биллинг и кредиты]].
+- **Онбординг и обратная связь:** welcome-модалка, форма отзывов (`app/api/feedback.py`, модель `UserFeedback`, migration `0012_onboarding_and_feedback`), мгновенное Telegram-уведомление на `ALLOWED_TELEGRAM_IDS` — [[Онбординг и обратная связь]].
+- **Источник BuiltIn.com** (`app/sources/builtin.py`) — 10-й источник, [[Источники вакансий]].
+- **Retries для Adzuna и Jooble:** exponential backoff в `app/sources/adzuna.py`, `app/sources/jooble.py`.
+- **Публичная регистрация:** `ALLOW_PUBLIC_REGISTRATION=True` — любой Google-аккаунт может зарегистрироваться ([[Auth]]).
+- **Гостевой режим:** постоянный баннер и executive-лендинг с переключателем языка, гостю скрыты вкладки/фильтры/таблица/пагинация; серия фиксов OAuth-сессии (`https_only` отключён за Nginx SSL termination, 302-редирект из callback) — [[Frontend]], [[Auth]].
+- **UI:** skeleton-загрузчики, микро-анимации, адаптивные карточки для мобильных; cache-busting параметры у скриптов.
+- **Инфографика:** только all-time история; метрика «Rejected before AI» убрана.
+
+## 8 августа 2026 — production guards для платежей, CSP и semantic index
+
+- `app/api/billing.py` и `app/services/billing_service.py`: live checkout и webhook теперь fail-closed без обоих Cryptomus credentials; test fulfilment доступен только в явном локальном sandbox-режиме без live credentials. Сравнение webhook-signature выполняется constant-time, а зачисление кредита блокирует строку транзакции и проверяет provider transaction ID.
+- `app/security_headers.py`, `app/static/dashboard.html`, `app/static/js/events.js`: восстановлены `script-src-attr 'none'` и запрет JavaScript `unsafe-inline`; оставшиеся inline event handlers переведены на существующую `data-action` delegation.
+- `app/services/embedding_service.py`: embedding queue ограничена открытыми German vacancies не старше 31 дня с AI score ≥60. Старый архив больше не будет постепенно расходовать embedding quota.
+- Обновлены `Настройки.md`, `Поиск и индексация.md` и `API.md`; добавлены regression tests и обновлены ожидания после удаления Claude.
+
+### NVIDIA burst для очереди embeddings
+
+- `embed_index_burst` запускается каждые 30 минут только при `EMBEDDING_PROVIDER=nvidia` и при scoped queue строго больше 100 вакансий. Один запуск обрабатывает обычный пакет из 70 вакансий; при малом остатке сохраняется двухчасовой основной запуск.
+- Ops events теперь корректно маркируют provider (`nvidia_embedding`), а не устаревший `gemini_embedding`.
+
+### Точные queue KPI в Ops
+
+- Заменена ложная карточка «все вакансии без score»: Ops отдельно показывает scope AI backfill, scope NVIDIA embeddings и исторический archive coverage. Alerts используют только первые две рабочие очереди.
+
+## 9 августа 2026 — scheduler не ждёт Telegram-бота
+
+- `run.py`: планировщик (сбор, скоринг, индексация) стартует **до** подключения Telegram-бота. Раньше он запускался только после полной инициализации бота, и медленный старт Telegram задерживал весь pipeline при здоровом web/API.
+- Приоритизация свежего NVIDIA embedding backlog — см. блок 8 августа («NVIDIA burst для очереди embeddings»).
+
+## 10 августа 2026 — Gemini quota fallback for batch scoring
 
 - When the Gemini 3.6 Flash circuit breaker is open or opens during a batch,
   the selected vacancies move to NVIDIA in the same scheduler run.
 - The fallback is recorded as `scoring_fallback`; NVIDIA retries remain bounded
   and do not requeue an unlimited historical backlog.
 
-## 17 August — hourly fresh-vacancy scans
+## 17 августа 2026 — hourly fresh-vacancy scans
 
 - `background_scan` запускается каждые 60 минут вместо 3 часов.
 - Интервал вынесен в `SCAN_INTERVAL_MINUTES`; `_scan_lock` по-прежнему не
@@ -123,7 +135,7 @@
 - 30-минутный интервал не выбран: worst-case Adzuna crawl превысил бы дневную
   бесплатную квоту, тогда как hourly режим остаётся в её пределах.
 
-## 17 August — multi-user search and scoring fairness
+## 17 августа 2026 — multi-user search and scoring fairness
 
 - Для каждого активного профиля строится отдельный search plan (`target_titles` + `preferred_countries`). Планы round-robin объединяются в один provider pass с точными `country_queries`, чтобы сохранить общую дедупликацию и API-квоты.
 - Real-time и backfill скоринг берут до 15 самых свежих вакансий на user за проход; первый user ротируется между прогонами.
@@ -132,22 +144,32 @@
 - Ops показывает целевые рынки, queue depth и throughput отдельно для каждого активного user.
 - Миграция БД не требуется: связка `JobScore(job_id, user_id)` уже является persistent персональной очередью.
 
-## 18 August — reliability, profile save and security hardening
+## 18 августа 2026 — reliability, profile save and security hardening
 
 - `excluded_companies` получил отдельный hard cap 200: накопленный blocklist из 58 компаний больше не блокирует сохранение всего профиля. Dashboard показывает точную server validation error.
 - NVIDIA chat scoring разделён на пакеты по 8 вакансий, timeout снижен до 90 секунд, retries ограничены двумя попытками. Это не даёт одному slow batch задерживать весь scheduler pass на 20+ минут.
 - CSP запрещает JavaScript `unsafe-inline` и inline event attributes; известные inline scripts разрешаются только per-response nonce.
 - Billing работает fail-closed без live credentials; sandbox fulfilment скрыт в production и проверяет ownership, webhook signature сравнивается constant-time, а credit deductions стали атомарными.
 
-## 19 August — Reject survives provider reposts
+## 19 августа 2026 — Reject survives provider reposts
 
 - Production audit нашёл 38 replacement rows с тем же `source + external_id`: provider менял metadata, создавался новый `Job.id`, и отклонённая вакансия снова попадала в feed.
 - Default feed, Inbox и scoring queues теперь переносят action на replacement row по доказанной identity: одинаковый provider ID или точный URL. Title/company-only matching не используется, чтобы не отсечь другую целевую роль.
 - Migration `0013_application_identity` сохраняет самое новое action при исторических дублях и делает `(user_id, job_id)` unique.
 
-## 19 August — Feedback and dashboard recovery
+## 19 августа 2026 — Feedback and dashboard recovery
 
 - Feedback получил прямой click binding и явные `window` exports; версии static scripts подняты для инвалидации browser/CDN cache.
 - Feedback status больше не вставляет server text через `innerHTML`; Telegram HTML экранирует user fields, а API принимает только известные категории.
 - Ops alerts читают multi-user `queues.scoring.countries` и не падают на устаревшем `country.toUpperCase()`.
 - `/api/jobs` устойчив к legacy `raw_data`, записанному не JSON-object; frontend показывает точный HTTP status вместо вторичного `Unexpected token`.
+
+## 27 августа 2026 — freshness-first очереди
+
+- Парсер упорядочивает прошедшие фильтр вакансии от новых к старым ещё до upsert; DB-result имеет детерминированные fallback по `scraped_at` и `id`.
+- NVIDIA embeddings и режим NVIDIA recheck берут вакансии от самых свежих `posted_at`/времени сбора. Исторический backlog не вытесняет новые поступления.
+- Внутри каждого target-role bucket свежесть является первым критерием. Между bucket новые целевые роли по-прежнему превыше уже обработанных.
+
+---
+
+→ [[Changelog 2026-07]] → [[Changelog 2026-09]] → [[Безопасность]] → [[Деплой]] → [[Миграции]] → [[Биллинг и кредиты]] → [[Мульти-юзер очереди]] → [[Roadmap]]

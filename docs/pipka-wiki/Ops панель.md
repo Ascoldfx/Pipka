@@ -7,7 +7,7 @@
 - **Health & throughput** — `/api/ops/overview`
 - **Дедуп-эффект** — `/api/ops/dedup`
 
-Бэкенд: `app/api/ops.py` + `app/services/ops_service.py`. Источник данных — таблица [[База данных#ops_events|ops_events]].
+Бэкенд: `app/api/ops.py` + `app/services/ops_service.py`. Источник данных — таблица [[База данных|ops_events]].
 
 > Хардкод на русском (не i18n) — целевая аудитория одна, лень на шесть переводов.
 
@@ -59,7 +59,7 @@ LIMIT $limit
 
 | event_type | status | Источник | Когда пишется |
 |------------|--------|----------|---------------|
-| `scan` | `success`/`error` | `_background_scan` | По завершении/падении основного 3ч-скана |
+| `scan` | `success`/`error` | `_background_scan` | По завершении/падении основного ежечасного скана (`SCAN_INTERVAL_MINUTES=60`) |
 | `gemini_request` | `attempt` | `_generate_with_retry` | Durable счётчик каждого Gemini batch/API-вызова за UTC-день |
 | `gemini_429` | `error` | `_call_gemini_raw` | Один ответ ResourceExhausted; ретрая нет |
 | `gemini_exhausted` | `error` | `_call_gemini_raw` | После 5-й попытки |
@@ -71,11 +71,17 @@ LIMIT $limit
 | `cleanup` | `success`/`error` | `_cleanup_old_jobs` | После daily cleanup в 03:00 UTC |
 | `url_check` | `success`/`error` | `_check_job_urls` | После daily HEAD-пинга в 04:00 UTC. payload: `{checked, active, closed, unreachable, skipped}` |
 
-Подробнее по конкретным событиям — [[Скоринг#надёжность]], [[Observability]].
+Подробнее по конкретным событиям — [[Скоринг]], [[Observability]].
 
 ### Размер и ретеншн
 
 `ops_events` сейчас **не ротируется** автоматически. Ретеншн-cron — пункт из [[Roadmap]]. На текущем темпе (~50–150 событий в сутки) таблица вырастает на ~50KB/день — не блокер.
+
+### Исключение внешних security probes (23.09.2026)
+
+`NoCacheAPIMiddleware` не создаёт `api_error` для известных не-Pipka путей при unsafe-методах и ожидаемых отказах 403/404: `/api/templates/preview`, `/api/fs/exec`, `/api/graphql`, `/api/inngest`, `/api/designer/v1/file-content`, `/api/v1/validate/code`. Их всё ещё отклоняет middleware и пишет access log. Старые строки в `ops_events` сохраняются; read path Ops скрывает их из ленты. CSRF 403 на реальных endpoints не исключается.
+
+Production smoke-check: POST на `/api/templates/preview` вернул 403, счётчик событий остался 24 до/после.
 
 ## Read path
 
@@ -87,7 +93,7 @@ Frontend: `loadOpsOverview()` в application-блоке `app/static/dashboard.ht
 - Events feed — последние ~50, цветные по `status`.
 - Dedup table — отдельно через `/api/ops/dedup`.
 
-→ [[API#ops]] → [[Сервисы]] → [[Observability]] → [[База данных#ops_events]]
+→ [[API]] → [[Сервисы]] → [[Observability]] → [[База данных]]
 # Очереди
 
 Ops больше не называет все исторические вакансии без `JobScore` рабочей

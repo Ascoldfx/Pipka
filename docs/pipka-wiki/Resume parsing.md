@@ -97,19 +97,19 @@ SET embedding = NULL,
 WHERE id = :pid
 ```
 
-Иначе старый embedding продолжает использоваться при `?semantic=1` в `/api/jobs` и [[Скоринг#этап-15-опционально-semantic-pre-rank|semantic-skip]] — search-результаты не отразят новое резюме.
+Иначе старый embedding продолжает использоваться при `?semantic=1` в `/api/jobs`, и semantic pre-rank не отражает новое резюме. `semantic_skip` больше не используется: similarity меняет только порядок кандидатов, не исключает их.
 
 ## Не делает
 
 - **OCR.** Сканированный PDF приходит как картинка — pdfminer вернёт пусто. Поддержка `pdf2image + tesseract` — пункт [[Roadmap]].
-- **Auto-detect языка.** Резюме на DE/EN обрабатываются одинаково. Embedding API (`models/gemini-embedding-001`) сам мультиязычный, так что в плане скоринга не критично, но в UI было бы polished показать "Язык резюме: DE/EN".
-- **Sections extraction.** `text` хранится как одна сплошная строка. Парсить на "Опыт работы / Образование / Навыки" — для лучших промптов AI-скорера. Сейчас весь текст уходит в Claude/Gemini как контекст профиля.
+- **Auto-detect языка.** Резюме на DE/EN обрабатываются одинаково. Для semantic retrieval используется multilingual NVIDIA Nemotron embedding; UI-индикатор языка остаётся возможным улучшением.
+- **Sections extraction.** `text` хранится как одна сплошная строка. Парсить на "Опыт работы / Образование / Навыки" — для лучших промптов AI-скорера. Сейчас весь текст уходит в Gemini/NVIDIA как контекст профиля.
 
 ## Связи
 
 - Triggered by [[Frontend]] (`POST /api/profile/resume` через FormData в `app/static/dashboard.html`).
 - Storage: `user_profiles.resume_text` ([[База данных]]).
 - Consumers: [[Скоринг]] (через `compute_profile_hash` → инвалидация AI-кэша), [[Поиск и индексация]] (через `embed_index`).
-- Validation: [[Безопасность#4-input-validation]] — magic-bytes pattern.
+- Validation: [[Безопасность#4. Input validation]] — magic-bytes pattern.
 
 → [[API]] → [[Frontend]] → [[Безопасность]] → [[Поиск и индексация]] → [[База данных]] → [[Скоринг]] → [[Roadmap]]

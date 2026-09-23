@@ -26,7 +26,7 @@ Library: `python-telegram-bot` 21. Long-polling, без webhook'ов. Подни
 | `tracker.py` | `my_jobs_handler`, `stats_handler`, `status_update_handler` | "Мои вакансии", статистика, переключение статуса (`saved → applied → interviewing → offer / rejected`). |
 | `settings.py` | `profile_menu_handler`, `profile_field_handler`, `profile_text_handler` | Редактирование профиля по полям через текстовые сообщения (state в `context.user_data["editing_profile_field"]`). |
 
-Search и detailed AI analysis имеют отдельные часовые квоты, потому что Telegram updates не проходят через FastAPI middleware. См. [[Rate limiting#telegram-per-user]]. Profile text ограничен теми же cap'ами, что web: до 50 target titles × 200 символов, 20 языков, location до 255 символов и resume до 100 000.
+Search и detailed AI analysis имеют отдельные часовые квоты, потому что Telegram updates не проходят через FastAPI middleware. См. [[Rate limiting#Telegram (per-user)]]. Profile text ограничен теми же cap'ами, что web: до 50 target titles × 200 символов, 20 языков, location до 255 символов и resume до 100 000.
 
 ## Keyboards
 
@@ -40,7 +40,7 @@ Search и detailed AI analysis имеют отдельные часовые кв
 
 ## Formatters
 
-`app/bot/formatters.py:format_job_card(job, score)` — строит Markdown-карточку вакансии: заголовок, компания, локация, source, salary range, posted_at + бейдж score. Используется и в боте, и в push-уведомлениях из [[Сервисы#_score_and_notify]] после background scan.
+`app/bot/formatters.py:format_job_card(job, score)` — строит Markdown-карточку вакансии: заголовок, компания, локация, source, salary range, posted_at + бейдж score. Используется и в боте, и в push-уведомлениях из [[Сервисы#_score_and_notify()]] после background scan.
 
 ## State management
 
