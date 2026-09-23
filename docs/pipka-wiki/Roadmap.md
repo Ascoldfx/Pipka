@@ -150,7 +150,6 @@ Medium-severity (4-5):
 
 - **Дроп orphaned profile-колонок** — `industries`, `languages`, `experience_years`, `base_location`, `max_commute_km` удалить отдельной миграцией после проверки, что Telegram/старые клиенты их не читают.
 - **Раздробить `Скоринг.md`** на под-страницы (Gemini / NVIDIA / Pre-filter / Recheck) — единая страница уже разрослась.
-- **`scripts/2026_04_add_hot_path_indexes.sql`** — устаревший, индексы создаются через [[Миграции]].
 - Удалить мёртвый `deduct_user_credits()` или перевести на него инлайн-списание в шедулере (он атомарный) — [[Биллинг и кредиты]].
 - Убрать неиспользуемые `DASHBOARD_*` / `GUEST_*` из `config.py` и production `.env` — [[Настройки]].
 
