@@ -34,7 +34,8 @@ cd /opt/pipka && sudo git pull && sudo docker compose up -d --build
 ```
 Всегда `--build` — без него Docker использует старый image.
 
-Перед пушем прогнать то же, что CI: `.venv/bin/ruff check --isolated --select F,E9 app tests alembic`, `.venv/bin/python -m pytest -q`, `python scripts/check_secrets.py`, `node scripts/check_inline_js.mjs`. Локальный `.venv` — Python 3.12.
+Перед пушем прогнать то же, что CI: `.venv/bin/ruff check --isolated --select F,E9 app tests alembic`, `.venv/bin/python -m pytest -q`, `python scripts/check_secrets.py`, `node scripts/check_inline_js.mjs`. Локальный `.venv` — Python 3.12, собирается как в Dockerfile:
+`python3.12 -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bin/pip install --no-deps markdownify==0.14.1` (JobSpy тянет уязвимую 0.13.x).
 
 Если GitHub не принимает пуш, доставить коммиты на сервер напрямую:
 ```bash
