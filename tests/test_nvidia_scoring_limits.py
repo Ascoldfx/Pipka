@@ -17,14 +17,13 @@ def test_nvidia_scoring_batch_is_always_positive(monkeypatch) -> None:
 
 
 def test_nvidia_reliability_defaults_bound_slow_retries() -> None:
-    assert settings.nvidia_model == "openai/gpt-oss-20b"
-    assert settings.nvidia_scoring_batch_size == 4
-    assert settings.nvidia_scoring_timeout_seconds == 120.0
-    assert settings.nvidia_scoring_max_attempts == 2
+    assert settings.nvidia_model == "poolside/laguna-xs-2.1"
+    assert settings.nvidia_scoring_batch_size == 1
+    assert settings.nvidia_scoring_timeout_seconds == 60.0
+    assert settings.nvidia_scoring_max_attempts == 1
     assert _nvidia_generation_options() == {
-        "max_tokens": 1536,
+        "max_tokens": 768,
         "temperature": 0.3,
         "top_p": 0.95,
         "stream": False,
-        "reasoning_effort": "low",
     }

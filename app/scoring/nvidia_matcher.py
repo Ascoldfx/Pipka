@@ -128,8 +128,8 @@ async def _call_nvidia(prompt: str, batch_size: int) -> str | None:
                 # so the batch is skipped cleanly rather than crashing downstream.
                 return data["choices"][0]["message"].get("content")
 
-    # GPT-OSS 20B with low reasoning typically responds in under a minute for
-    # a batch of four vacancies.
+    # Laguna XS typically responds in under a minute for one vacancy. Larger
+    # batches are rejected or time out on the hosted free endpoint.
     # Retries handle transient ReadTimeouts (cold starts). Per-attempt noise is
     # logged at DEBUG; one WARNING summarises an exhausted batch below. 429s go
     # to OpsEvent because they're rare and quota-meaningful.

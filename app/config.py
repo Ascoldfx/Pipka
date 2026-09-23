@@ -27,17 +27,17 @@ class Settings(BaseSettings):
     nvidia_idle_rescore_enabled: bool = False
     nvidia_api_key: str = ""
     # Hosted catalog models are retired periodically. llama-3.3-70b-instruct
-    # began returning HTTP 410 in production in September 2026. GPT-OSS 20B
-    # is the currently verified structured-output fallback.
-    nvidia_model: str = "openai/gpt-oss-20b"
+    # began returning HTTP 410 in production in September 2026. Laguna XS is
+    # the currently verified hosted fallback for the full scoring prompt.
+    nvidia_model: str = "poolside/laguna-xs-2.1"
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
     nvidia_batch_delay: float = 2.0      # seconds between batches (conservative)
-    # Chat scoring is materially slower than Gemini. Four jobs with low
-    # reasoning fit the hosted endpoint reliably; larger batches time out.
-    nvidia_scoring_batch_size: int = 4
-    nvidia_scoring_timeout_seconds: float = 120.0
-    nvidia_scoring_max_attempts: int = 2
-    nvidia_scoring_max_tokens: int = 1536
+    # The hosted endpoint accepts the full prompt reliably only one job at a
+    # time. Keep attempts bounded so a degraded fallback cannot stall a pass.
+    nvidia_scoring_batch_size: int = 1
+    nvidia_scoring_timeout_seconds: float = 60.0
+    nvidia_scoring_max_attempts: int = 1
+    nvidia_scoring_max_tokens: int = 768
     nvidia_scoring_reasoning_effort: str = "low"
     nvidia_max_per_run: int = 300        # hard cap per scheduler tick
     nvidia_country: str = "de"           # ISO country filter for idle rescore
