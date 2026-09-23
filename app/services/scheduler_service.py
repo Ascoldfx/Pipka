@@ -20,7 +20,7 @@ from app.models.application import Application
 from app.models.job import Job, JobScore
 from app.models.user import User, UserProfile
 from app.scoring.profile_hash import compute_profile_hash, valid_score_model_versions
-from app.scoring.rules import matches_explicit_target_title, pre_filter
+from app.scoring.rules import focus_rank, matches_explicit_target_title, pre_filter
 from app.services.backup_service import run_backup, verify_latest_backup_restore
 from app.services.ops_service import record_ops_event
 from app.services.tracker_service import (
@@ -397,13 +397,15 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
             "error": "credits_exhausted",
         }
 
+    # Freshness bucket first (today > last days > older), procurement leads
+    # within a bucket, then newest first.
     new_jobs.sort(
         key=lambda job: (
-            (job.posted_at or job.scraped_at).timestamp()
-            if (job.posted_at or job.scraped_at) else 0.0,
-            job.id or 0,
+            focus_rank(job, user.profile),
+            -((job.posted_at or job.scraped_at).timestamp()
+              if (job.posted_at or job.scraped_at) else 0.0),
+            -(job.id or 0),
         ),
-        reverse=True,
     )
     per_user_batch = settings.max_jobs_per_scoring_batch
     priority_window = new_jobs[:per_user_batch]
@@ -634,10 +636,12 @@ def _order_by_semantic_priority(
 ) -> tuple[list[Job], int]:
     """Order candidates without removing any of them.
 
-    Exact targets lead, then sufficiently similar jobs, jobs awaiting an
+    Freshness bucket and primary function (``focus_rank``) come first, so
+    similarity never lifts an older vacancy above today's. Within a bucket
+    exact targets lead, then sufficiently similar jobs, jobs awaiting an
     embedding, and finally low-similarity jobs. Input order breaks ties.
     """
-    decorated: list[tuple[int, float, int, Job]] = []
+    decorated: list[tuple[tuple[int, int], int, float, int, Job]] = []
     low_count = 0
     for index, job in enumerate(candidates):
         similarity = similarities.get(job.id)
@@ -650,10 +654,10 @@ def _order_by_semantic_priority(
         else:
             group = 3
             low_count += 1
-        decorated.append((group, -(similarity or 0.0), index, job))
+        decorated.append((focus_rank(job, profile), group, -(similarity or 0.0), index, job))
 
-    decorated.sort(key=lambda item: item[:3])
-    return [item[3] for item in decorated], low_count
+    decorated.sort(key=lambda item: item[:4])
+    return [item[4] for item in decorated], low_count
 
 
 async def _semantic_priority_filter(
@@ -872,6 +876,10 @@ async def _backfill_score():
                 if nvidia_mode and time.monotonic() >= run_deadline:
                     logger.info("Backfill NVIDIA time budget spent; user %s waits for next run", user.id)
                     continue
+                # Stable sort keeps newest-first inside each freshness
+                # bucket; procurement leads within the bucket.
+                need_ai_t1.sort(key=lambda job: focus_rank(job, user.profile))
+                need_ai_t2.sort(key=lambda job: focus_rank(job, user.profile))
                 t1_total = len(need_ai_t1)
                 priority_window = per_user_batch
                 need_ai_t1 = need_ai_t1[:priority_window]

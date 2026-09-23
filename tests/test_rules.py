@@ -390,3 +390,80 @@ def test_actual_internships_are_still_rejected(title):
         Job(title=title, description="Support global supply chain operations."),
         UserProfile(),
     ) == (False, "low")
+
+
+# Strict title match (23.09.2026). Real titles from the production audit: the
+# description-only keyword hit let ~90% non-target roles into the priority
+# queue. The function or the seniority must now be visible in the title.
+_GENERIC_DESC = "You will work with operations and supply chain teams to drive growth."
+
+
+@pytest.mark.parametrize("title", [
+    "Senior Graphic Designer",
+    "Full-stack Engineer (f/m/d)",
+    "Principal Hardware System Test Engineer",
+    "Growth Partner (w/m/d)",
+    "Website Growth Engineer",
+    "Production Assembler",
+])
+def test_description_only_domain_hit_never_reaches_priority_queue(title):
+    passed, bucket = pre_filter(Job(title=title, description=_GENERIC_DESC), None)
+    assert not (passed and bucket in ("high", "medium"))
+
+
+@pytest.mark.parametrize("title, expected", [
+    ("Head of Procurement", "high"),
+    ("Director Global Transportation Management (m/f/d)", "medium"),
+    ("Principal Supply Chain Transformation (alle Geschlechter)", "medium"),
+    ("Standortleiter Produktion (m/w/d)", "medium"),
+    ("Fachbereichsleitung strategischer Einkauf (m/w/d)", "high"),
+    ("MD Germany - Express and Freight Forwarder Handling", "medium"),
+    ("Director / VP Procurement", "high"),
+])
+def test_senior_target_roles_stay_in_priority_queue(title, expected):
+    passed, bucket = pre_filter(Job(title=title, description=_GENERIC_DESC), None)
+    assert (passed, bucket) == (True, expected)
+
+
+def test_function_without_seniority_goes_to_second_queue():
+    job = Job(title="Supply Chain Manager North Island", description=_GENERIC_DESC)
+    assert pre_filter(job, None) == (False, "manager_tier2")
+
+
+# VP roles were removed from the candidate's targets (not realistic in DE).
+_PROFILE = UserProfile(target_titles=["Head of Procurement", "Director Supply Chain"])
+
+
+@pytest.mark.parametrize("title", [
+    "VP, Strategic Operations (UK & EU)",
+    "Vice President Procurement",
+    "SVP Global Supply Chain",
+])
+def test_vp_only_titles_rejected_unless_targeted(title):
+    assert pre_filter(Job(title=title, description=_GENERIC_DESC), _PROFILE) == (False, "low")
+    vp_profile = UserProfile(target_titles=["VP Supply Chain"])
+    assert pre_filter(Job(title=title, description=_GENERIC_DESC), vp_profile)[0] is True
+
+
+def test_vp_with_director_marker_is_kept():
+    job = Job(title="Director / VP Procurement", description=_GENERIC_DESC)
+    assert pre_filter(job, _PROFILE) == (True, "high")
+
+
+def test_focus_rank_freshness_beats_function_procurement_leads_within_day():
+    from datetime import datetime, timedelta
+
+    from app.scoring.rules import focus_rank
+
+    now = datetime(2026, 9, 23, 12, 0)
+    today_ops = Job(title="Director Logistics", posted_at=now - timedelta(hours=3))
+    today_proc = Job(title="Leiter Einkauf (m/w/d)", posted_at=now - timedelta(hours=5))
+    old_proc = Job(title="Head of Procurement", posted_at=now - timedelta(days=2))
+    stale = Job(title="Head of Procurement", posted_at=now - timedelta(days=10))
+
+    ordered = sorted([stale, old_proc, today_ops, today_proc], key=lambda j: focus_rank(j, _PROFILE, now))
+    assert ordered == [today_proc, today_ops, old_proc, stale]
+
+    # Without procurement in the profile the function gives no boost.
+    no_proc = UserProfile(target_titles=["Director Supply Chain"])
+    assert focus_rank(today_proc, no_proc, now) == focus_rank(today_ops, no_proc, now)

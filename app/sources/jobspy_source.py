@@ -139,13 +139,14 @@ class JobSpySource:
         except ImportError:
             logger.error("python-jobspy not installed")
             return []
+        from app.config import settings  # noqa: PLC0415
 
         def _run():
             kwargs = {
                 "site_name": sites,
                 "search_term": query,
                 "results_wanted": min(limit, 50),
-                "hours_old": 24 * 60,  # 60 days
+                "hours_old": 24 * settings.fresh_search_days,
                 "country_indeed": COUNTRY_NAME.get(country, country),
             }
             if location:

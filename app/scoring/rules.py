@@ -2,31 +2,29 @@ from __future__ import annotations
 
 import html
 import re
+from datetime import datetime, timedelta, timezone
 
+from app.config import settings
 from app.models.job import Job
 from app.models.user import UserProfile
 from app.sources.country_queries import expand_queries_for_country
 
-# Director+ level only — no plain "Manager"
-DIRECTOR_KEYWORDS = [
-    "director", "head of", "vp ", "vice president", "chief",
-    "coo", "cfo", "cpo", "cso", "cro",  # C-suite
-    "senior director", "global director",
-    "principal", "partner",
-    # Interim / Crisis / Turnaround — senior by nature
-    "interim manager", "interim director", "interim head",
-    "crisis manager", "crisis director", "krisenmanager",
-    "turnaround manager", "turnaround director",
-    "restructuring",
-    "growth director",
-    # German equivalents
-    "direktor", "leiter", "abteilungsleiter", "bereichsleiter",
-    "geschäftsführer", "geschaeftsfuehrer",
-    # Brazilian Portuguese equivalents
-    "diretor", "diretora", "head de", "vice-presidente",
-    "gerente executivo", "gerente executiva", "gerente nacional",
-    "superintendente",
-]
+# Seniority is read from the TITLE only. German compounds (Standortleiter,
+# Betriebsdirektor, Fachbereichsleitung) are matched inside the word.
+DIRECTOR_TITLE_PATTERN = re.compile(
+    r"\b(?:director|head|[es]?vp|vice president|chief|c[oe]o|cpo|cfo|cso|cro|md|"
+    r"interim|krisenmanager|turnaround|restructuring|"
+    r"diretor|diretora|head de|vice-presidente|superintendente|"
+    r"gerente executiv[oa]|gerente nacional)\b"
+    r"|direktor|leiter|leitung|gesch[aä]ftsf[uü]hr"
+)
+
+# Mid-senior markers. "Principal"/"Partner"/"Lead" alone describe engineers,
+# consultants and sales roles too, so they only count with the target
+# function in the title.
+SENIOR_TITLE_PATTERN = re.compile(
+    r"\b(?:senior manager|lead|leader|teamlead|principal|partner|gerente s[eê]nior)\b"
+)
 
 # These in title = too junior or wrong function, auto-reject
 REJECT_TITLE_KEYWORDS = [
@@ -93,11 +91,10 @@ DOMAIN_KEYWORDS = [
     "growth",  # growth roles often overlap with operations leadership
 ]
 
-ENGLISH_FRIENDLY_SIGNALS = [
-    "english", "international", "global", "multinational",
-    "working language: english", "english-speaking",
-    "startup", "remote",
-]
+# "growth" is a useful description signal but too generic in a title
+# ("Growth Marketer", "Growth Engineer"); growth targets from the profile are
+# matched exactly by matches_explicit_target_title instead.
+TITLE_DOMAIN_KEYWORDS = [kw for kw in DOMAIN_KEYWORDS if kw != "growth"]
 
 # High-frequency function words provide a deterministic, dependency-free
 # language classifier for long vacancy descriptions.  We only hard-reject a
@@ -208,6 +205,20 @@ CORE_FUNCTION_TITLE_PATTERN = re.compile(
     r"\b(?:supply chain|procurement|sourcing|purchasing|logistics|"
     r"einkauf|beschaffung|logistik|lieferkette|cadeia de suprimentos|"
     r"suprimentos|compras|logística|abastecimento)\b"
+)
+
+# VP roles are opt-in: the candidate considers them unrealistic in Germany
+# and removed VP from the target list. Matched on a normalised title, where
+# hyphens are already spaces ("vice-presidente" -> "vice presidente").
+VP_ROLE_PATTERN = re.compile(
+    r"\b(?:[aes]?vp|vice\s+president(?:e|a)?|vizepr[aä]sident(?:in)?)\b"
+)
+
+# The candidate's strongest experience; drives queue order only, never
+# filtering. "einkauf" is matched inside compounds (Einkaufsleiter).
+PROCUREMENT_TITLE_PATTERN = re.compile(
+    r"\b(?:procurement|purchasing|sourcing|cpo|buying|category management|"
+    r"source to pay|s2p|beschaffung|compras|suprimentos)\b|einkauf"
 )
 
 COO_ROLE_PATTERN = re.compile(
@@ -323,6 +334,62 @@ def is_non_target_coo(title: str, profile: UserProfile | None) -> bool:
     )
 
 
+def is_non_target_vp(title: str, profile: UserProfile | None) -> bool:
+    """Reject a VP-only title unless the profile targets VP roles.
+
+    A combined title such as "Director / VP Supply Chain" keeps its other
+    director-level marker and is not rejected here.
+    """
+    normalised = _normalise_title(title)
+    if not VP_ROLE_PATTERN.search(normalised):
+        return False
+    if profile and any(
+        VP_ROLE_PATTERN.search(_normalise_title(target))
+        for target in (profile.target_titles or [])
+        if target
+    ):
+        return False
+    remainder = VP_ROLE_PATTERN.sub(" ", normalised)
+    return not DIRECTOR_TITLE_PATTERN.search(remainder)
+
+
+def targets_procurement(profile: UserProfile | None) -> bool:
+    return bool(profile and any(
+        PROCUREMENT_TITLE_PATTERN.search(_normalise_title(target))
+        for target in (profile.target_titles or [])
+        if target
+    ))
+
+
+def focus_rank(job: Job, profile: UserProfile | None, now: datetime | None = None) -> tuple[int, int]:
+    """Scoring-queue rank: freshness bucket first, then the primary function.
+
+    Recruiters shortlist from the first applicants, so a vacancy from today
+    always outranks one from the day before. Within the same freshness bucket
+    procurement roles lead when the profile targets procurement. Timestamps
+    are UTC-naive (see ``normalise_posted_at``).
+    """
+    seen_at = job.posted_at or job.scraped_at
+    if seen_at is None:
+        bucket = 2
+    else:
+        if seen_at.tzinfo is not None:
+            seen_at = seen_at.astimezone(timezone.utc).replace(tzinfo=None)
+        now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+        age = now - seen_at
+        if age <= timedelta(days=1):
+            bucket = 0
+        elif age <= timedelta(days=settings.fresh_search_days):
+            bucket = 1
+        else:
+            bucket = 2
+    primary = 0 if (
+        targets_procurement(profile)
+        and PROCUREMENT_TITLE_PATTERN.search(_normalise_title(job.title))
+    ) else 1
+    return bucket, primary
+
+
 def _target_title_tokens(title: str) -> tuple[str, ...]:
     """Normalise only harmless fillers; retain all functional modifiers."""
     return tuple(
@@ -370,6 +437,9 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     # COO was deliberately removed from this candidate's target directions.
     # Keep the rule profile-driven so a future user can opt in explicitly.
     if is_non_target_coo(job.title, profile):
+        return False, "low"
+
+    if is_non_target_vp(job.title, profile):
         return False, "low"
 
     # An exact user target is authoritative over generic title/category rules.
@@ -457,41 +527,24 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     if explicit_target_match:
         return True, "high"
 
-    # Director-level seniority
-    is_director = any(kw in title_lower for kw in DIRECTOR_KEYWORDS)
+    # Strict match: the target function or the seniority must be visible in
+    # the TITLE. Words like "operations" or "growth" appear in almost every
+    # description, so a description-only hit is not a match (it previously
+    # sent ~90% non-target roles to the priority AI queue).
+    title_domain = any(kw in title_lower for kw in TITLE_DOMAIN_KEYWORDS)
+    is_director = bool(DIRECTOR_TITLE_PATTERN.search(title_lower))
+    is_senior = bool(SENIOR_TITLE_PATTERN.search(title_lower))
 
-    # "Senior Manager" is borderline — allow but lower bucket
-    is_senior_manager = (
-        "senior manager" in title_lower
-        or "lead" in title_lower
-        or "gerente sênior" in title_lower
-        or "gerente senior" in title_lower
-        or "gerente executivo" in title_lower
-        or "gerente executiva" in title_lower
-        or "gerente nacional" in title_lower
-    )
+    if is_director:
+        return True, "high" if title_domain else "medium"
+    if is_senior and title_domain:
+        return True, "medium"
 
-    # Plain "Manager" without Director/Head/VP → tier2 queue (scored after tier1 is clear)
-    is_plain_manager = (
-        ("manager" in title_lower or "gerente" in title_lower)
-        and not is_director
-        and not is_senior_manager
-    )
-    if is_plain_manager:
+    # Right function or plain manager, seniority unclear: scored only after
+    # the priority queue is empty.
+    is_plain_manager = "manager" in title_lower or "gerente" in title_lower
+    if title_domain or is_senior or is_plain_manager:
         return False, "manager_tier2"
 
-    # English-friendly signal
-    english_friendly = any(signal in text for signal in ENGLISH_FRIENDLY_SIGNALS)
-
-    # Scoring buckets
-    if is_director and english_friendly:
-        return True, "high"
-    if is_director:
-        return True, "high"
-    if is_senior_manager and english_friendly:
-        return True, "medium"
-    if is_senior_manager:
-        return True, "medium"
-
-    # Domain match but no seniority signal — low priority
-    return True, "medium"
+    # Neither the function nor any seniority in the title.
+    return False, "low"

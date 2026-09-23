@@ -70,6 +70,11 @@ class Settings(BaseSettings):
     # One hour keeps the worst-case Adzuna crawl (80 combinations × 2 pages)
     # below the daily free-tier request budget while surfacing fresh jobs fast.
     scan_interval_minutes: int = 60
+    # Freshness window requested from providers that support it (JobSpy
+    # hours_old, Adzuna max_days_old). With hourly scans a few days gives a wide
+    # safety margin while the provider's result quota goes to new postings
+    # instead of re-returning weeks-old listings.
+    fresh_search_days: int = 3
 
     # Search / semantic indexing. Nemotron is deliberately separate from the
     # Gemini scorer quota. Its 2048-dimensional vectors need migration 0010.

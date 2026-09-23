@@ -134,6 +134,7 @@ class AdzunaSource:
             "results_per_page": min(limit, 50),
             "what": query,
             "sort_by": "date",
+            "max_days_old": settings.fresh_search_days,
         }
         if location:
             request_params["where"] = location
