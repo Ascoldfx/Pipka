@@ -435,7 +435,13 @@ async def _score_and_notify(bot_app, user: User, all_jobs: list[Job], session):
             score_fn = score_jobs_nvidia
 
     logger.info("Using %s for real-time scoring", score_fn.__name__)
-    scores = await score_fn(to_score, user, session)
+    if score_fn.__name__ == "score_jobs_nvidia":
+        # Real-time scoring runs inside the scan lock: a degraded NVIDIA
+        # (15 jobs x 120s timeouts) previously stretched scans to 30+ minutes.
+        deadline = time.monotonic() + settings.nvidia_realtime_max_seconds
+        scores = await score_fn(to_score, user, session, deadline=deadline)
+    else:
+        scores = await score_fn(to_score, user, session)
 
     if scores and user.role != "admin":
         deducted = min(user.credits, len(scores))
@@ -539,6 +545,46 @@ def _backfill_score_fn():
     logger.debug("Backfill scorer: using NVIDIA (%s)", settings.nvidia_model)
     from app.scoring.nvidia_matcher import score_jobs_nvidia  # noqa: PLC0415
     return score_jobs_nvidia
+
+
+def _backfill_budget(score_fn) -> tuple[int, bool]:
+    """Return ``(jobs per user this run, nvidia_mode)`` for the active backend.
+
+    Gemini batches are sized to its daily *request* quota (one request per
+    batch). NVIDIA scores one job per request on a separate quota, so a
+    Gemini-sized batch left it idle for most of the two-hour interval.
+    """
+    gemini_sized = min(settings.max_jobs_per_scoring_batch, settings.backfill_ai_jobs_per_run)
+    name = getattr(score_fn, "__name__", "")
+    if name == "score_jobs_nvidia":
+        return settings.nvidia_backfill_jobs_per_run, True
+    if name == "score_jobs_gemini" and settings.nvidia_api_key:
+        from app.scoring.gemini_matcher import is_gemini_available  # noqa: PLC0415
+
+        if not is_gemini_available():
+            return settings.nvidia_backfill_jobs_per_run, True
+    return gemini_sized, False
+
+
+async def _score_backfill_chunks(
+    score_fn, jobs: list[Job], user: User, session: AsyncSession, deadline: float | None
+):
+    """Score in batch-sized chunks; in NVIDIA mode stop at the run deadline.
+
+    Each NVIDIA job is committed as it is scored, so stopping early only
+    defers the remaining jobs to the next run.
+    """
+    if deadline is None:
+        return await _score_backfill_batch(score_fn, jobs, user, session)
+    step = max(1, settings.max_jobs_per_scoring_batch)
+    for start in range(0, len(jobs), step):
+        if time.monotonic() >= deadline:
+            logger.info(
+                "Backfill NVIDIA time budget reached after %d/%d jobs for user %s",
+                start, len(jobs), user.id,
+            )
+            return
+        await _score_backfill_batch(score_fn, jobs[start : start + step], user, session)
 
 
 async def _score_backfill_batch(score_fn, jobs: list[Job], user: User, session: AsyncSession):
@@ -685,6 +731,7 @@ async def _backfill_score():
     _score_fn = _backfill_score_fn()
     backend = _score_fn.__name__.replace("score_jobs_", "").replace("score_jobs", "claude") or "claude"
     logger.info("Backfill scorer started (backend=%s)", backend)
+    run_deadline = time.monotonic() + settings.nvidia_backfill_max_seconds
 
     async with async_session() as session:
         users_result = await session.execute(
@@ -816,10 +863,11 @@ async def _backfill_score():
                 # Keep the queue freshness-first. Semantic similarity may
                 # reorder only a bounded window of the newest candidates, so
                 # an older high-similarity job cannot starve today's arrivals.
-                per_user_batch = min(
-                    settings.max_jobs_per_scoring_batch,
-                    settings.backfill_ai_jobs_per_run,
-                )
+                per_user_batch, nvidia_mode = _backfill_budget(_score_fn)
+                if nvidia_mode and time.monotonic() >= run_deadline:
+                    logger.info("Backfill NVIDIA time budget spent; user %s waits for next run", user.id)
+                    continue
+                t1_total = len(need_ai_t1)
                 priority_window = per_user_batch
                 need_ai_t1 = need_ai_t1[:priority_window]
                 need_ai_t2 = need_ai_t2[:priority_window]
@@ -846,8 +894,20 @@ async def _backfill_score():
                         "Backfill tier1 [%s]: AI-scoring %d director-level jobs for user %s",
                         backend, len(to_score), user.telegram_id,
                     )
-                    await _score_backfill_batch(_score_fn, to_score, user, session)
-                    continue  # come back next run for tier2
+                    deadline = run_deadline if nvidia_mode else None
+                    await _score_backfill_chunks(_score_fn, to_score, user, session, deadline)
+                    remaining = per_user_batch - len(to_score)
+                    if not nvidia_mode or remaining <= 0 or t1_total > len(to_score) or not need_ai_t2:
+                        continue  # come back next run for tier2
+                    # NVIDIA has no daily batch quota: tier1 is cleared within
+                    # this run, so the leftover budget goes to tier2 now.
+                    to_score = need_ai_t2[:remaining]
+                    logger.info(
+                        "Backfill tier2 [%s]: AI-scoring %d manager-level jobs for user %s (leftover budget)",
+                        backend, len(to_score), user.telegram_id,
+                    )
+                    await _score_backfill_chunks(_score_fn, to_score, user, session, deadline)
+                    continue
 
                 # Tier 2: manager-level, only when tier1 is fully cleared
                 if need_ai_t2:
@@ -856,7 +916,9 @@ async def _backfill_score():
                         "Backfill tier2 [%s]: AI-scoring %d manager-level jobs for user %s",
                         backend, len(to_score), user.telegram_id,
                     )
-                    await _score_backfill_batch(_score_fn, to_score, user, session)
+                    await _score_backfill_chunks(
+                        _score_fn, to_score, user, session, run_deadline if nvidia_mode else None
+                    )
                     continue  # recheck only after tier2 is also empty
 
                 # Both queues empty → safety recheck of pre-filter rejects

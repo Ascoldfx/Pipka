@@ -177,3 +177,90 @@ async def test_backfill_gives_each_user_15_fresh_jobs_from_their_own_market(monk
 
     assert call_order == [2, 1]
     await engine.dispose()
+
+
+async def _nvidia_budget_fixture(monkeypatch, *, tier1: int, tier2: int):
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    now = datetime.now()
+    async with factory() as session:
+        user = User(
+            id=1,
+            name="Germany",
+            profile=UserProfile(
+                target_titles=["Director Supply Chain"],
+                preferred_countries=["de"],
+            ),
+        )
+        jobs = []
+        for index in range(tier1):
+            jobs.append(Job(
+                external_id=f"t1-{index}", source="test", title="Director Supply Chain",
+                description="Supply chain leadership role.", country="de",
+                posted_at=now - timedelta(hours=index), url_status="active", dedup_hash=f"t1-{index}",
+            ))
+        for index in range(tier2):
+            jobs.append(Job(
+                external_id=f"t2-{index}", source="test", title="Supply Chain Manager",
+                description="Supply chain management role.", country="de",
+                posted_at=now - timedelta(hours=index), url_status="active", dedup_hash=f"t2-{index}",
+            ))
+        session.add_all([user, *jobs])
+        await session.commit()
+
+    selected: list[str] = []
+
+    async def score_jobs_nvidia(jobs, _user, _session):
+        selected.extend(job.external_id for job in jobs)
+        return []
+
+    async def no_hidden(*_args, **_kwargs):
+        return set()
+
+    monkeypatch.setattr(scheduler_service, "async_session", factory)
+    monkeypatch.setattr(scheduler_service, "_backfill_score_fn", lambda: score_jobs_nvidia)
+    monkeypatch.setattr(scheduler_service, "get_hidden_job_ids", no_hidden)
+    monkeypatch.setattr(scheduler_service, "get_hidden_dedup_hashes", no_hidden)
+    monkeypatch.setattr(scheduler_service, "_backfill_round_robin_offset", 0)
+    monkeypatch.setattr(settings, "backfill_max_age_days", 31)
+    monkeypatch.setattr(settings, "backfill_ai_jobs_per_run", 30)
+    monkeypatch.setattr(settings, "max_jobs_per_scoring_batch", 15)
+    monkeypatch.setattr(settings, "nvidia_backfill_jobs_per_run", 40)
+    monkeypatch.setattr(settings, "nvidia_backfill_max_seconds", 2700)
+    monkeypatch.setattr(settings, "semantic_skip_enabled", False)
+    return engine, selected
+
+
+@pytest.mark.asyncio
+async def test_nvidia_backfill_uses_its_own_larger_budget(monkeypatch):
+    engine, selected = await _nvidia_budget_fixture(monkeypatch, tier1=50, tier2=0)
+
+    await scheduler_service._backfill_score()
+
+    assert selected == [f"t1-{index}" for index in range(40)]
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_nvidia_backfill_spends_leftover_budget_on_tier2(monkeypatch):
+    engine, selected = await _nvidia_budget_fixture(monkeypatch, tier1=5, tier2=10)
+
+    await scheduler_service._backfill_score()
+
+    assert selected[:5] == [f"t1-{index}" for index in range(5)]
+    assert sorted(selected[5:]) == sorted(f"t2-{index}" for index in range(10))
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_nvidia_backfill_stops_at_time_budget(monkeypatch):
+    engine, selected = await _nvidia_budget_fixture(monkeypatch, tier1=10, tier2=0)
+    monkeypatch.setattr(settings, "nvidia_backfill_max_seconds", 0)
+
+    await scheduler_service._backfill_score()
+
+    assert selected == []
+    await engine.dispose()

@@ -223,15 +223,30 @@ def _parse_scores(raw: str, jobs: list[Job]) -> list[tuple[Job, int, str]]:
         elif text.count("```") >= 2:
             text = text.split("```")[1]
         text = text.replace("```", "").strip()
-    if not text.endswith("]"):
-        last_brace = text.rfind("}")
-        if last_brace > 0:
-            text = text[: last_brace + 1] + "]"
 
+    # Models sometimes append commentary after a complete array. Decode only
+    # the first JSON value and ignore the tail; fall back to repairing a
+    # truncated array only when that fails.
+    starts = [i for i in (text.find("["), text.find("{")) if i >= 0]
+    start = min(starts) if starts else -1
     try:
-        results = json.loads(text)
-    except json.JSONDecodeError as exc:
-        logger.warning("NVIDIA JSON parse failed: %s | raw[:200]=%s", exc, text[:200])
+        if start < 0:
+            raise json.JSONDecodeError("no JSON value", text, 0)
+        results, _ = json.JSONDecoder().raw_decode(text[start:])
+    except json.JSONDecodeError:
+        repaired = text[start:] if start >= 0 else text
+        last_brace = repaired.rfind("}")
+        if last_brace > 0:
+            repaired = repaired[: last_brace + 1] + "]"
+        try:
+            results = json.loads(repaired)
+        except json.JSONDecodeError as exc:
+            logger.warning("NVIDIA JSON parse failed: %s | raw[:200]=%s", exc, text[:200])
+            return []
+    if isinstance(results, dict):
+        results = [results]
+    if not isinstance(results, list):
+        logger.warning("NVIDIA JSON parse failed: expected array | raw[:200]=%s", text[:200])
         return []
 
     output: list[tuple[Job, int, str]] = []
@@ -266,6 +281,7 @@ async def score_jobs_nvidia(
     jobs: list[Job],
     user: User,
     session: AsyncSession,
+    deadline: float | None = None,
 ) -> list[JobScore]:
     """Backfill scorer via NVIDIA Build — drop-in replacement for ``score_jobs_gemini``.
 
@@ -286,6 +302,12 @@ async def score_jobs_nvidia(
     batch_size = _nvidia_batch_size()
 
     for i in range(0, len(jobs), batch_size):
+        # ``deadline`` (time.monotonic) bounds callers that must not stall,
+        # e.g. the hourly scan. Scored jobs are already committed; the rest
+        # stay unscored and are picked up by backfill.
+        if deadline is not None and time.monotonic() >= deadline:
+            logger.info("NVIDIA scoring time budget reached after %d/%d jobs", i, len(jobs))
+            break
         batch = jobs[i : i + batch_size]
         batch_results = await _score_batch(batch, profile_text)
         if not batch_results:

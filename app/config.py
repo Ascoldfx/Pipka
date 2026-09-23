@@ -116,6 +116,14 @@ class Settings(BaseSettings):
     # target market. New jobs are scored by the real-time scan separately.
     backfill_max_age_days: int = 31
     backfill_ai_jobs_per_run: int = 30
+    # When backfill runs on NVIDIA (Gemini key absent or breaker open) the
+    # batch size is no longer tied to Gemini's daily request quota: NVIDIA
+    # scores one job per request (~10-15s). A larger per-user budget, capped
+    # by wall-clock time so a run always finishes before the next 2h tick.
+    nvidia_backfill_jobs_per_run: int = 120
+    nvidia_backfill_max_seconds: int = 2700
+    # Wall-clock cap for NVIDIA real-time scoring inside the hourly scan.
+    nvidia_realtime_max_seconds: int = 300
     # Legacy env compatibility only. Multi-user backfill uses each profile's
     # explicit preferred_countries and never reads this global value.
     backfill_country: str = "de"
