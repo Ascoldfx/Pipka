@@ -1,5 +1,9 @@
 from app.config import settings
-from app.scoring.nvidia_matcher import _nvidia_batch_size, _nvidia_generation_options
+from app.scoring.nvidia_matcher import (
+    _nvidia_batch_size,
+    _nvidia_generation_options,
+    _stream_content,
+)
 
 
 def test_nvidia_scoring_uses_smaller_batches_than_gemini(monkeypatch) -> None:
@@ -25,5 +29,12 @@ def test_nvidia_reliability_defaults_bound_slow_retries() -> None:
         "max_tokens": 768,
         "temperature": 0.3,
         "top_p": 0.95,
-        "stream": False,
+        "stream": True,
     }
+
+
+def test_nvidia_stream_parser_extracts_content_and_ignores_control_lines() -> None:
+    assert _stream_content('data: {"choices":[{"delta":{"content":"[{"}}]}') == "[{"
+    assert _stream_content("data: [DONE]") is None
+    assert _stream_content(": keep-alive") is None
+    assert _stream_content("data: not-json") is None

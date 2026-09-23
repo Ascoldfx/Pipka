@@ -61,7 +61,7 @@ def _nvidia_generation_options() -> dict[str, object]:
         "max_tokens": settings.nvidia_scoring_max_tokens,
         "temperature": 0.3,
         "top_p": 0.95,
-        "stream": False,
+        "stream": True,
     }
     if settings.nvidia_model == "openai/gpt-oss-20b":
         options["reasoning_effort"] = settings.nvidia_scoring_reasoning_effort
@@ -81,9 +81,33 @@ async def _pace() -> None:
 def _is_retryable(exc: BaseException) -> bool:
     if isinstance(exc, httpx.HTTPStatusError):
         return exc.response.status_code in {408, 429, 500, 502, 503, 504}
-    if isinstance(exc, (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout)):
+    if isinstance(
+        exc,
+        (TimeoutError, httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout),
+    ):
         return True
     return False
+
+
+def _stream_content(line: str) -> str | None:
+    """Extract visible assistant content from one OpenAI-compatible SSE line."""
+    if not line.startswith("data: "):
+        return None
+    payload = line[6:].strip()
+    if not payload or payload == "[DONE]":
+        return None
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        return None
+    choices = data.get("choices") or []
+    if not choices:
+        return None
+    choice = choices[0]
+    content = (choice.get("delta") or {}).get("content")
+    if content is None:
+        content = (choice.get("message") or {}).get("content")
+    return content if isinstance(content, str) and content else None
 
 
 def _build_jobs_text(jobs: list[Job]) -> str:
@@ -120,13 +144,18 @@ async def _call_nvidia(prompt: str, batch_size: int) -> str | None:
         async with _nvidia_semaphore:
             await _pace()
             async with httpx.AsyncClient(timeout=settings.nvidia_scoring_timeout_seconds) as client:
-                resp = await client.post(url, headers=headers, json=payload)
-                resp.raise_for_status()
-                data = resp.json()
-                # Defensive: some models can return content=None (e.g. reasoning
-                # variants that exhaust the budget on chain-of-thought). Use .get
-                # so the batch is skipped cleanly rather than crashing downstream.
-                return data["choices"][0]["message"].get("content")
+                # Streaming keeps the read socket active while the hosted model
+                # generates a long JSON answer. A total wall-clock guard still
+                # prevents a provider that drips tokens from holding the queue.
+                async with asyncio.timeout(settings.nvidia_scoring_timeout_seconds * 2):
+                    async with client.stream("POST", url, headers=headers, json=payload) as resp:
+                        resp.raise_for_status()
+                        chunks: list[str] = []
+                        async for line in resp.aiter_lines():
+                            content = _stream_content(line)
+                            if content:
+                                chunks.append(content)
+                        return "".join(chunks) or None
 
     # Laguna XS typically responds in under a minute for one vacancy. Larger
     # batches are rejected or time out on the hosted free endpoint.
