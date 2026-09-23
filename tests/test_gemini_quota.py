@@ -71,4 +71,4 @@ async def test_manual_analysis_does_not_consume_gemini_batch_budget(monkeypatch)
 
     result = await analyze_single_job(Job(title="Director Supply Chain"), UserProfile())
 
-    assert "зарезервирован" in result
+    assert "недоступен" in result

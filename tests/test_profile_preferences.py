@@ -5,13 +5,13 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from starlette.requests import Request
 
+import app.scoring.profile_hash as profile_hash_module
 from app.api import jobs as jobs_api
 from app.api.profile import _parse_country_codes, _parse_exclusion_list
 from app.models import Base
 from app.models.application import Application
 from app.models.job import Job, JobScore
 from app.models.user import User, UserProfile
-import app.scoring.profile_hash as profile_hash_module
 from app.scoring.profile_hash import compute_profile_hash, valid_score_model_versions
 
 
@@ -62,7 +62,11 @@ def test_score_cache_tracks_the_configured_primary_model(monkeypatch):
     monkeypatch.setattr(profile_hash_module.settings, "gemini_scoring_model", "gemini-new")
     monkeypatch.setattr(profile_hash_module.settings, "nvidia_api_key", "fallback-key")
 
-    assert valid_score_model_versions() == ("prefilter", "gemini:gemini-new")
+    assert valid_score_model_versions() == (
+        "prefilter",
+        "gemini:gemini-new",
+        "nvidia:poolside/laguna-xs-2.1",
+    )
 
     monkeypatch.setattr(profile_hash_module.settings, "gemini_api_key", "")
     monkeypatch.setattr(profile_hash_module.settings, "nvidia_model", "nvidia-new")

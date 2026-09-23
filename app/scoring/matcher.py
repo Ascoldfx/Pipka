@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-import json
 import logging
-from datetime import datetime, timedelta
 
-from sqlalchemy import or_, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.job import Job, JobScore
 from app.models.user import User, UserProfile
 from app.scoring.gemini_client import generate_gemini_content
-from app.scoring.profile_hash import compute_profile_hash
 
 logger = logging.getLogger(__name__)
 
