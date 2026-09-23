@@ -100,7 +100,7 @@ Medium-severity (4-5):
 4. Удалить с VPS устаревшие `.env.bak*` после ручного подтверждения актуального `.env`.
 5. Разделить application/migration/backup DB roles; текущий runtime role не должен быть PostgreSQL superuser.
 6. Вынести inline CSS/`style=` из dashboard и убрать оставшийся `style-src 'unsafe-inline'`; JavaScript CSP уже nonce-only, event attributes запрещены.
-7. **Синхронизировать Git:** локальный `main` в рабочей папке на 51 коммит впереди GitHub (02.08 → 23.09.2026), VPS деплоится file-overlay'ем поверх своего HEAD `4a29d79`. Запушить `main`, затем привести VPS к `git pull` — иначе следующий `git pull` на сервере может откатить runtime-изменения.
+7. **Запушить `main` на GitHub:** VPS уже синхронизирован с каноническим `main` (23.09.2026), но GitHub отстаёт на 50+ коммитов — токен на Mac без права `workflow` (в коммитах есть `.github/workflows/ci.yml`). Выдать токену `workflow` или добавить SSH-ключ в GitHub, затем `git push origin main`.
 
 ### P1 — качество и стоимость pipeline
 

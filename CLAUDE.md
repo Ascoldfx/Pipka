@@ -5,6 +5,8 @@ Repo: github.com/Ascoldfx/Pipka, ветка `main`.
 Сервер: Contabo VPS, `pipkaops@217.76.61.28` (sudo), директория `/opt/pipka`.
 SSH ключ: `~/.ssh/id_ed25519`.
 
+**Единственная локальная копия проекта: `~/клод джоб/Pipka`** (она же vault Obsidian, вики — `docs/pipka-wiki/`). Других клонов, снимков сервера и `sync`-скриптов нет — не создавать. Сервер `/opt/pipka` = коммит `main` без локальных правок; не деплоить копированием файлов.
+
 ## Структура
 - `app/` — основной код
   - `api/` — 11 FastAPI роутеров (auth, health, pages, jobs, stats, profile, scan, ops, admin, billing, feedback)
@@ -31,6 +33,14 @@ ssh pipkaops@217.76.61.28 -i ~/.ssh/id_ed25519
 cd /opt/pipka && sudo git pull && sudo docker compose up -d --build
 ```
 Всегда `--build` — без него Docker использует старый image.
+
+Перед пушем прогнать то же, что CI: `.venv/bin/ruff check --isolated --select F,E9 app tests alembic`, `.venv/bin/python -m pytest -q`, `python scripts/check_secrets.py`, `node scripts/check_inline_js.mjs`. Локальный `.venv` — Python 3.12.
+
+Если GitHub не принимает пуш, доставить коммиты на сервер напрямую:
+```bash
+git push --receive-pack="sudo -n git-receive-pack" ssh://pipkaops@217.76.61.28/opt/pipka main:refs/heads/sync-YYYYMMDD
+# на сервере: sudo git reset --hard sync-YYYYMMDD && sudo git branch -D sync-YYYYMMDD && sudo docker compose up -d --build
+```
 
 ## БД
 - PostgreSQL 16, база `pipka`, user `pipka`.
