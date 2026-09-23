@@ -66,6 +66,8 @@
 - Токен на Mac не имел права `workflow`, из-за этого 60 коммитов (02.08 → 23.09) не пушились. После нового токена `main` на GitHub = `e0796b5`, VPS снова обновляется через `sudo git pull` (upstream `origin/main`).
 - Первый в истории прогон CI: тесты, линтер, проверка секретов и JS — зелёные; упал `Validate Compose` — `docker-compose.yml` грузит `env_file: .env`, которого в CI нет. `.github/workflows/ci.yml`: перед проверкой копируется `.env.example`.
 
+- Второй прогон CI дошёл до «Validate fresh database migration» и упал: на пустой базе `0011` падал на `column "credits" already exists`. `0001_baseline` создаёт схему через `create_all()` по текущим моделям, а `0011_user_billing_and_transactions.py` и `0012_onboarding_and_feedback.py` не проверяли существование колонок/таблиц/индексов. Добавлены проверки в стиле `0002`–`0010`. Проверено на одноразовом `pgvector/pgvector:pg16`: все 13 миграций до `0013_application_identity (head)`. Production (уже на head) не затронут. См. [[Миграции]].
+
 ### Проверено и отклонено: `deepseek-ai/deepseek-v4.1-flash` на NVIDIA
 
 Сравнение на реальном промпте скоринга (продакшен-путь `_call_nvidia`, 6 свежих вакансий): DeepSeek не прислал ни байта ни в потоковом режиме (60 с × 6), ни обычным запросом (180 с). Для скоринга непригоден; остаётся `poolside/laguna-xs-2.1`. Сам бесплатный эндпоинт NVIDIA в этот день нестабилен: пустые потоки, зависания, но и корректные ответы за 5 с.
