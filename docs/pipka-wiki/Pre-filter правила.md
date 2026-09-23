@@ -6,8 +6,8 @@
 
 Возвращает `tuple[bool, str]`:
 - `True, "high"` — director/head уровень **в title** + функция **в title** → AI-скоринг tier 1 ([[Скоринг]])
-- `True, "medium"` — director-уровень без функции в title (функция есть в описании) или senior/lead/principal **вместе** с функцией в title → tier 1
-- `False, "manager_tier2"` — функция в title без seniority, plain manager, senior-маркер без функции → AI-скоринг tier 2 (только когда tier 1 пуст)
+- `True, "medium"` — director-уровень + смежная операционная роль или общее руководство в title (`ADJACENT_LEADERSHIP_TITLE_PATTERN`: production, plant, site, transportation, lean, value stream, commodity, buying, MD, CEO/COO, Produktion, Standort, Betrieb, Werksleitung, Geschäftsführer) или senior/lead/principal **вместе** с функцией в title → tier 1
+- `False, "manager_tier2"` — прочий director-уровень без функции в title (Account Director, CFO, Head of Engineering), функция в title без seniority, plain manager, senior-маркер без функции → AI-скоринг tier 2 (только когда tier 1 пуст)
 - `False, "low"` — hard reject, в БД пишется `JobScore(score=0, model_version="prefilter")` ([[Кэш и инвалидация#prefilter sentinel]])
 
 ## Списки ключевых слов
@@ -62,8 +62,8 @@ Crisis-related: `crisis management`, `turnaround`, `transformation`, `restructur
 10. **Work mode filter** — соответствие `profile.work_mode` (`remote`/`onsite`/`hybrid`/`any`) и `Job.is_remote` + ключевых слов.
 11. **Country check** — `Job.country` должен быть в `profile.preferred_countries`.
 12. **Protected target-title priority** — после обязательных personal/language/location ограничений exact target возвращается как `high`, не требуя generic Director/Head keywords.
-13. **Seniority bucketing (по title)** — director-маркер + функция в title → `high`; director-маркер без функции в title → `medium`; senior-маркер + функция в title → `medium`.
-14. **Default** — функция в title, senior-маркер или plain manager/gerente → `manager_tier2`; иначе → `low`. Раньше default был `medium`: это и заполняло tier 1 нецелевыми ролями.
+13. **Seniority bucketing (по title)** — director-маркер + функция в title → `high`; director-маркер + смежная роль / общее руководство → `medium`; senior-маркер + функция в title → `medium`.
+14. **Default** — функция в title, прочий director-маркер, senior-маркер или plain manager/gerente → `manager_tier2`; иначе → `low`. Замер 45 дней DE: director-уровень без функции в title — 927 оценок, 80% <40; с гейтом смежных ролей в tier 1 осталось 88 (31 со score ≥70), остальное уходит в tier 2 и оценивается позже. Раньше default был `medium`: это и заполняло tier 1 нецелевыми ролями.
 
 ## Порядок AI-очереди — `focus_rank()`
 

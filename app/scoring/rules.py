@@ -96,6 +96,19 @@ DOMAIN_KEYWORDS = [
 # matched exactly by matches_explicit_target_title instead.
 TITLE_DOMAIN_KEYWORDS = [kw for kw in DOMAIN_KEYWORDS if kw != "growth"]
 
+# A director-level title without the core function keeps priority only for
+# operations-adjacent or general-management roles (Head of Production, Site
+# Director, Standortleiter, MD). Production audit 23.09.2026: without this
+# gate 80% of director-level titles lacking the function scored <40
+# (Account Director, CFO, Head of Engineering). The rest go to tier 2.
+ADJACENT_LEADERSHIP_TITLE_PATTERN = re.compile(
+    r"\b(?:production|manufacturing|plant|site|operational|transport(?:ation)?|"
+    r"freight|airfreight|lean|value stream|commodity|facilities|buying|industrial|"
+    r"technical operations|general manager|managing director|md|country director|"
+    r"ceo|chief executive|coo|chief operating|chief operation)\b"
+    r"|fertigung|produktion|standort|betrieb|bestand|werks?leit|gesch[aä]ftsf[uü]hr"
+)
+
 # High-frequency function words provide a deterministic, dependency-free
 # language classifier for long vacancy descriptions.  We only hard-reject a
 # confident non-English result; ambiguous/short text is sent to AI instead of
@@ -535,15 +548,17 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     is_director = bool(DIRECTOR_TITLE_PATTERN.search(title_lower))
     is_senior = bool(SENIOR_TITLE_PATTERN.search(title_lower))
 
-    if is_director:
-        return True, "high" if title_domain else "medium"
+    if is_director and title_domain:
+        return True, "high"
+    if is_director and ADJACENT_LEADERSHIP_TITLE_PATTERN.search(title_lower):
+        return True, "medium"
     if is_senior and title_domain:
         return True, "medium"
 
     # Right function or plain manager, seniority unclear: scored only after
     # the priority queue is empty.
     is_plain_manager = "manager" in title_lower or "gerente" in title_lower
-    if title_domain or is_senior or is_plain_manager:
+    if title_domain or is_director or is_senior or is_plain_manager:
         return False, "manager_tier2"
 
     # Neither the function nor any seniority in the title.

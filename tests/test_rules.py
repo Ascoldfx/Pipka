@@ -467,3 +467,24 @@ def test_focus_rank_freshness_beats_function_procurement_leads_within_day():
     # Without procurement in the profile the function gives no boost.
     no_proc = UserProfile(target_titles=["Director Supply Chain"])
     assert focus_rank(today_proc, no_proc, now) == focus_rank(today_ops, no_proc, now)
+
+
+@pytest.mark.parametrize("title", [
+    "Account Director, EMEA",
+    "Chief Financial Officer (all genders)",
+    "Head of Engineering (m/w/d)",
+    "Niederlassungsleiter (m/w/d) Zeitarbeit in Mainz",
+])
+def test_director_level_outside_function_goes_to_second_queue(title):
+    assert pre_filter(Job(title=title, description=_GENERIC_DESC), _PROFILE) == (False, "manager_tier2")
+
+
+@pytest.mark.parametrize("title", [
+    "Head of Production (w/m/d)",
+    "Site Director",
+    "Betriebsdirektor:in",
+    "Managing Director (m/f/d)",
+    "Senior Director, Lean Excellence (EU & AMEA)",
+])
+def test_operations_adjacent_leadership_stays_in_priority_queue(title):
+    assert pre_filter(Job(title=title, description=_GENERIC_DESC), _PROFILE) == (True, "medium")

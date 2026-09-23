@@ -95,6 +95,9 @@
 - **Строгий title-матч** ([[Pre-filter правила]]): уровень (`DIRECTOR_TITLE_PATTERN`) и функция (`TITLE_DOMAIN_KEYWORDS`) читаются только из названия должности.
   - `partner`/`principal`/`lead` засчитываются только вместе с функцией.
   - Default `medium` заменён на `manager_tier2`.
+  - Director-уровень без функции в title остаётся в tier 1 только для смежных операционных ролей и общего руководства (`ADJACENT_LEADERSHIP_TITLE_PATTERN`).
+  - Account Director, CFO, Head of Engineering уходят в tier 2.
+  - На 45 днях DE эта группа сократилась в tier 1 с 927 до 88 вакансий; 31 из 49 с оценкой ≥70 остался в tier 1.
   - Удалены `DIRECTOR_KEYWORDS` и `ENGLISH_FRIENDLY_SIGNALS`.
   - Замер на 3 днях DE: tier 1 874 → 201, совпадения со score ≥70 сохранены 369/394, вакансий со score <40 в tier 1 4465 → 940.
 - **VP — opt-in** (`is_non_target_vp`): кандидат убрал VP из целей как нереалистичный в Германии.
@@ -107,4 +110,4 @@
   - Similarity больше не поднимает старую вакансию выше сегодняшней.
 - **`FRESH_SEARCH_DAYS=3`** ([[Настройки]]): JobSpy `hours_old` 60 дней → 72 ч; Adzuna `max_days_old=3`.
 - `SCORING_RULES_VERSION` не повышался: новое правило строже старого, уже выставленные оценки остаются валидными.
-- Тесты: регрессии на реальные нецелевые и целевые title, VP opt-in, `focus_rank` (261 тест).
+- Тесты: регрессии на реальные нецелевые и целевые title, VP opt-in, смежные роли, `focus_rank` (270 тестов).
