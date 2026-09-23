@@ -57,7 +57,8 @@
 - `app/services/scheduler_service.py`: бюджет backfill зависит от бэкенда — 15 вакансий через Gemini (как раньше), `NVIDIA_BACKFILL_JOBS_PER_RUN=120` через NVIDIA с лимитом времени `NVIDIA_BACKFILL_MAX_SECONDS=2700`; остаток бюджета после Tier 1 сразу идёт на Tier 2. Потолок вырос с 180 до ~1440 оценок/сутки.
 - `app/scoring/nvidia_matcher.py`: необязательный `deadline`; real-time оценка в скане ограничена `NVIDIA_REALTIME_MAX_SECONDS=300` — сканы 02:50–06:50 длились до 32 минут из-за 15 × 120 с таймаутов.
 - `app/scoring/nvidia_matcher.py`: разбор ответа берёт первое JSON-значение (массив или объект) и игнорирует хвостовой комментарий модели; раньше `Extra data` выбрасывал всю оценку.
-- Тесты: `tests/test_nvidia_parse.py` (6), 3 новых в `tests/test_backfill_selection.py`. Итого 240 зелёных.
+- Контрольный прогон на продакшене выявил, что лимит времени проверялся только между пачками по 15 — при зависаниях провайдера (5 таймаутов по ~2 мин из 8 запросов) прогон пережил 10-минутный лимит. Дедлайн теперь передаётся в `score_jobs_nvidia` и проверяется перед каждым запросом.
+- Тесты: `tests/test_nvidia_parse.py` (6), 4 новых в `tests/test_backfill_selection.py`. Итого 241 зелёный.
 
 См. [[Скоринг#Backfill scorer]], [[Настройки]], [[Сервисы]].
 

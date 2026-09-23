@@ -53,7 +53,7 @@ async def test_backfill_falls_back_to_nvidia_in_same_batch(monkeypatch):
 
     gemini_score.__name__ = "score_jobs_gemini"
 
-    async def nvidia_score(*_args):
+    async def nvidia_score(*_args, **_kwargs):
         calls.append("nvidia")
         return ["nvidia-score"]
 

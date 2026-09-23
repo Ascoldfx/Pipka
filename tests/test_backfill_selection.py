@@ -212,8 +212,10 @@ async def _nvidia_budget_fixture(monkeypatch, *, tier1: int, tier2: int):
         await session.commit()
 
     selected: list[str] = []
+    deadlines: list[float | None] = []
 
-    async def score_jobs_nvidia(jobs, _user, _session):
+    async def score_jobs_nvidia(jobs, _user, _session, deadline=None):
+        deadlines.append(deadline)
         selected.extend(job.external_id for job in jobs)
         return []
 
@@ -231,12 +233,12 @@ async def _nvidia_budget_fixture(monkeypatch, *, tier1: int, tier2: int):
     monkeypatch.setattr(settings, "nvidia_backfill_jobs_per_run", 40)
     monkeypatch.setattr(settings, "nvidia_backfill_max_seconds", 2700)
     monkeypatch.setattr(settings, "semantic_skip_enabled", False)
-    return engine, selected
+    return engine, selected, deadlines
 
 
 @pytest.mark.asyncio
 async def test_nvidia_backfill_uses_its_own_larger_budget(monkeypatch):
-    engine, selected = await _nvidia_budget_fixture(monkeypatch, tier1=50, tier2=0)
+    engine, selected, deadlines = await _nvidia_budget_fixture(monkeypatch, tier1=50, tier2=0)
 
     await scheduler_service._backfill_score()
 
@@ -246,7 +248,7 @@ async def test_nvidia_backfill_uses_its_own_larger_budget(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_nvidia_backfill_spends_leftover_budget_on_tier2(monkeypatch):
-    engine, selected = await _nvidia_budget_fixture(monkeypatch, tier1=5, tier2=10)
+    engine, selected, deadlines = await _nvidia_budget_fixture(monkeypatch, tier1=5, tier2=10)
 
     await scheduler_service._backfill_score()
 
@@ -257,10 +259,21 @@ async def test_nvidia_backfill_spends_leftover_budget_on_tier2(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_nvidia_backfill_stops_at_time_budget(monkeypatch):
-    engine, selected = await _nvidia_budget_fixture(monkeypatch, tier1=10, tier2=0)
+    engine, selected, deadlines = await _nvidia_budget_fixture(monkeypatch, tier1=10, tier2=0)
     monkeypatch.setattr(settings, "nvidia_backfill_max_seconds", 0)
 
     await scheduler_service._backfill_score()
 
     assert selected == []
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_nvidia_backfill_passes_deadline_into_every_request(monkeypatch):
+    engine, selected, deadlines = await _nvidia_budget_fixture(monkeypatch, tier1=20, tier2=0)
+
+    await scheduler_service._backfill_score()
+
+    assert len(selected) == 20
+    assert deadlines and all(isinstance(value, float) for value in deadlines)
     await engine.dispose()

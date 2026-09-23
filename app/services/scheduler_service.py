@@ -584,16 +584,21 @@ async def _score_backfill_chunks(
                 start, len(jobs), user.id,
             )
             return
-        await _score_backfill_batch(score_fn, jobs[start : start + step], user, session)
+        await _score_backfill_batch(score_fn, jobs[start : start + step], user, session, deadline)
 
 
-async def _score_backfill_batch(score_fn, jobs: list[Job], user: User, session: AsyncSession):
+async def _score_backfill_batch(
+    score_fn, jobs: list[Job], user: User, session: AsyncSession, deadline: float | None = None
+):
     """Score one selected batch and fail over to NVIDIA after Gemini exhausts.
 
     The Gemini matcher opens its breaker immediately on a quota response.  A
     fallback in the same scheduler run keeps fresh vacancies moving instead of
     waiting for the next two-hour backfill tick (or the next quota reset).
     """
+    if score_fn.__name__ == "score_jobs_nvidia":
+        # NVIDIA checks the deadline before every single request.
+        return await score_fn(jobs, user, session, deadline=deadline)
     if score_fn.__name__ != "score_jobs_gemini":
         return await score_fn(jobs, user, session)
 
@@ -607,7 +612,7 @@ async def _score_backfill_batch(score_fn, jobs: list[Job], user: User, session: 
             source="nvidia",
             message=f"gemini_breaker_open batch={len(jobs)}",
         )
-        return await score_jobs_nvidia(jobs, user, session)
+        return await score_jobs_nvidia(jobs, user, session, deadline=deadline)
 
     scores = await score_fn(jobs, user, session)
     if not is_gemini_available() and settings.nvidia_api_key:
@@ -617,7 +622,7 @@ async def _score_backfill_batch(score_fn, jobs: list[Job], user: User, session: 
             source="nvidia",
             message=f"gemini_exhausted batch={len(jobs)}",
         )
-        return await score_jobs_nvidia(jobs, user, session)
+        return await score_jobs_nvidia(jobs, user, session, deadline=deadline)
     return scores
 
 
