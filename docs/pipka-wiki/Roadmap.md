@@ -104,6 +104,9 @@ Medium-severity (4-5):
 
 ### P1 — качество и стоимость pipeline
 
+0. **Главный рычаг скорости — платный Gemini.** Бесплатный 3.6 Flash даёт ~5 пачек/сутки (ретраи на 503 сжигают слоты), NVIDIA-эндпоинт нестабилен. С биллингом на Google-проекте и поднятым `GEMINI_DAILY_REQUEST_LIMIT` (≈30–40/сутки) Gemini один покрывает весь спрос ~370 оценок/сутки пачками по 15. Решение и биллинг — за владельцем.
+0.1. Pre-filter пропускает в Tier 1 явно нерелевантные роли (пример 23.09: «Math, Physics & Engineering Graduates» — `(True, 'medium')`), они тратят дефицитную AI-квоту — [[Pre-filter правила]].
+
 1. Добавить golden dataset из 50–100 вручную размеченных вакансий и regression-метрики precision@20 / false-negative rate.
 3. Ввести per-backend latency/token/cost counters и вывести их в Ops.
 4. Кэшировать detailed analysis по `(user, job, profile_hash, analysis_model)` с TTL; идею из старого `pipka-latest` реализовать заново в текущих роутерах, не переносить устаревший монолит.

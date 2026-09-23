@@ -58,3 +58,7 @@ async def test_expired_deadline_stops_before_any_request(monkeypatch):
 
     assert result == []
     assert calls == []
+
+
+def test_empty_stream_is_a_visible_transient_failure():
+    assert nvidia_matcher._is_retryable(nvidia_matcher.NvidiaEmptyResponse("empty stream"))

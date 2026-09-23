@@ -37,6 +37,10 @@ from app.services.ops_service import record_ops_event
 
 logger = logging.getLogger(__name__)
 
+class NvidiaEmptyResponse(Exception):
+    """HTTP 200 stream that carried no assistant content (provider hiccup)."""
+
+
 # Serialise + pace NVIDIA calls, same pattern as gemini_matcher.
 _nvidia_semaphore = asyncio.Semaphore(1)
 _pacer_lock = asyncio.Lock()
@@ -83,7 +87,14 @@ def _is_retryable(exc: BaseException) -> bool:
         return exc.response.status_code in {408, 429, 500, 502, 503, 504}
     if isinstance(
         exc,
-        (TimeoutError, httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout),
+        (
+            NvidiaEmptyResponse,
+            TimeoutError,
+            httpx.ConnectError,
+            httpx.ReadTimeout,
+            httpx.WriteTimeout,
+            httpx.PoolTimeout,
+        ),
     ):
         return True
     return False
@@ -155,7 +166,13 @@ async def _call_nvidia(prompt: str, batch_size: int) -> str | None:
                             content = _stream_content(line)
                             if content:
                                 chunks.append(content)
-                        return "".join(chunks) or None
+                        content_text = "".join(chunks)
+                        if not content_text:
+                            # Previously returned None silently: no log, no
+                            # OpsEvent, invisible in Ops. Surface it as a
+                            # transient failure so it is counted as exhausted.
+                            raise NvidiaEmptyResponse("empty stream")
+                        return content_text
 
     # Laguna XS typically responds in under a minute for one vacancy. Larger
     # batches are rejected or time out on the hosted free endpoint.
