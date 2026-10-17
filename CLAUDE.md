@@ -14,7 +14,8 @@ SSH ключ: `~/.ssh/id_ed25519`.
   - `models/` — SQLAlchemy модели (User, UserProfile, PaymentTransaction, UserFeedback, Job, JobScore, Application, ApplicationHistory, SearchSubscription, OpsEvent)
   - `schemas/` — Pydantic-схемы
   - `scoring/` — `rules.py` (pre_filter) + `matcher.py` (промпт + маршрутизатор) + `gemini_matcher.py` (Gemini) + `gemini_client.py` (Google GenAI SDK) + `nvidia_matcher.py` (NVIDIA fallback) + `nvidia_embedding_client.py` + `profile_hash.py`
-  - `sources/` — Adzuna, JobSpy, Arbeitnow, Remotive, Arbeitsagentur, Xing, BerlinStartupJobs, WTTJ, Jooble, BuiltIn, Gupy + Watchlist + aggregator
+  - `sources/` — Adzuna, JobSpy, Arbeitnow, Remotive, Arbeitsagentur, Xing, BerlinStartupJobs, WTTJ, Jooble, BuiltIn, Gupy, Greenhouse + Watchlist + aggregator
+  - `markets/` — политики стран сверх общих правил; `korea.py` — whitelist-рынок KR (реестр работодателей, языковой и статусный фильтр, вызывается из `pre_filter`)
   - `services/` — scheduler, user_scope_service (мульти-юзер очереди), billing_service, embedding_service, resume_parser, url_checker, user_service, tracker_service, ops_service, backup_service, job_service
   - `static/` — dashboard.html, infographic.html, js/security.js, js/events.js, css/styles.css
 - `alembic/` — миграции (единственный способ менять схему БД)
