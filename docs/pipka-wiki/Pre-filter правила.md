@@ -61,6 +61,13 @@ Crisis-related: `crisis management`, `turnaround`, `transformation`, `restructur
 9. **Domain check** — нет protected target-title и `DOMAIN_KEYWORDS` в title или description → `low`.
 10. **Work mode filter** — соответствие `profile.work_mode` (`remote`/`onsite`/`hybrid`/`any`) и `Job.is_remote` + ключевых слов.
 11. **Country check** — `Job.country` должен быть в `profile.preferred_countries`.
+11a. **Whitelist-рынок (Южная Корея, с 17.10.2026)** — для `Job.country == KR` вызывается `app.markets.korea.rejection_reason()`, и любая причина → `low`, в том числе для exact target. Причины проверяются по порядку:
+   - работодателя нет в реестре;
+   - описание написано по-корейски (доля хангыля среди букв больше 0,2);
+   - явное требование корейского (fluent, native, bilingual, business-level, TOPIK, `한국어 능통`); формулировки «plus/preferred/우대» не считаются;
+   - ограничение статуса: F-2/F-4/F-5/F-6 only, must reside in Korea, no visa sponsorship.
+
+   Подробно: [[Южная Корея — whitelist-рынок]].
 12. **Protected target-title priority** — после обязательных personal/language/location ограничений exact target возвращается как `high`, не требуя generic Director/Head keywords.
 13. **Seniority bucketing (по title)** — director-маркер + функция в title → `high`; director-маркер + смежная роль / общее руководство → `medium`; senior-маркер + функция в title → `medium`.
 14. **Default** — функция в title, прочий director-маркер, senior-маркер или plain manager/gerente → `manager_tier2`; иначе → `low`. Замер 45 дней DE: director-уровень без функции в title — 927 оценок, 80% <40; с гейтом смежных ролей в tier 1 осталось 88 (31 со score ≥70), остальное уходит в tier 2 и оценивается позже. Раньше default был `medium`: это и заполняло tier 1 нецелевыми ролями.
@@ -100,6 +107,7 @@ Similarity больше не может поднять старую ваканс
 - **27 июля 2026:** компании отделены от контентных стоп-фраз миграцией `0007`; `nan` очищается; English-only перешёл с marker-гейта на консервативное определение языка.
 - **1 августа 2026:** whole-word internship, primary-role COO detection и semantic priority закрыли false-negative классы `International`/COO-office/низкая embedding similarity.
 
+- **17 октября 2026:** политика whitelist-рынка для `KR`; `scm` добавлен в `DOMAIN_KEYWORDS`.
 - **23 сентября 2026:** seniority и функция только из title; default `medium` → `manager_tier2`; VP стал opt-in; порядок очереди — окно свежести → procurement ([[Changelog 2026-09]]). Замер на production (DE, 3 дня): tier 1 874 → 201, совпадения со score ≥70 сохранены 369/394.
 
 ## Куда не масштабируется

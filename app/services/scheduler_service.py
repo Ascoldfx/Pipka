@@ -41,6 +41,7 @@ from app.sources import (
     ArbeitsagenturSource,
     BerlinStartupJobsSource,
     BuiltInSource,
+    GreenhouseSource,
     GupyFeedSource,
     JobSpySource,
     JoobleSource,
@@ -210,6 +211,7 @@ async def _background_scan(bot_app, trigger: str = "scheduled"):
                 JoobleSource(),
                 GupyFeedSource(),
                 BuiltInSource(),
+                GreenhouseSource(),
             ]
         )
 

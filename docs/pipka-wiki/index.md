@@ -20,6 +20,7 @@
 - [[Дедупликация]] — exact (sha256) + fuzzy (title + company subset) + merged_sources
 - [[Поиск и индексация]] — tsvector + GIN, pgvector + NVIDIA Nemotron embeddings
 - [[Watchlist]] — точечный 6-часовой scan по `target_companies`
+- [[Южная Корея — whitelist-рынок]] — страна с политикой «только реестр работодателей + англоязычные вакансии»
 - [[Скоринг]] — pre-filter rules + 2 AI backend'а (Gemini, NVIDIA)
 - [[Pre-filter правила]] — keyword lists, buckets, language detection
 - [[Кэш и инвалидация]] — profile_hash + model_version (Phase 2)
@@ -59,6 +60,7 @@
 
 ## Changelog
 
+- [[Changelog 2026-10]] — Южная Корея как whitelist-рынок: реестр работодателей, Greenhouse-источник, языковой фильтр
 - [[Changelog 2026-09]] — NVIDIA streaming fallback, модель scoring, Ops security-probe filtering и состояние production
 - [[Changelog 2026-08]] — security audit, фильтры, AI-cache, географический dedup, backup restore-test
 - [[Changelog 2026-07]] — Gemini 3.5/3.6, скрытые страны, удаление salary-фильтра, регионы Gulf/APAC, Бразилия

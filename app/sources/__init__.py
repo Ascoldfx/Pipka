@@ -3,6 +3,7 @@ from app.sources.arbeitnow import ArbeitnowSource
 from app.sources.arbeitsagentur import ArbeitsagenturSource
 from app.sources.berlinstartupjobs import BerlinStartupJobsSource
 from app.sources.builtin import BuiltInSource
+from app.sources.greenhouse import GreenhouseSource
 from app.sources.gupy import GupyFeedSource
 from app.sources.jobspy_source import JobSpySource
 from app.sources.jooble import JoobleSource
@@ -24,4 +25,5 @@ __all__ = [
     "JoobleSource",
     "GupyFeedSource",
     "BuiltInSource",
+    "GreenhouseSource",
 ]

@@ -1073,6 +1073,7 @@ window.toggleLogin = toggleLogin;
           <div class="country-item" data-code="id">🇮🇩 Indonesia</div>
           <div class="country-item" data-code="sg">🇸🇬 Singapore</div>
           <div class="country-item" data-code="br">🇧🇷 Brazil</div>
+          <div class="country-item" data-code="kr" title="Whitelist: international employers, English-language postings only">🇰🇷 South Korea</div>
         </div>
       </div>
 
@@ -1109,6 +1110,7 @@ window.toggleLogin = toggleLogin;
           <div class="country-item country-hidden" data-code="id">🇮🇩 Indonesia</div>
           <div class="country-item country-hidden" data-code="sg">🇸🇬 Singapore</div>
           <div class="country-item country-hidden" data-code="br">🇧🇷 Brazil</div>
+          <div class="country-item country-hidden" data-code="kr">🇰🇷 South Korea</div>
         </div>
         <p class="country-hint" data-i18n="settings.hiddenCountriesHint">Jobs from these countries are still collected and scored. Choose a country in the feed filter to show it temporarily.</p>
       </div>
@@ -1715,7 +1717,7 @@ const COUNTRY_NAMES = {
   us:'USA', ca:'Canada', pt:'Portugal', lu:'Luxembourg', ee:'Estonia',
   lv:'Latvia', lt:'Lithuania', hr:'Croatia', rs:'Serbia', bg:'Bulgaria',
   ae:'UAE', sa:'Saudi Arabia', qa:'Qatar', au:'Australia', nz:'New Zealand',
-  id:'Indonesia', sg:'Singapore', br:'Brazil'};
+  id:'Indonesia', sg:'Singapore', br:'Brazil', kr:'South Korea'};
 let _selCountries = new Set();
 
 function toggleCountryDrop(e) {

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import async_session
+from app.markets import korea
 from app.models.job import Job
 from app.sources.base import (
     JobSource,
@@ -612,6 +613,8 @@ REGION_MARKERS: dict[str, list[str]] = {
         "porto alegre", "joinville", "recife", "salvador", "manaus",
         "goiânia", "goiania",
     ],
+    # Whitelist market: only listed employers pass (app/markets/korea.py).
+    "kr": list(korea.LOCATION_MARKERS),
 }
 
 

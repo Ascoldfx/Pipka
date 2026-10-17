@@ -54,6 +54,9 @@ COUNTRY_NAME = {
     "id": "indonesia",
     "sg": "singapore",
     "br": "brazil",
+    # Whitelist market: English queries; employer and language gates apply
+    # in pre_filter (app/markets/korea.py).
+    "kr": "south korea",
 }
 
 

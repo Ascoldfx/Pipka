@@ -45,6 +45,7 @@ COUNTRY_LOCATIONS: dict[str, tuple[str, str]] = {
     "id": ("Indonesia", "ID"),
     "sg": ("Singapore", "SG"),
     "br": ("Brazil", "BR"),
+    "kr": ("South Korea", "KR"),
 }
 
 # FALLBACK queries for Jooble — used only when no profile titles are available.

@@ -40,6 +40,7 @@ Do not impose a fixed industry, function, or title hierarchy that is not present
 - Language requirements clearly conflict with an explicit profile preference or the candidate's documented proficiency → max 30
 - Technical individual-contributor or hands-on engineering role unrelated to an explicit target role → max 35
 - Junior/Trainee/Student → max 15
+- South Korea: Korean language required (fluent, bilingual, native, business level, TOPIK) or work limited to F-2/F-4/F-5/F-6 visa holders or current residents → max 25. "Korean is a plus" is not a penalty.
 - Consulting/Advisory role outside the explicit target directions → max 35
 
 ## Key bonuses (only apply if base score is already decent):
@@ -47,6 +48,7 @@ Do not impose a fixed industry, function, or title hierarchy that is not present
 - Scope and seniority match the candidate's demonstrated experience → +10
 - Industry matches the candidate's documented background → +10
 - Remote/hybrid option → +5
+- South Korea: English working environment, global/APAC/EMEA scope, visa sponsorship or relocation support, or Europe/CIS supplier and sourcing scope → +5
 - Company context and requirements align with the candidate's specific experience → +5
 
 ## IMPORTANT:

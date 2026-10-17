@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.config import settings
 from app.models.job import Job
+from app.markets import korea
 from app.models.user import UserProfile
 from app.sources.country_queries import expand_queries_for_country
 
@@ -78,6 +79,7 @@ DOMAIN_KEYWORDS = [
     "demand planning", "inventory", "distribution", "fulfillment",
     "supplier", "vendor management", "category management",
     "strategic sourcing", "indirect procurement", "direct procurement",
+    "scm",
     # Brazilian Portuguese equivalents
     "cadeia de suprimentos", "suprimentos", "compras", "compras estratégicas",
     "compras estrategicas", "logística", "logistica", "operações", "operacoes",
@@ -534,6 +536,13 @@ def pre_filter(job: Job, profile: UserProfile | None) -> tuple[bool, str]:
     if profile and profile.preferred_countries and job.country:
         if job.country.lower() not in [c.lower() for c in profile.preferred_countries]:
             return False, "low"
+
+    # Whitelist market: a Korean vacancy needs a listed international
+    # employer, a non-Korean posting and no residence-status restriction.
+    if (job.country or "").lower() == korea.MARKET_CODE and korea.rejection_reason(
+        job.title, job.company_name, job.description
+    ):
+        return False, "low"
 
     # Exact targets do not need to rediscover seniority through generic
     # Director/Head/Manager keywords.
