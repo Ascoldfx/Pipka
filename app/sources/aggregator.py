@@ -5,7 +5,7 @@ import logging
 import re
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +18,7 @@ from app.sources.base import (
     RawJob,
     SearchParams,
     fuzzy_title_key,
+    is_aggregator_clickout,
     is_fuzzy_duplicate,
     normalise_posted_at,
 )
@@ -50,11 +51,19 @@ def _fuzzy_deduplicate(jobs: list[RawJob]) -> tuple[list[RawJob], int]:
             if job.source not in all_sources:
                 all_sources.append(job.source)
 
-            if len(job.description or "") > len(seen.description or ""):
-                job.raw_data["merged_sources"] = all_sources
-                deduped[index] = job
-            else:
-                seen.raw_data["merged_sources"] = all_sources
+            # A direct link beats an aggregator click-out (paywalled resellers,
+            # feed dates); otherwise the richer description wins. The earliest
+            # date survives either way, so a re-post never looks fresh.
+            job_direct = not is_aggregator_clickout(job.url)
+            seen_direct = not is_aggregator_clickout(seen.url)
+            keep_new = (job_direct, len(job.description or "")) > (
+                seen_direct, len(seen.description or "")
+            )
+            keeper, other = (job, seen) if keep_new else (seen, job)
+            dates = [d for d in (normalise_posted_at(job.posted_at), normalise_posted_at(seen.posted_at)) if d]
+            keeper.posted_at = min(dates) if dates else None
+            keeper.raw_data["merged_sources"] = all_sources
+            deduped[index] = keeper
             merged = True
             break
 
@@ -63,6 +72,65 @@ def _fuzzy_deduplicate(jobs: list[RawJob]) -> tuple[list[RawJob], int]:
             deduped.append(job)
 
     return deduped, comparisons
+
+
+REPOST_LOOKBACK_DAYS = 45
+
+
+async def _suppress_reposts(session: AsyncSession, candidates: list[RawJob]) -> set[str]:
+    """Dedup hashes of candidates that re-post a vacancy already stored.
+
+    The exact dedup hash misses re-posts whose title spelling or location
+    changed ("(m|w|d)" vs "(m w d)", "Heidenheim" vs "Deutschland"). Feed
+    resellers re-submit the same vacancy daily, so without this check it
+    re-enters the queue as a fresh job every day. The stored row keeps the
+    earliest date and is upgraded from an Adzuna click-out to a direct link
+    when another source carries the same vacancy.
+    """
+    countries = {_normalise_country(c.country) for c in candidates} - {None}
+    if not countries:
+        return set()
+    keys = {fuzzy_title_key(c.title) for c in candidates}
+    since = datetime.now() - timedelta(days=REPOST_LOOKBACK_DAYS)
+    rows = (await session.execute(
+        select(
+            Job.id, Job.title, Job.company_name, Job.country, Job.location,
+            Job.url, Job.posted_at, Job.source,
+        ).where(Job.country.in_(countries), Job.scraped_at >= since)
+    )).all()
+    known: dict[str, list] = {}
+    for row in rows:
+        key = fuzzy_title_key(row.title)
+        if key in keys:
+            known.setdefault(key, []).append(row)
+
+    skipped: set[str] = set()
+    for candidate in candidates:
+        for row in known.get(fuzzy_title_key(candidate.title), []):
+            stored = RawJob(
+                external_id="", source=row.source, title=row.title,
+                company_name=row.company_name, country=row.country, location=row.location,
+            )
+            if not is_fuzzy_duplicate(candidate, stored):
+                continue
+            skipped.add(candidate.dedup_hash)
+            changes: dict = {}
+            if (
+                is_aggregator_clickout(row.url)
+                and candidate.url
+                and not is_aggregator_clickout(candidate.url)
+            ):
+                changes.update(url=candidate.url, source=candidate.source,
+                               external_id=candidate.external_id)
+            candidate_date = normalise_posted_at(candidate.posted_at)
+            if candidate_date and (row.posted_at is None or candidate_date < row.posted_at):
+                changes["posted_at"] = candidate_date
+            if changes:
+                await session.execute(update(Job).where(Job.id == row.id).values(**changes))
+            break
+    if skipped:
+        await session.commit()
+    return skipped
 
 
 def _normalise_posted_at(value: datetime | None) -> datetime | None:
@@ -356,6 +424,12 @@ class JobAggregator:
 
         async with async_session() as wsession:
             existing_by_hash = await _fetch_chunked(wsession, all_hashes) if all_hashes else {}
+            reposts = await _suppress_reposts(
+                wsession, [r for r in filtered if r.dedup_hash not in existing_by_hash]
+            )
+            if reposts:
+                logger.info("Re-posts of known vacancies skipped: %d", len(reposts))
+                filtered = [r for r in filtered if r.dedup_hash not in reposts]
 
             new_rows = [
                 {

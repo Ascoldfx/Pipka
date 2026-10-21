@@ -69,10 +69,11 @@ def _normalize(text: str) -> str:
         text = text.replace(suffix, "")
     # Remove job board noise from titles (Adzuna appends categories)
     text = re.sub(r"\s*-\s*(system engineering|admin|ingenieur|it|engineering).*$", "", text)
-    # Remove (m/w/d), (m/f/d), (all genders), (f/m/x) and similar
-    text = re.sub(r"\s*\([mwfd/]+\)\s*", " ", text)
-    text = re.sub(r"\s*\(all genders?\)\s*", " ", text)
-    text = re.sub(r"\s*\(m/f/x\)\s*", " ", text)
+    # Remove gender markers in every spelling resellers use for re-posts:
+    # (m/w/d), (m|w|d), (m w d), (f/m/x), (gn), (all genders), bare m/w/d.
+    text = re.sub(r"\s*\(\s*(?:[mwfdxi]\s*[/|,*]?\s*){2,4}\)\s*", " ", text)
+    text = re.sub(r"\s*\((?:gn|all genders?|alle geschlechter)\)\s*", " ", text)
+    text = re.sub(r"\b[mwfd]\s*/\s*[mwfd]\s*/\s*[mwfdx]\b", " ", text)
     # Remove "senior" for dedup — "Senior X" and "X" at same company = likely same role
     text = text.replace("senior ", "")
     # Remove location from title (e.g. "Director | Berlin", "COO - Munich")
@@ -146,6 +147,21 @@ def _location_root(location: str) -> str:
     return words[0] if words else text[:8]
 
 
+# Country-wide or remote locations say nothing about the city, so they never
+# conflict with a concrete city ("Deutschland" vs "Heidenheim (Kreis)").
+GENERIC_LOCATION_ROOTS = frozenset({
+    "deutschland", "deutschlandweit", "germany", "bundesweit", "remote",
+    "homeoffice", "home", "europe", "europa", "dach", "osterreich", "austria",
+    "schweiz", "switzerland",
+})
+
+
+def is_aggregator_clickout(url: str | None) -> bool:
+    """Adzuna click-out: the real target (often a paywalled reseller such as
+    JobLeads) is hidden behind adzuna.*/land/ad/ and its date is the feed date."""
+    return bool(url) and "adzuna." in url and "/land/ad/" in url
+
+
 def _locations_conflict(a: str | None, b: str | None) -> bool:
     """True if locations conflict — meaning jobs should NOT be merged.
 
@@ -154,6 +170,7 @@ def _locations_conflict(a: str | None, b: str | None) -> bool:
       • One known, one not    → True   (asymmetry = uncertainty = keep both)
       • Both known, same city → False  (clearly same place, allow merge)
       • Both known, diff city → True   (different places, keep both)
+      • Country-wide / remote → False  ("Deutschland" fits any German city)
     """
     a_has = bool(a and a.strip())
     b_has = bool(b and b.strip())
@@ -170,6 +187,8 @@ def _locations_conflict(a: str | None, b: str | None) -> bool:
     ra = _location_root(a)  # type: ignore[arg-type]
     rb = _location_root(b)  # type: ignore[arg-type]
     if not ra or not rb:
+        return False
+    if ra in GENERIC_LOCATION_ROOTS or rb in GENERIC_LOCATION_ROOTS:
         return False
     return ra != rb
 
