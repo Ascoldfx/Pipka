@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import aiohttp
 from dateutil import parser as dateparser
@@ -29,6 +31,37 @@ ADZUNA_MAX_PAGES = 2          # pages per combo (was 3)
 ADZUNA_CONCURRENCY = 6        # parallel in-flight requests
 ADZUNA_PACE_SECONDS = 0.4     # min gap between request starts (≈150/min ceiling)
 ADZUNA_REQUEST_TIMEOUT = 8    # per-page HTTP timeout (was 15) — fail fast on Adzuna 500s/slow pages
+
+# Adzuna's ``created`` is the country's local wall-clock time mislabelled as
+# UTC ("...Z"). Audit 21.10.2026: 76% of DE rows were "published" up to 2 h
+# after we scraped them, NZ up to 12 h, which put Adzuna ahead of every other
+# source in the freshness queue.
+ADZUNA_TIMEZONES = {
+    "de": "Europe/Berlin", "at": "Europe/Vienna", "ch": "Europe/Zurich",
+    "nl": "Europe/Amsterdam", "be": "Europe/Brussels", "fr": "Europe/Paris",
+    "it": "Europe/Rome", "es": "Europe/Madrid", "pl": "Europe/Warsaw",
+    "gb": "Europe/London", "au": "Australia/Sydney", "nz": "Pacific/Auckland",
+    "sg": "Asia/Singapore", "br": "America/Sao_Paulo", "in": "Asia/Kolkata",
+    "us": "America/New_York", "ca": "America/Toronto", "mx": "America/Mexico_City",
+    "za": "Africa/Johannesburg",
+}
+
+
+def parse_created(value: str | None, country: str) -> datetime | None:
+    """UTC-naive publication time from Adzuna's local-time ``created``."""
+    if not value:
+        return None
+    try:
+        parsed = dateparser.parse(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    zone = ADZUNA_TIMEZONES.get(country.lower())
+    if zone:
+        parsed = parsed.replace(tzinfo=ZoneInfo(zone))
+    utc = normalise_posted_at(parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc))
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    return min(utc, now)
+
 
 ADZUNA_CURRENCIES = {
     "au": "AUD",
@@ -187,7 +220,7 @@ class AdzunaSource:
         jobs: list[RawJob] = []
         for item in data.get("results", []):
             try:
-                posted = normalise_posted_at(dateparser.parse(item["created"])) if item.get("created") else None
+                posted = parse_created(item.get("created"), country)
                 title = item.get("title", "").replace("<b>", "").replace("</b>", "")
                 area = item.get("location", {}).get("display_name", "")
 

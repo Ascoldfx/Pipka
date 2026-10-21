@@ -96,7 +96,7 @@ async def apply(suppress: dict[int, dict], upgrades: dict[int, dict]) -> None:
                 update(Job).where(Job.id == job_id).values(
                     url_status=URL_STATUS_SUPPRESSED,
                     raw_data=func.coalesce(cast(Job.raw_data, JSONB), func.jsonb_build_object())
-                    .op("||")(func.jsonb_build_object("suppressed", cast(json.dumps(reason), JSONB))),
+                    .op("||")(func.jsonb_build_object("suppressed", cast(reason, JSONB))),
                 )
             )
         for job_id, change in upgrades.items():

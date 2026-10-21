@@ -8,10 +8,10 @@ from __future__ import annotations
 import logging
 
 import aiohttp
-from dateutil import parser as dateparser
 
 from app.config import settings
-from app.sources.base import RawJob, SearchParams, normalise_posted_at
+from app.sources.adzuna import parse_created
+from app.sources.base import RawJob, SearchParams
 
 logger = logging.getLogger(__name__)
 
@@ -88,12 +88,12 @@ class WatchlistSource:
 
         jobs = []
         for item in data.get("results", []):
-            job = self._parse_adzuna(item, company)
+            job = self._parse_adzuna(item, company, country)
             if job:
                 jobs.append(job)
         return jobs
 
-    def _parse_adzuna(self, item: dict, watchlist_company: str) -> RawJob | None:
+    def _parse_adzuna(self, item: dict, watchlist_company: str, country: str) -> RawJob | None:
         try:
             title = item.get("title", "").strip()
             if not title:
@@ -112,12 +112,8 @@ class WatchlistSource:
             description = item.get("description", "")
             url = item.get("redirect_url", "")
 
-            posted_at = None
-            if item.get("created"):
-                try:
-                    posted_at = normalise_posted_at(dateparser.parse(item["created"]))
-                except Exception:
-                    pass
+            # Adzuna "created" is local time labelled UTC; see adzuna.parse_created.
+            posted_at = parse_created(item.get("created"), country)
 
             return RawJob(
                 external_id=f"watchlist_adzuna_{job_id}",
