@@ -5,14 +5,14 @@ import logging
 import re
 from datetime import datetime, timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import async_session
 from app.markets import korea
-from app.models.job import Job
+from app.models.job import URL_STATUS_SUPPRESSED, Job
 from app.sources.base import (
     JobSource,
     RawJob,
@@ -96,7 +96,12 @@ async def _suppress_reposts(session: AsyncSession, candidates: list[RawJob]) -> 
         select(
             Job.id, Job.title, Job.company_name, Job.country, Job.location,
             Job.url, Job.posted_at, Job.source,
-        ).where(Job.country.in_(countries), Job.scraped_at >= since)
+        ).where(
+            Job.country.in_(countries),
+            Job.scraped_at >= since,
+            # A suppressed row must not block the genuine vacancy later.
+            or_(Job.url_status.is_(None), Job.url_status != URL_STATUS_SUPPRESSED),
+        )
     )).all()
     known: dict[str, list] = {}
     for row in rows:
@@ -131,6 +136,38 @@ async def _suppress_reposts(session: AsyncSession, candidates: list[RawJob]) -> 
     if skipped:
         await session.commit()
     return skipped
+
+
+# Normal Adzuna click-out traffic is <=6 per publication minute; a reseller
+# feed dump (21.10.2026: 417 click-outs stamped 05:32-05:34) is far above.
+BULK_FEED_MIN_PER_MINUTE = 20
+
+
+async def _bulk_feed_hashes(session: AsyncSession, candidates: list[RawJob]) -> set[str]:
+    """Dedup hashes of Adzuna click-outs that belong to a bulk feed dump.
+
+    A dump spans several hourly scans, so stored click-outs with the same
+    publication minute count towards the threshold too.
+    """
+    by_minute: dict[datetime, list[RawJob]] = {}
+    for job in candidates:
+        posted = normalise_posted_at(job.posted_at)
+        if posted and is_aggregator_clickout(job.url):
+            by_minute.setdefault(posted.replace(second=0, microsecond=0), []).append(job)
+    if not by_minute:
+        return set()
+    minute = func.date_trunc("minute", Job.posted_at)
+    stored = dict((await session.execute(
+        select(minute, func.count())
+        .where(Job.source == "adzuna", Job.url.like("%/land/ad/%"), minute.in_(list(by_minute)))
+        .group_by(minute)
+    )).all())
+    return {
+        job.dedup_hash
+        for at, jobs in by_minute.items()
+        if len(jobs) + stored.get(at, 0) >= BULK_FEED_MIN_PER_MINUTE
+        for job in jobs
+    }
 
 
 def _normalise_posted_at(value: datetime | None) -> datetime | None:
@@ -430,6 +467,11 @@ class JobAggregator:
             if reposts:
                 logger.info("Re-posts of known vacancies skipped: %d", len(reposts))
                 filtered = [r for r in filtered if r.dedup_hash not in reposts]
+            bulk_feed = await _bulk_feed_hashes(
+                wsession, [r for r in filtered if r.dedup_hash not in existing_by_hash]
+            )
+            if bulk_feed:
+                logger.warning("Bulk feed dump stored as suppressed: %d click-outs", len(bulk_feed))
 
             new_rows = [
                 {
@@ -448,6 +490,7 @@ class JobAggregator:
                     "posted_at": r.posted_at,
                     "raw_data": r.raw_data,
                     "dedup_hash": r.dedup_hash,
+                    "url_status": URL_STATUS_SUPPRESSED if r.dedup_hash in bulk_feed else None,
                 }
                 for r in filtered
                 if r.dedup_hash not in existing_by_hash
@@ -481,6 +524,7 @@ class JobAggregator:
             existing_by_hash[r.dedup_hash]
             for r in filtered
             if r.dedup_hash in existing_by_hash
+            and existing_by_hash[r.dedup_hash].url_status != URL_STATUS_SUPPRESSED
         ]
         # Sort: newest first
         db_jobs.sort(

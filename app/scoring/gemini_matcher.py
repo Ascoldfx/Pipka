@@ -32,7 +32,7 @@ from tenacity import (
 
 from app.config import settings
 from app.database import async_session
-from app.models.job import Job, JobScore
+from app.models.job import URL_STATUS_SUPPRESSED, Job, JobScore
 from app.models.ops_event import OpsEvent
 from app.models.user import User
 from app.scoring.gemini_client import generate_gemini_content
@@ -500,7 +500,12 @@ async def recheck_zero_scores(
         return 0, 0
 
     job_ids = [zs.job_id for zs in zero_scores]
-    jobs_result = await session.execute(select(Job).where(Job.id.in_(job_ids)))
+    jobs_result = await session.execute(
+        select(Job).where(
+            Job.id.in_(job_ids),
+            or_(Job.url_status.is_(None), Job.url_status != URL_STATUS_SUPPRESSED),
+        )
+    )
     jobs_map = {j.id: j for j in jobs_result.scalars().all()}
     score_map = {zs.job_id: zs for zs in zero_scores}
 

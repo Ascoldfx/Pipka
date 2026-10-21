@@ -11,6 +11,9 @@ from app.models import Base
 _JSON = JSON().with_variant(JSONB(), "postgresql")
 
 
+URL_STATUS_SUPPRESSED = "suppressed"
+
+
 class Job(Base):
     __tablename__ = "jobs"
     __table_args__ = (
@@ -51,7 +54,10 @@ class Job(Base):
     # URL-liveness fields. Set by the daily ``_check_job_urls`` scheduler job
     # via HEAD requests; ``None`` means "never checked yet" (treated as active
     # by readers). See [[Проверка ссылок]].
-    url_status: Mapped[str | None] = mapped_column(String(20))   # 'active'|'closed'|'unreachable'|None
+    # 'active'|'closed'|'unreachable'|'suppressed'|None. 'suppressed' = reseller
+    # re-post or bulk feed dump: hidden everywhere, never re-checked, and
+    # reversible by resetting to NULL (see [[Дедупликация]]).
+    url_status: Mapped[str | None] = mapped_column(String(20))
     url_checked_at: Mapped[datetime | None] = mapped_column(DateTime)
     url_check_failures: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 

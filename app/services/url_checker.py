@@ -45,7 +45,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.job import Job
+from app.models.job import URL_STATUS_SUPPRESSED, Job
 
 logger = logging.getLogger(__name__)
 
@@ -392,6 +392,8 @@ async def run_url_check_pass(session: AsyncSession) -> dict[str, int]:
             Job.url.isnot(None),
             Job.url != "",
             or_(Job.url_checked_at.is_(None), Job.url_checked_at < cutoff),
+            # A suppressed duplicate must not be revived as 'active'.
+            or_(Job.url_status.is_(None), Job.url_status != URL_STATUS_SUPPRESSED),
         )
         .order_by(Job.url_checked_at.asc().nullsfirst())
         .limit(settings.url_check_per_run)

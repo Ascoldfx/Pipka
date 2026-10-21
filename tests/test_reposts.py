@@ -124,3 +124,25 @@ async def test_different_company_is_not_a_repost():
                    company_name="Diehl Aviation", country="DE", location="Deutschland", url=CLICKOUT)
 
     assert await _suppress_reposts(session, [other]) == set()
+
+
+@pytest.mark.asyncio
+async def test_bulk_feed_dump_is_flagged_counting_stored_clickouts():
+    from app.sources.aggregator import BULK_FEED_MIN_PER_MINUTE, _bulk_feed_hashes
+
+    minute = datetime(2026, 10, 21, 5, 33)
+    dump = [
+        RawJob(external_id=str(i), source="adzuna", title=f"Head of Procurement {i}", company_name=f"C{i}",
+               country="DE", url=f"https://www.adzuna.de/land/ad/{i}", posted_at=minute.replace(second=i))
+        for i in range(5)
+    ]
+    normal = RawJob(external_id="n", source="adzuna", title="Director Logistics", company_name="N",
+                    country="DE", url="https://www.adzuna.de/land/ad/99", posted_at=datetime(2026, 10, 21, 9, 1))
+    direct = RawJob(external_id="x", source="xing", title="Head of Sourcing", company_name="X",
+                    country="DE", url="https://www.xing.com/jobs/1", posted_at=minute)
+    # Earlier scans already stored most of the dump for that minute.
+    session = _Session([(minute, BULK_FEED_MIN_PER_MINUTE - 3)])
+
+    flagged = await _bulk_feed_hashes(session, [*dump, normal, direct])
+
+    assert flagged == {job.dedup_hash for job in dump}

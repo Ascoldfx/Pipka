@@ -12,7 +12,7 @@ from app.api._ratelimit import check_rate_limit
 from app.api.stats import invalidate_stats_cache
 from app.database import async_session
 from app.models.application import Application
-from app.models.job import Job, JobScore
+from app.models.job import URL_STATUS_SUPPRESSED, Job, JobScore
 from app.scoring.matcher import analyze_single_job
 from app.services.tracker_service import (
     check_auto_exclude_company,
@@ -212,6 +212,8 @@ async def get_jobs(
         # shown — that's "we genuinely couldn't tell", not a confirmed close.
         if not include_closed:
             filters.append(or_(Job.url_status.is_(None), Job.url_status != "closed"))
+        # Suppressed re-posts / feed dumps are hidden even with include_closed.
+        filters.append(or_(Job.url_status.is_(None), Job.url_status != URL_STATUS_SUPPRESSED))
 
         if semantic and user:
             from app.services.embedding_service import semantic_job_ids_for_profile  # noqa: PLC0415
